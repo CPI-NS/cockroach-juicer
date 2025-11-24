@@ -964,6 +964,15 @@ func (db *DB) Run(ctx context.Context, b *Batch) error {
 	}
 	return sendAndFill(ctx, db.send, b)
 }
+func (db *DB) NewJuicerTxn(ctx context.Context, debugName string) *Txn {
+	// Observed timestamps don't work with multi-tenancy. See:
+	//
+	// https://github.com/cockroachdb/cockroach/issues/48008
+	nodeID, _ := db.ctx.NodeID.OptionalNodeID() // zero if not available
+	txn := NewTxnForJuicerBenchmark(ctx, db, debugName, nodeID, kvpb.AdmissionHeader_ROOT_KV, admissionpb.NormalPri)
+	txn.SetDebugName(debugName)
+	return txn
+}
 
 // NewTxn creates a new RootTxn.
 //

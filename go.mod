@@ -39,7 +39,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	google.golang.org/api v0.114.0
 	google.golang.org/genproto v0.0.0-20230526161137-0005af68ea54
-	google.golang.org/grpc v1.57.2
+	google.golang.org/grpc v1.57.2-juicer
 	google.golang.org/protobuf v1.35.1
 	storj.io/drpc v0.0.34
 )
@@ -516,3 +516,5 @@ replace github.com/prometheus/client_golang => github.com/cockroachdb/client_gol
 replace github.com/snowflakedb/gosnowflake => github.com/cockroachdb/gosnowflake v1.6.25
 
 replace github.com/knz/strtime => github.com/cockroachdb/strtime v0.0.0-20250401230151-b9140bbb29b5
+
+replace google.golang.org/grpc v1.57.2-juicer => github.com/CPI-NS/juicer-grpc-go v1.57.2-juicer-9

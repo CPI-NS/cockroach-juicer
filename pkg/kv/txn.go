@@ -146,6 +146,42 @@ func NewTxn(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
 
 // NewTxnWithAdmissionControl creates a new transaction with the specified
 // admission control source and priority. See NewTxn() for details.
+func NewTxnForJuicerBenchmark(
+	ctx context.Context,
+	db *DB,
+	txnName string,
+	gatewayNodeID roachpb.NodeID,
+	source kvpb.AdmissionHeader_Source,
+	priority admissionpb.WorkPriority,
+) *Txn {
+	if db == nil {
+		panic(errors.WithContextTags(
+			errors.AssertionFailedf("attempting to create txn with nil db"), ctx))
+	}
+
+	now := db.clock.NowAsClockTimestamp()
+	kvTxn := roachpb.MakeTransaction(
+		txnName,
+		nil, // baseKey
+		isolation.Serializable,
+		roachpb.NormalUserPriority,
+		now.ToTimestamp(),
+		db.clock.MaxOffset().Nanoseconds(),
+		int32(db.ctx.NodeID.SQLInstanceID()),
+		priority,
+		false, /* omitInRangefeeds */
+	)
+	txn := NewTxnFromProto(ctx, db, gatewayNodeID, now, RootTxn, &kvTxn)
+	txn.admissionHeader = kvpb.AdmissionHeader{
+		CreateTime: db.clock.PhysicalNow(),
+		Priority:   int32(priority),
+		Source:     source,
+	}
+	return txn
+}
+
+// NewTxnWithAdmissionControl creates a new transaction with the specified
+// admission control source and priority. See NewTxn() for details.
 func NewTxnWithAdmissionControl(
 	ctx context.Context,
 	db *DB,

@@ -177,6 +177,20 @@ var requireConstFmt = map[string]bool{
 
 	"(*github.com/cockroachdb/cockroach/pkg/cloud/amazon.awsLogAdapter).Logf": true,
 
+	// LoggerBridge methods are bridge functions that forward format strings from external
+	// loggers (e.g., juicer) to CockroachDB's logging functions. The format strings come
+	// from external callers, so they cannot be compile-time constants. We add them to
+	// requireConstFmt so that linter checks stop at these methods and don't propagate
+	// to the underlying log functions. However, since these are bridge functions that
+	// accept format from external sources, we need to allow non-constant formats here.
+	// The linter will check these methods, but since the format comes from function
+	// parameters, it will be allowed per the logic in fmtsafe.go that allows parameters
+	// to be passed through.
+	"(*github.com/cockroachdb/cockroach/pkg/rpc.LoggerBridge).Debug":   true,
+	"(*github.com/cockroachdb/cockroach/pkg/rpc.LoggerBridge).Info":    true,
+	"(*github.com/cockroachdb/cockroach/pkg/rpc.LoggerBridge).Warning": true,
+	"(*github.com/cockroachdb/cockroach/pkg/rpc.LoggerBridge).Error":   true,
+
 	// Error things are populated in the init() message.
 }
 
