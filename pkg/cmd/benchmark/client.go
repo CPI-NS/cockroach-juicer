@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package benchmark
+package main
 
 import (
 	"context"
@@ -14,17 +14,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
-	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -134,24 +134,35 @@ func NewClient(ctx context.Context, cfg Config) (*kv.DB, *stop.Stopper, error) {
 	nodeDialer := nodedialer.New(rpcCtx, addressResolver)
 
 	// Create HLC Clock
-	clock := hlc.NewClockForTesting(nil)
+	clock := hlc.NewClockWithSystemTimeSource(50*time.Millisecond, 50*time.Millisecond, hlc.PanicLogger)
 
 	// Create DistSender
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
 
+	// Create a safe LatencyFunc that handles nil RemoteClocks
+	// Client-only connections don't get RemoteClocks by default, so we need to
+	// provide a safe wrapper that returns default values when RemoteClocks is nil.
+	latencyFunc := func(nodeID roachpb.NodeID) (time.Duration, bool) {
+		if rpcCtx.RemoteClocks != nil {
+			return rpcCtx.RemoteClocks.Latency(nodeID)
+		}
+		// Return default values when RemoteClocks is nil (client-only connections)
+		return 0, false
+	}
+
 	dsCfg := kvcoord.DistSenderConfig{
-		AmbientCtx:        ambientCtx,
-		Settings:          cluster.MakeTestingClusterSettings(),
-		Clock:             clock,
-		NodeDescs:         g,
-		NodeIDGetter:      func() roachpb.NodeID { return 0 }, // Clients don't have a NodeID
-		RPCRetryOptions:   &retryOpts,
-		Stopper:           stopper,
-		LatencyFunc:       rpcCtx.RemoteClocks.Latency,
-		TransportFactory:  kvcoord.GRPCTransportFactory(nodeDialer),
+		AmbientCtx:         ambientCtx,
+		Settings:           cluster.MakeTestingClusterSettings(),
+		Clock:              clock,
+		NodeDescs:          g,
+		NodeIDGetter:       func() roachpb.NodeID { return 0 }, // Clients don't have a NodeID
+		RPCRetryOptions:    &retryOpts,
+		Stopper:            stopper,
+		LatencyFunc:        latencyFunc,
+		TransportFactory:   kvcoord.GRPCTransportFactory(nodeDialer),
 		FirstRangeProvider: g,
-		Locality:          roachpb.Locality{},
+		Locality:           roachpb.Locality{},
 	}
 
 	ds := kvcoord.NewDistSender(dsCfg)
@@ -183,4 +194,3 @@ func NewClient(ctx context.Context, cfg Config) (*kv.DB, *stop.Stopper, error) {
 
 	return db, rpcStopper, nil
 }
-

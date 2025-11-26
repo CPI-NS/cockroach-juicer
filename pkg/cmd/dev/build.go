@@ -108,6 +108,7 @@ var buildTargetMapping = map[string]string{
 	"tests":                "//pkg:all_tests",
 	"whoownsit":            "//pkg/cmd/whoownsit:whoownsit",
 	"workload":             "//pkg/cmd/workload:workload",
+	"benchmark":            "//pkg/cmd/benchmark:benchmark",
 }
 
 // allBuildTargets is a sorted list of all the available build targets.

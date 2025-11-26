@@ -1,0 +1,42 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_binary(
+    name = "benchmark",
+    embed = [":benchmark_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_library(
+    name = "benchmark_lib",
+    srcs = [
+        "client.go",
+        "init_data.go",
+        "main.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/benchmark",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/base",
+        "//pkg/gossip",
+        "//pkg/kv",
+        "//pkg/kv/bulk",
+        "//pkg/kv/kvclient/kvcoord",
+        "//pkg/kv/kvclient/rangecache",
+        "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/roachpb",
+        "//pkg/rpc",
+        "//pkg/rpc/nodedialer",
+        "//pkg/security/username",
+        "//pkg/settings/cluster",
+        "//pkg/util",
+        "//pkg/util/hlc",
+        "//pkg/util/limit",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/mon",
+        "//pkg/util/stop",
+        "//pkg/util/tracing",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
