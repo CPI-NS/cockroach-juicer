@@ -1025,6 +1025,13 @@ func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) err
 	)
 }
 
+func (db *DB) TxnForJuicerBenchmark(ctx context.Context, debugName string, retryable func(context.Context, *Txn) error) error {
+	nodeID, _ := db.ctx.NodeID.OptionalNodeID() // zero if not available
+	txn := NewTxnForJuicerBenchmark(ctx, db, debugName, nodeID, kvpb.AdmissionHeader_ROOT_KV, admissionpb.NormalPri)
+	txn.SetDebugName(debugName)
+	return runTxn(ctx, txn, retryable)
+}
+
 // TxnWithAdmissionControl is like Txn, but uses a configurable admission
 // control source and priority.
 func (db *DB) TxnWithAdmissionControl(

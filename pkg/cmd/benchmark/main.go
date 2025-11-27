@@ -12,12 +12,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/benchmark"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 )
 
@@ -27,18 +25,21 @@ var (
 	sslCertsDir    = flag.String("certs", "", "directory containing SSL certificates")
 	clusterName    = flag.String("cluster", "default", "cluster name")
 	key            = flag.String("key", "test-key", "key to use for RMW operation")
+
+	// Data initialization flags
+	initData       = flag.Bool("init", false, "initialize test data")
+	initNumKeys    = flag.Int("init-keys", 10000, "number of keys to initialize")
+	initKeyPrefix  = flag.String("init-prefix", "key", "prefix for initialized keys")
+	initKeyRange   = flag.Int("init-range", 10000, "key range for initialization (1 to init-range)")
+	initBatchSize  = flag.Int("init-batch", 100, "batch size for initialization")
+	initConcurrent = flag.Int("init-concurrent", 1, "number of concurrent writers")
+	useBulkAdder   = flag.Bool("init-bulk", false, "use BulkAdder for high-performance initialization")
 )
 
 func main() {
 	flag.Parse()
 
 	ctx := context.Background()
-
-	// Initialize logging
-	if err := log.InitDefaultConfig(); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to initialize logging: %v\n", err)
-		os.Exit(1)
-	}
 
 	// Parse bootstrap addresses
 	addrs := []string{}
@@ -55,17 +56,17 @@ func main() {
 	}
 
 	// Create client config
-	cfg := benchmark.Config{
+	cfg := Config{
 		BootstrapAddrs: addrs,
 		Insecure:       *insecure,
 		SSLCertsDir:    *sslCertsDir,
 		ClusterName:    *clusterName,
-		User:           username.RootUser,
+		User:           username.RootUserName(),
 	}
 
 	// Create client
 	fmt.Printf("Connecting to cluster at %v...\n", addrs)
-	db, stopper, err := benchmark.NewClient(ctx, cfg)
+	db, stopper, err := NewClient(ctx, cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error creating client: %v\n", err)
 		os.Exit(1)
@@ -74,16 +75,41 @@ func main() {
 
 	fmt.Println("✓ Connected to cluster")
 
-	// Perform RMW operation
-	keyBytes := roachpb.Key(*key)
-	fmt.Printf("Performing RMW operation on key: %s\n", *key)
+	// Initialize data if requested
+	if *initData {
+		initCfg := InitDataConfig{
+			KeyPrefix:           *initKeyPrefix,
+			NumKeys:             *initNumKeys,
+			KeyRange:            *initKeyRange,
+			BatchSize:           *initBatchSize,
+			Concurrency:         *initConcurrent,
+			UseBulkAdder:        *useBulkAdder,
+			BulkAdderBufferSize: 128 << 20, // 128MB
+		}
 
-	if err := performRMW(ctx, db, keyBytes); err != nil {
-		fmt.Fprintf(os.Stderr, "error performing RMW: %v\n", err)
-		os.Exit(1)
+		if err := InitData(ctx, db, initCfg); err != nil {
+			fmt.Fprintf(os.Stderr, "error initializing data: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("✓ Data initialization completed")
+		return
 	}
 
-	fmt.Println("✓ RMW operation completed successfully")
+	for i := 0; i < 10; i++ {
+		// Perform RMW operation
+		keyBytes := roachpb.Key(*key)
+		fmt.Printf("Performing RMW operation on key: %s\n", *key)
+
+		if err := performRMW(ctx, db, keyBytes); err != nil {
+			fmt.Fprintf(os.Stderr, "error performing RMW: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("✓ RMW operation completed successfully")
+
+	}
+
+	time.Sleep(10 * time.Second)
+
 }
 
 func performRMW(ctx context.Context, db *kv.DB, key roachpb.Key) error {
@@ -144,4 +170,3 @@ func splitAddrs(addrs string) []string {
 	}
 	return result
 }
-

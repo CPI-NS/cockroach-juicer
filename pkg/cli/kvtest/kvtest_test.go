@@ -34,10 +34,10 @@ import (
 )
 
 const (
-	numShards  = 1 // 3个shard节点（使用3个LocalTestCluster实例）
+	numShards  = 3 // 3个shard节点（使用3个LocalTestCluster实例）
 	numClients = 1 // 2个客户端
 
-	defaultKeyRange = 10000
+	defaultKeyRange = 1000
 	defaultZipfS    = 1.1
 	defaultZipfV    = 1.0
 )
@@ -99,9 +99,9 @@ func isContextError(err error) bool {
 func runClient(ctx context.Context, t *testing.T, clientID int, db *kv.DB) {
 	keyRange := defaultKeyRange
 
-	zipfS := defaultZipfS
+	// zipfS := defaultZipfS
 
-	zipfV := defaultZipfV
+	// zipfV := defaultZipfV
 
 	const workerCount = 10
 	var workerWG sync.WaitGroup
@@ -115,8 +115,8 @@ func runClient(ctx context.Context, t *testing.T, clientID int, db *kv.DB) {
 	for workerID := 0; workerID < workerCount; workerID++ {
 		go func(id int) {
 			defer workerWG.Done()
-			rng := rand.New(rand.NewSource(time.Now().UnixNano() + int64(clientID*1000+id*10)))
-			zipf := rand.NewZipf(rng, zipfS, zipfV, uint64(keyRange-1))
+			// rng := rand.New(rand.NewSource(time.Now().UnixNano() + int64(clientID*1000+id*10)))
+			// zipf := rand.NewZipf(rng, zipfS, zipfV, uint64(keyRange-1))
 			ops := 0
 			for {
 				select {
@@ -133,7 +133,8 @@ func runClient(ctx context.Context, t *testing.T, clientID int, db *kv.DB) {
 				keys := make([]roachpb.Key, 0, keyNumber)
 				seen := make(map[int]struct{}, keyNumber)
 				for len(keys) < keyNumber {
-					k := int(zipf.Uint64()) + 1
+					k := rand.Intn(keyRange) + 1
+
 					if _, ok := seen[k]; ok {
 						continue
 					}
@@ -197,6 +198,7 @@ func runClient(ctx context.Context, t *testing.T, clientID int, db *kv.DB) {
 	ops := totalOps.Load()
 	aborts := abortCount.Load()
 	avgLatency := time.Duration(0)
+
 	if ops > 0 {
 		avgLatency = time.Duration(totalLatency.Load() / ops)
 	}
