@@ -1,0 +1,20 @@
+# Python dependencies for Cockroach-Juicer Experimental Framework
+
+# Configuration parsing
+pyyaml>=6.0
+
+# Data analysis and statistics
+numpy>=1.24.0
+
+# Visualization
+matplotlib>=3.7.0
+
+# Optional: Enhanced plotting
+# plotly>=5.14.0
+# seaborn>=0.12.0
+
+# Optional: Progress bars
+# tqdm>=4.65.0
+
+# Optional: Pandas for data manipulation
+# pandas>=2.0.0
