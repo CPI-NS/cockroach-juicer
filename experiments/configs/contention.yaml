@@ -1,0 +1,33 @@
+experiment:
+  name: "contention"
+  output_dir: "../results/contention"
+  repeat_count: 5
+  timeout_seconds: 600
+
+workload:
+  tx_count: [10000]
+  ops_per_tx: [10]
+  key_range: [10, 50, 100, 500, 1000, 5000]
+  distribution: ["zipfian"]
+  zipfian_s: [0.9, 1.1, 1.5]
+  zipfian_v: [1.0]
+  read_write_ratio: [0.3, 0.5, 0.8]
+
+concurrency:
+  num_clients: [2, 4]
+  workers_per_client: [10, 20]
+
+juicer:
+  enabled: [true, false]
+  flush_time_us: [500]
+
+protocol:
+  type: ["2PL-WW"]
+
+cluster:
+  num_nodes: 1          
+  base_port: 26257      
+  base_http_port: 8080  
+  data_dir: "./cockroach-data"
+  log_dir: "./logs"
+  store_size: "10GB"    

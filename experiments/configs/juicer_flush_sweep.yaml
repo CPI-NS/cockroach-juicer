@@ -1,0 +1,34 @@
+# Experiment: Juicer Flush Time Sensitivity Analysis
+# Purpose: Determine optimal flush time for various workload characteristics
+
+experiment:
+  name: "juicer-flush-time-sweep"
+  output_dir: "../results/flush_sweep"
+  repeat_count: 3
+  timeout_seconds: 300
+
+workload:
+  tx_count: [5000, 10000]
+  ops_per_tx: [5, 10, 20]
+  key_range: [100]
+  distribution: ["uniform"]
+  read_write_ratio: [0.5]
+
+concurrency:
+  num_clients: [2]
+  workers_per_client: [10, 20]
+
+juicer:
+  enabled: [true, false]
+  flush_time_us: [25, 50, 75, 100, 150, 200, 300]
+
+protocol:
+  type: ["2PL-WW"]
+
+cluster:
+  num_nodes: 1          # Number of CockroachDB nodes (1 for single-node, 3+ for multi-node)
+  base_port: 26257      # Base SQL port (nodes use base_port, base_port+1, etc.)
+  base_http_port: 8080  # Base HTTP port for admin UI
+  data_dir: "./cockroach-data"
+  log_dir: "./logs"
+  store_size: "10GB"    # Maximum store size per node

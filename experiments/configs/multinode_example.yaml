@@ -1,0 +1,38 @@
+# Experiment: Multi-Node Cluster Example
+# Purpose: Demonstrate multi-node CockroachDB cluster configuration
+
+experiment:
+  name: "multinode-cluster-example"
+  output_dir: "../results/multinode"
+  repeat_count: 3
+  timeout_seconds: 300
+
+workload:
+  tx_count: [5000]
+  ops_per_tx: [10]
+  key_range: [100]
+  distribution: ["uniform"]
+  read_write_ratio: [0.5]
+
+concurrency:
+  num_clients: [2]
+  workers_per_client: [10]
+
+juicer:
+  enabled: [true, false]
+  flush_time_us: [100]
+
+protocol:
+  type: ["2PL-WW"]
+
+# Multi-node cluster configuration
+cluster:
+  num_nodes: 3          # 3-node cluster
+  base_port: 26257      # Node ports: 26257, 26258, 26259
+  base_http_port: 8080  # HTTP ports: 8080, 8081, 8082
+  data_dir: "./cockroach-data"
+  log_dir: "./logs"
+  store_size: "10GB"
+
+# To run a single-node cluster, set num_nodes to 1
+# To run a 5-node cluster, set num_nodes to 5, etc.
