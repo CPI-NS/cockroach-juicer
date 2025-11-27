@@ -181,17 +181,3 @@ def generate_experiment_matrix(config: ExperimentConfig) -> List[Dict[str, Any]]
         experiments.append(exp_params)
 
     return experiments
-
-
-def example():
-    import sys
-    if len(sys.argv) > 1:
-        config = load_config(sys.argv[1])
-        print(f"Loaded config: {config.name}")
-        experiments = generate_experiment_matrix(config)
-        print(f"Generated {len(experiments)} experiment configurations")
-        if experiments:
-            print(f"Example experiment: {experiments[0]}")
-
-if __name__ == '__main__':
-    example()
