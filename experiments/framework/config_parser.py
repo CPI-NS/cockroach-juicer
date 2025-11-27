@@ -33,6 +33,17 @@ class ProtocolConfig:
 
 
 @dataclass
+class ClusterConfig:
+    """Configuration for CockroachDB cluster setup."""
+    num_nodes: int = 1
+    base_port: int = 26257
+    base_http_port: int = 8080
+    data_dir: str = "./cockroach-data"
+    log_dir: str = "./logs"
+    store_size: str = "10GB"
+
+
+@dataclass
 class ExperimentConfig:
     name: str = "cool-experiment-name"
     output_dir: str = "./results"
@@ -42,6 +53,7 @@ class ExperimentConfig:
     concurrency: ConcurrencyConfig = field(default_factory=ConcurrencyConfig)
     juicer: JuicerConfig = field(default_factory=JuicerConfig)
     protocol: ProtocolConfig = field(default_factory=ProtocolConfig)
+    cluster: ClusterConfig = field(default_factory=ClusterConfig)
 
 
 def load_config(config_path: str) -> ExperimentConfig:
@@ -89,6 +101,16 @@ def load_config(config_path: str) -> ExperimentConfig:
         type=_ensure_list(protocol_data.get('type', ['2PL-WW']))
     )
 
+    cluster_data = data.get('cluster', {})
+    cluster = ClusterConfig(
+        num_nodes=cluster_data.get('num_nodes', 1),
+        base_port=cluster_data.get('base_port', 26257),
+        base_http_port=cluster_data.get('base_http_port', 8080),
+        data_dir=cluster_data.get('data_dir', './cockroach-data'),
+        log_dir=cluster_data.get('log_dir', './logs'),
+        store_size=cluster_data.get('store_size', '10GB')
+    )
+
     return ExperimentConfig(
         name=name,
         output_dir=output_dir,
@@ -97,7 +119,8 @@ def load_config(config_path: str) -> ExperimentConfig:
         workload=workload,
         concurrency=concurrency,
         juicer=juicer,
-        protocol=protocol
+        protocol=protocol,
+        cluster=cluster
     )
 
 
