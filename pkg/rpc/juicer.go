@@ -7,5 +7,5 @@ import (
 )
 
 func NewJuicerInterceptorCrdb() grpc.UnaryServerInterceptor {
-	return grpc.NewJuicerServerInterceptor(&JuicerSpiImpl{}, 500*time.Microsecond, 1, 2)
+	return grpc.NewJuicerServerInterceptor(&JuicerSpiImpl{}, 1*time.Millisecond, 1, 2)
 }

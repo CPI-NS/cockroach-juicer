@@ -11,6 +11,7 @@ go_test(
         "//pkg/base",
         "//pkg/kv",
         "//pkg/kv/kvpb",
+        "//pkg/kv/kvclient/kvcoord",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
@@ -19,6 +20,7 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util/log",
         "//pkg/util/randutil",
+        "//pkg/util/metric",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

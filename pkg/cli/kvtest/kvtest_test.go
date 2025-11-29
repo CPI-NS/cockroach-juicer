@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
@@ -99,9 +100,9 @@ func isContextError(err error) bool {
 func runClient(ctx context.Context, t *testing.T, clientID int, db *kv.DB) {
 	keyRange := defaultKeyRange
 
-	// zipfS := defaultZipfS
+	zipfS := defaultZipfS
 
-	// zipfV := defaultZipfV
+	zipfV := defaultZipfV
 
 	const workerCount = 10
 	var workerWG sync.WaitGroup
@@ -110,18 +111,18 @@ func runClient(ctx context.Context, t *testing.T, clientID int, db *kv.DB) {
 	var totalOps atomic.Int64
 	var totalLatency atomic.Int64
 	var abortCount atomic.Int64
-	keyNumber := 3
+	keyNumber := 10
 
 	for workerID := 0; workerID < workerCount; workerID++ {
 		go func(id int) {
 			defer workerWG.Done()
-			// rng := rand.New(rand.NewSource(time.Now().UnixNano() + int64(clientID*1000+id*10)))
-			// zipf := rand.NewZipf(rng, zipfS, zipfV, uint64(keyRange-1))
+			rng := rand.New(rand.NewSource(time.Now().UnixNano() + int64(clientID*1000+id*10)))
+			zipf := rand.NewZipf(rng, zipfS, zipfV, uint64(keyRange-1))
 			ops := 0
 			for {
 				select {
 				case <-ctx.Done():
-					t.Logf("客户端 %d Worker %d: 停止，完成RMW次数: %d", clientID, id, ops)
+					t.Logf("Client %d Worker %d: Stop，Finish RMW: %d", clientID, id, ops)
 					return
 				default:
 				}
@@ -133,8 +134,8 @@ func runClient(ctx context.Context, t *testing.T, clientID int, db *kv.DB) {
 				keys := make([]roachpb.Key, 0, keyNumber)
 				seen := make(map[int]struct{}, keyNumber)
 				for len(keys) < keyNumber {
-					k := rand.Intn(keyRange) + 1
 
+					k := int(zipf.Uint64()) + 1
 					if _, ok := seen[k]; ok {
 						continue
 					}
@@ -148,7 +149,7 @@ func runClient(ctx context.Context, t *testing.T, clientID int, db *kv.DB) {
 				}
 				if err := txn.Run(ctx, getBatch); err != nil {
 					if !isContextError(err) {
-						t.Logf("客户端 %d Worker %d: Get批次失败: %v", clientID, id, err)
+						t.Logf("Client %d Worker %d: Get batch failed: %v", clientID, id, err)
 					}
 					abortCount.Add(1)
 					_ = txn.Rollback(ctx)
@@ -171,7 +172,7 @@ func runClient(ctx context.Context, t *testing.T, clientID int, db *kv.DB) {
 				}
 				if err := txn.Run(ctx, putBatch); err != nil {
 					if !isContextError(err) {
-						t.Logf("客户端 %d Worker %d: Put批次失败: %v", clientID, id, err)
+						t.Logf("Client %d Worker %d: Put batch failed: %v", clientID, id, err)
 					}
 					abortCount.Add(1)
 					_ = txn.Rollback(ctx)
@@ -180,7 +181,7 @@ func runClient(ctx context.Context, t *testing.T, clientID int, db *kv.DB) {
 
 				if err := txn.Commit(ctx); err != nil {
 					if !isContextError(err) {
-						t.Logf("客户端 %d Worker %d: Commit失败: %v", clientID, id, err)
+						t.Logf("Client %d Worker %d: Commit failed: %v", clientID, id, err)
 					}
 					abortCount.Add(1)
 					continue
@@ -193,7 +194,6 @@ func runClient(ctx context.Context, t *testing.T, clientID int, db *kv.DB) {
 	}
 
 	<-ctx.Done()
-
 	workerWG.Wait()
 	ops := totalOps.Load()
 	aborts := abortCount.Load()
@@ -209,4 +209,51 @@ func runClient(ctx context.Context, t *testing.T, clientID int, db *kv.DB) {
 	}
 	t.Logf("Client %d: All RMW workers stopped (Success=%d, Abort=%d, Average latency=%s, Abort rate=%.2f%%)",
 		clientID, ops, aborts, avgLatency, abortRate)
+
+	// Get and print TxnMetrics
+	printTxnMetrics(t, db)
+}
+
+// printTxnMetrics retrieves and prints TxnMetrics from the DB's TxnCoordSenderFactory
+func printTxnMetrics(t *testing.T, db *kv.DB) {
+	factory := db.GetFactory()
+	tcsFactory, ok := factory.(*kvcoord.TxnCoordSenderFactory)
+	if !ok {
+		t.Logf("Warning: DB factory is not a TxnCoordSenderFactory, cannot get TxnMetrics")
+		return
+	}
+
+	metrics := tcsFactory.Metrics()
+
+	// Get histogram snapshots
+	durationSnapshot := metrics.Durations.CumulativeSnapshot()
+	restartSnapshot := metrics.Restarts.CumulativeSnapshot()
+
+	durationTotal, _ := durationSnapshot.Total()
+	restartTotal, _ := restartSnapshot.Total()
+
+	// Print metrics
+	t.Logf("=== TxnMetrics ===")
+	t.Logf("Commits: %d", metrics.Commits.Count())
+	t.Logf("Commits1PC: %d", metrics.Commits1PC.Count())
+	t.Logf("CommitsReadOnly: %d", metrics.CommitsReadOnly.Count())
+	t.Logf("ParallelCommits: %d", metrics.ParallelCommits.Count())
+	t.Logf("ParallelCommitAutoRetries: %d", metrics.ParallelCommitAutoRetries.Count())
+	t.Logf("Aborts: %d", metrics.Aborts.Count())
+	t.Logf("Prepares: %d", metrics.Prepares.Count())
+	t.Logf("CommitWaits: %d", metrics.CommitWaits.Count())
+	t.Logf("Durations (total): %d", durationTotal)
+	t.Logf("Restarts (total): %d", restartTotal)
+	t.Logf("ClientRefreshSuccess: %d", metrics.ClientRefreshSuccess.Count())
+	t.Logf("ClientRefreshFail: %d", metrics.ClientRefreshFail.Count())
+	t.Logf("ClientRefreshAutoRetries: %d", metrics.ClientRefreshAutoRetries.Count())
+	t.Logf("ServerRefreshSuccess: %d", metrics.ServerRefreshSuccess.Count())
+	t.Logf("TxnsWithCondensedIntents: %d", metrics.TxnsWithCondensedIntents.Count())
+	t.Logf("TxnsRejectedByLockSpanBudget: %d", metrics.TxnsRejectedByLockSpanBudget.Count())
+	t.Logf("TxnsRejectedByCountLimit: %d", metrics.TxnsRejectedByCountLimit.Count())
+	t.Logf("RestartsWriteTooOld: %d", metrics.RestartsWriteTooOld.Count())
+	t.Logf("RestartsSerializable: %d", metrics.RestartsSerializable.Count())
+	t.Logf("RestartsAsyncWriteFailure: %d", metrics.RestartsAsyncWriteFailure.Count())
+	t.Logf("RestartsReadWithinUncertainty: %d", metrics.RestartsReadWithinUncertainty.Count())
+	t.Logf("==================")
 }
