@@ -1,0 +1,111 @@
+# Graph 7: Median Latency vs. Throughput (Finding the Knee)
+
+experiment:
+  name: "crdb-eval-graph7-knee"
+  output_dir: "../results/eval_graph7_knee"
+  repeat_count: 2     
+  timeout_seconds: 600
+  deployment_mode: "local"  
+
+workload:
+  tx_count: [10000]           
+  ops_per_tx: [1]             
+  key_range: [10000000]       
+  distribution: ["zipfian"]
+  zipfian_s: [0.99]           
+  zipfian_v: [1.0]
+  read_write_ratio: [0.0]     
+
+concurrency:
+  num_clients: [1]            
+  workers_per_client: [1, 2, 4, 8, 16, 32, 64, 128, 256]
+
+juicer:
+  enabled: [false, true] 
+  flush_time_us: [100]
+
+protocol:
+  type: ["2PL-WW"]
+
+cluster:
+  num_nodes: 9
+  base_port: 26257
+  base_http_port: 8080
+  data_dir: "/home/ubuntu/cockroach-data"
+  log_dir: "/home/ubuntu/logs"
+  store_size: "100GB"
+
+data_init:
+  enabled: true
+  num_keys: 10000000         
+  key_prefix: "key"
+  key_range: 10000000
+  batch_size: 10000           
+  concurrent: 8               
+  use_bulk: true              
+
+
+remote:
+  ssh_user: "harrisah"
+  ssh_key: "~/.ssh/aws-key.pem"
+
+  nodes:
+    servers:
+      - hostname: "ec2-server-0.compute-1.amazonaws.com"
+        internal_ip: "10.0.1.10"
+        role: "cockroach"
+        node_id: 1
+
+      - hostname: "ec2-server-1.compute-1.amazonaws.com"
+        internal_ip: "10.0.1.11"
+        role: "cockroach"
+        node_id: 2
+
+      - hostname: "ec2-server-2.compute-1.amazonaws.com"
+        internal_ip: "10.0.1.12"
+        role: "cockroach"
+        node_id: 3
+
+      - hostname: "ec2-server-3.compute-1.amazonaws.com"
+        internal_ip: "10.0.1.13"
+        role: "cockroach"
+        node_id: 4
+
+      - hostname: "ec2-server-4.compute-1.amazonaws.com"
+        internal_ip: "10.0.1.14"
+        role: "cockroach"
+        node_id: 5
+
+      - hostname: "ec2-server-5.compute-1.amazonaws.com"
+        internal_ip: "10.0.1.15"
+        role: "cockroach"
+        node_id: 6
+
+      - hostname: "ec2-server-6.compute-1.amazonaws.com"
+        internal_ip: "10.0.1.16"
+        role: "cockroach"
+        node_id: 7
+
+      - hostname: "ec2-server-7.compute-1.amazonaws.com"
+        internal_ip: "10.0.1.17"
+        role: "cockroach"
+        node_id: 8
+
+      - hostname: "ec2-server-8.compute-1.amazonaws.com"
+        internal_ip: "10.0.1.18"
+        role: "cockroach"
+        node_id: 9
+
+    clients:
+      - hostname: "ec2-client-0.compute-1.amazonaws.com"
+        internal_ip: "10.0.1.20"
+        role: "benchmark"
+
+  remote_paths:
+    cockroach_bin: "/home/ubuntu/cockroach-juicer/cockroach"
+    benchmark_bin: "/home/ubuntu/cockroach-juicer/bin/benchmark"
+    data_dir: "/home/ubuntu/cockroach-data"
+    log_dir: "/home/ubuntu/logs"
+
+  deploy_binaries: true       
+  local_build_dir: "../../"

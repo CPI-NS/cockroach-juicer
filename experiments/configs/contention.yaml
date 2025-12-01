@@ -25,9 +25,18 @@ protocol:
   type: ["2PL-WW"]
 
 cluster:
-  num_nodes: 1          
-  base_port: 26257      
-  base_http_port: 8080  
+  num_nodes: 1
+  base_port: 26257
+  base_http_port: 8080
   data_dir: "./cockroach-data"
   log_dir: "./logs"
-  store_size: "10GB"    
+  store_size: "10GB"
+
+data_init:
+  enabled: true         # Initialize data before running benchmarks
+  num_keys: 10000       # Number of keys to initialize
+  key_prefix: "key"     # Prefix for keys (e.g., "key-1", "key-2", ...)
+  key_range: 10000      # Key range (1 to key_range)
+  batch_size: 100       # Batch size for initialization
+  concurrent: 1         # Number of concurrent writers
+  use_bulk: false       # Use high-performance BulkAdder (SST import)    

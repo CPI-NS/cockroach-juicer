@@ -57,7 +57,18 @@ def run_from_config(config_path: str, dry_run: bool = False):
 
         return
 
-    runner = BenchmarkRunner(config)
+    # Find cockroach-juicer root directory (2 levels up from experiments/)
+    experiments_dir = Path(__file__).parent.parent.resolve()
+    cockroach_juicer_root = experiments_dir.parent
+
+    cockroach_bin = str(cockroach_juicer_root / "cockroach")
+    benchmark_bin = str(cockroach_juicer_root / "bin" / "benchmark")
+
+    runner = BenchmarkRunner(
+        config,
+        benchmark_bin=benchmark_bin,
+        cockroach_bin=cockroach_bin
+    )
     results = runner.run_all()
 
     print("\n" + "="*80)

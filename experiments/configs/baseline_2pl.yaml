@@ -1,28 +1,28 @@
 experiment:
-  name: "baseline-2pl"
-  output_dir: "../results/baseline"
-  repeat_count: 3
+  name: "baseline-2pl-full"
+  output_dir: "../results/baseline_full"
+  repeat_count: 3           # 3 trials for statistical significance
   timeout_seconds: 300
 
 workload:
-  tx_count: [10000]
-  ops_per_tx: [10]
-  key_range: [100]
-  distribution: ["uniform", "zipfian"]
+  tx_count: [500, 1000]     # More transactions for better statistics
+  ops_per_tx: [5, 10]       # Vary workload complexity
+  key_range: [1000, 5000]   # Lower key range = more contention (where Juicer shines)
+  distribution: ["uniform"] # Uniform distribution
   zipfian_s: [1.1]
   zipfian_v: [1.0]
-  read_write_ratio: [0.5]
+  read_write_ratio: [0.5, 0.7]  # Mix of read/write ratios
 
 concurrency:
-  num_clients: [1, 2, 4]
-  workers_per_client: [10, 20]
+  num_clients: [1]          # Single client
+  workers_per_client: [2, 4, 8]  # Vary concurrency to see Juicer impact
 
 juicer:
-  enabled: [false]  # Baseline without Juicer
-  flush_time_us: [100]  # Ignored when disabled
+  enabled: [false, true]  # Compare with and without Juicer
+  flush_time_us: [500]
 
 protocol:
-  type: ["2PL", "2PL-WW"]
+  type: ["2PL-WW"]  # Start with just one protocol for testing
 
 cluster:
   num_nodes: 1          # Number of CockroachDB nodes (1 for single-node, 3+ for multi-node)
@@ -31,3 +31,12 @@ cluster:
   data_dir: "./cockroach-data"
   log_dir: "./logs"
   store_size: "10GB"    # Maximum store size per node
+
+data_init:
+  enabled: true         # Initialize data before running benchmarks
+  num_keys: 5000        # Match max workload key_range
+  key_prefix: "key"     # Prefix for keys (e.g., "key-1", "key-2", ...)
+  key_range: 5000       # Match max workload key_range
+  batch_size: 100       # Batch size for initialization
+  concurrent: 1         # Number of concurrent writers
+  use_bulk: false       # Use high-performance BulkAdder (SST import)

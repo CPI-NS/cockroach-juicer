@@ -34,5 +34,15 @@ cluster:
   log_dir: "./logs"
   store_size: "10GB"
 
+# Data initialization (using new KV benchmark binary)
+data_init:
+  enabled: true         # Initialize data before running benchmarks
+  num_keys: 10000       # Number of keys to initialize
+  key_prefix: "key"     # Prefix for keys (e.g., "key-1", "key-2", ...)
+  key_range: 10000      # Key range (1 to key_range)
+  batch_size: 100       # Batch size for initialization
+  concurrent: 4         # Number of concurrent writers (good for multi-node)
+  use_bulk: false       # Use high-performance BulkAdder (SST import)
+
 # To run a single-node cluster, set num_nodes to 1
 # To run a 5-node cluster, set num_nodes to 5, etc.

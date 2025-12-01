@@ -1,0 +1,84 @@
+experiment:
+  name: "cloudlab-juicer-eval"
+  output_dir: "../results/cloudlab"
+  repeat_count: 5
+  timeout_seconds: 1200
+
+  deployment_mode: "remote"
+
+remote:
+  ssh_user: "harrisah"
+  ssh_key: "~/.ssh/id_rsa"
+  ssh_host_base: "pc474.emulab.net"
+
+  nodes:
+    servers:
+      - hostname: "pc474.emulab.net"
+        ssh_port: 25477
+        internal_hostname: "server-0"
+        role: "cockroach"
+        node_id: 1
+
+      - hostname: "pc474.emulab.net"
+        ssh_port: 25478
+        internal_hostname: "server-1"
+        role: "cockroach"
+        node_id: 2
+
+    clients:
+      - hostname: "pc474.emulab.net"
+        ssh_port: 25475
+        internal_hostname: "client-0"
+        role: "benchmark"
+
+      - hostname: "pc474.emulab.net"
+        ssh_port: 25476
+        internal_hostname: "client-1"
+        role: "benchmark"
+
+  remote_paths:
+    cockroach_bin: "/users/harrisah/cockroach"
+    benchmark_bin: "/users/harrisah/benchmark"
+    data_dir: "/users/harrisah/cockroach-data"
+    log_dir: "/users/harrisah/logs"
+
+  deploy_binaries: true
+  local_build_dir: "../../cockroach-juicer/"
+
+# Workload: Graph 7 - Finding the Knee
+workload:
+  tx_count: [10000]
+  ops_per_tx: [1]
+  key_range: [1000000]
+  distribution: ["zipfian"]
+  zipfian_s: [0.99]
+  zipfian_v: [1.0]
+  read_write_ratio: [0.0]  # 100% RMW
+
+concurrency:
+  num_clients: [2]  # Use both clients
+  workers_per_client: [1, 2, 4, 8, 12, 16]
+
+juicer:
+  enabled: [false, true]  # Test baseline and Juicer
+  flush_time_us: [100]
+
+protocol:
+  type: ["2PL-WW"]
+
+cluster:
+  num_nodes: 2
+  base_port: 26257
+  base_http_port: 8080
+  data_dir: "/users/harrisah/cockroach-data"
+  log_dir: "/users/harrisah/logs"
+  store_size: "50GB"
+
+data_init:
+  enabled: true
+  num_keys: 1000000
+  key_prefix: "key"
+  key_range: 1000000
+  batch_size: 10000
+  concurrent: 8
+  use_bulk: true

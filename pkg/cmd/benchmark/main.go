@@ -34,6 +34,21 @@ var (
 	initBatchSize  = flag.Int("init-batch", 100, "batch size for initialization")
 	initConcurrent = flag.Int("init-concurrent", 1, "number of concurrent writers")
 	useBulkAdder   = flag.Bool("init-bulk", false, "use BulkAdder for high-performance initialization")
+
+	// Workload execution flags
+	txCount        = flag.Int("tx-count", 1000, "number of transactions to execute")
+	opsPerTx       = flag.Int("ops-per-tx", 10, "number of operations per transaction")
+	keyRange       = flag.Int("key-range", 1000, "key range for workload (1 to key-range)")
+	keyPrefix      = flag.String("key-prefix", "key", "prefix for keys in workload")
+	distribution   = flag.String("distribution", "uniform", "distribution type: uniform or zipfian")
+	zipfianS       = flag.Float64("zipfian-s", 1.1, "zipfian skew parameter")
+	zipfianV       = flag.Float64("zipfian-v", 1.0, "zipfian velocity parameter")
+	readWriteRatio = flag.Float64("read-write-ratio", 0.5, "ratio of reads to total operations")
+	workers        = flag.Int("workers", 10, "number of worker goroutines")
+	protocol       = flag.String("protocol", "2PL-WW", "concurrency control protocol: 2PL or 2PL-WW")
+	juicerEnabled  = flag.Bool("juicer", false, "enable Juicer transaction reordering")
+	workloadType   = flag.String("workload-type", "mixed", "workload type: mixed (default) or rmw (read-modify-write)")
+	useHashKeys    = flag.Bool("use-hash-keys", true, "use hash-based keys for even distribution across shards")
 )
 
 func main() {
@@ -95,21 +110,31 @@ func main() {
 		return
 	}
 
-	for i := 0; i < 10; i++ {
-		// Perform RMW operation
-		keyBytes := roachpb.Key(*key)
-		fmt.Printf("Performing RMW operation on key: %s\n", *key)
-
-		if err := performRMW(ctx, db, keyBytes); err != nil {
-			fmt.Fprintf(os.Stderr, "error performing RMW: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Println("✓ RMW operation completed successfully")
-
+	// Run workload
+	workloadCfg := WorkloadConfig{
+		TxCount:        *txCount,
+		OpsPerTx:       *opsPerTx,
+		KeyRange:       *keyRange,
+		KeyPrefix:      *keyPrefix,
+		Distribution:   *distribution,
+		ZipfianS:       *zipfianS,
+		ZipfianV:       *zipfianV,
+		ReadWriteRatio: *readWriteRatio,
+		Workers:        *workers,
+		Protocol:       *protocol,
+		JuicerEnabled:  *juicerEnabled,
+		WorkloadType:   *workloadType,
+		UseHashKeys:    *useHashKeys,
 	}
 
-	time.Sleep(10 * time.Second)
+	results, err := RunWorkload(ctx, db, workloadCfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error running workload: %v\n", err)
+		os.Exit(1)
+	}
 
+	// Print results
+	PrintResults(results)
 }
 
 func performRMW(ctx context.Context, db *kv.DB, key roachpb.Key) error {

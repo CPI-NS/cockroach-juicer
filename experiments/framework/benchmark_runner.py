@@ -42,13 +42,39 @@ class BenchmarkRunner:
         self.logger.info(f"Repeat count: {self.config.repeat_count}")
         self.logger.info(f"Total runs: {total_experiments}")
 
+        # Prepare remote node list if remote mode
+        remote_nodes = []
+        if self.config.remote.deployment_mode == "remote":
+            # Convert RemoteNodeConfig to dict format expected by ClusterManager
+            for node in self.config.remote.server_nodes:
+                remote_nodes.append({
+                    'hostname': node.hostname,
+                    'internal_ip': node.internal_ip,
+                    'role': node.role,
+                    'node_id': node.node_id
+                })
+            for node in self.config.remote.client_nodes:
+                remote_nodes.append({
+                    'hostname': node.hostname,
+                    'internal_ip': node.internal_ip,
+                    'role': node.role,
+                    'node_id': node.node_id
+                })
+
         self.cluster_mgr = ClusterManager(
             cockroach_bin=self.cockroach_bin,
             data_dir=self.config.cluster.data_dir,
             log_dir=self.config.cluster.log_dir,
             num_nodes=self.config.cluster.num_nodes,
             base_port=self.config.cluster.base_port,
-            base_http_port=self.config.cluster.base_http_port
+            base_http_port=self.config.cluster.base_http_port,
+            # Remote deployment parameters
+            remote_mode=(self.config.remote.deployment_mode == "remote"),
+            remote_nodes=remote_nodes,
+            ssh_user=self.config.remote.ssh_user,
+            ssh_key=self.config.remote.ssh_key,
+            remote_cockroach_bin=self.config.remote.cockroach_bin_remote,
+            remote_benchmark_bin=self.config.remote.benchmark_bin_remote
         )
 
         self.logger.info(f"Starting {self.config.cluster.num_nodes}-node cluster")
@@ -58,6 +84,21 @@ class BenchmarkRunner:
         if not self.cluster_mgr.start(store_size=self.config.cluster.store_size):
             self.logger.error("Failed to start cluster")
             return results
+
+        # Configure Raft replication (for evaluation experiments)
+        if self.config.cluster.num_nodes >= 3:
+            self.logger.info("Configuring Raft replication factor...")
+            if not self._configure_replication(replicas=3):
+                self.logger.warning("Failed to configure replication (continuing anyway)")
+
+        # Initialize data if enabled
+        if self.config.data_init.enabled:
+            self.logger.info("Initializing benchmark data...")
+            if not self._initialize_data():
+                self.logger.error("Failed to initialize data")
+                self.cluster_mgr.stop()
+                return results
+            self.logger.info("Data initialization completed")
 
         try:
             for exp_idx, exp_params in enumerate(experiments):
@@ -154,20 +195,114 @@ class BenchmarkRunner:
             metrics.errors.append(str(e))
             return metrics
 
-    def _build_benchmark_command(self, bench_params: Dict[str, Any]) -> List[str]:
+    def _initialize_data(self) -> bool:
+        """Initialize benchmark data using the benchmark binary's --init flag."""
+        cfg = self.config.data_init
+
+        # Get server addresses from cluster manager (handles both local and remote)
+        addrs = self.cluster_mgr.get_server_addresses()
+        addrs_str = ",".join(addrs)
+
         cmd = [
             self.benchmark_bin,
-            f"--url={bench_params['db_url']}",
+            f"--addrs={addrs_str}",
+            "--insecure",
+            "--init",
+            f"--init-keys={cfg.num_keys}",
+            f"--init-prefix={cfg.key_prefix}",
+            f"--init-range={cfg.key_range}",
+            f"--init-batch={cfg.batch_size}",
+            f"--init-concurrent={cfg.concurrent}"
+        ]
+
+        if cfg.use_bulk:
+            cmd.append("--init-bulk")
+
+        self.logger.info(f"  Running: {' '.join(cmd)}")
+
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=self.config.timeout_seconds
+            )
+
+            if result.returncode != 0:
+                self.logger.error(f"Data initialization failed: {result.stderr}")
+                return False
+
+            self.logger.info(result.stdout)
+            return True
+
+        except subprocess.TimeoutExpired:
+            self.logger.error(f"Data initialization timeout after {self.config.timeout_seconds}s")
+            return False
+        except Exception as e:
+            self.logger.error(f"Data initialization error: {e}")
+            return False
+
+    def _configure_replication(self, replicas: int = 3) -> bool:
+        """Configure CockroachDB Raft replication factor."""
+        try:
+            # Get server addresses from cluster manager
+            addrs = self.cluster_mgr.get_server_addresses()
+            if not addrs:
+                return False
+
+            host = addrs[0]  # Use first server for SQL commands
+
+            cmd = [
+                self.cockroach_bin,
+                "sql",
+                "--insecure",
+                f"--host={host}",
+                f"--execute=ALTER RANGE default CONFIGURE ZONE USING num_replicas = {replicas};",
+            ]
+
+            self.logger.info(f"  Setting replication factor to {replicas}...")
+
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+
+            if result.returncode != 0:
+                self.logger.error(f"Failed to configure replication: {result.stderr}")
+                return False
+
+            self.logger.info(f"  ✓ Replication factor set to {replicas}")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Replication configuration error: {e}")
+            return False
+
+    def _build_benchmark_command(self, bench_params: Dict[str, Any]) -> List[str]:
+        """Build benchmark command using new --addrs flag instead of --url."""
+        # Get server addresses from cluster manager (handles both local and remote)
+        addrs = self.cluster_mgr.get_server_addresses()
+        addrs_str = ",".join(addrs)
+
+        cmd = [
+            self.benchmark_bin,
+            f"--addrs={addrs_str}",
+            "--insecure",
             f"--tx-count={bench_params['workload']['tx_count']}",
             f"--ops-per-tx={bench_params['workload']['ops_per_tx']}",
             f"--key-range={bench_params['workload']['key_range']}",
             f"--distribution={bench_params['workload']['distribution']}",
+            f"--read-write-ratio={bench_params['workload']['read_write_ratio']}",
             f"--workers={bench_params['total_workers']}",
-            f"--protocol={bench_params['protocol']}"
+            f"--protocol={bench_params['protocol']}",
         ]
 
         if bench_params['juicer_enabled']:
-            cmd.append(f"--juicer-flush-time={bench_params['flush_time_us']}")
+            cmd.append("--juicer")
+            # Note: flush_time is currently hardcoded in pkg/rpc/juicer.go at 100μs
+            # TODO: Add --juicer-flush-time flag to benchmark binary if configurable flush time is needed
 
         if bench_params['workload']['distribution'] == 'zipfian':
             cmd.append(f"--zipfian-s={bench_params['workload']['zipfian_s']}")

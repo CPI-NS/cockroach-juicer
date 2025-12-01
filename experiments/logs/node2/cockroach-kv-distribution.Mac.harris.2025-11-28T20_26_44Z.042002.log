@@ -1,0 +1,183 @@
+I251128 20:26:44.069256 1069 util/log/file_sync_buffer.go:237 ⋮ [config]   file created at: 2025/11/28 20:26:44
+I251128 20:26:44.069260 1069 util/log/file_sync_buffer.go:237 ⋮ [config]   running on machine: ‹Mac.lan›
+I251128 20:26:44.069265 1069 util/log/file_sync_buffer.go:237 ⋮ [config]   binary: CockroachDB CCL v25.3.5-dev (darwin arm64, built , go1.23.12 X:nocoverageredesign)
+I251128 20:26:44.069267 1069 util/log/file_sync_buffer.go:237 ⋮ [config]   arguments: [‹/Users/harris/Documents/cpi-ns/juicer/juicer-cc/cockroach-juicer/cockroach› ‹start› ‹--store=path=cockroach-data/node2,size=5GB› ‹--listen-addr=localhost:26258› ‹--http-addr=localhost:8081› ‹--join=localhost:26257,localhost:26258,localhost:26259› ‹--log-dir=logs/node2› ‹--cluster-name=default› ‹--insecure›]
+I251128 20:26:44.069274 1069 util/log/file_sync_buffer.go:237 ⋮ [config]   log format (utf8=✓): crdb-v2
+I251128 20:26:44.069275 1069 util/log/file_sync_buffer.go:237 ⋮ [config]   line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid [chan@]file:line redactionmark \[tags\] [counter] msg
+I251128 20:26:44.068924 1069 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r48/2:{-}] 1  applying snapshot 427c479f from (n1,s1):1 at applied index 15
+I251128 20:26:44.432900 1236 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r26/2:{-}] 2  applying snapshot 7aa86dcc from (n1,s1):1 at applied index 18
+I251128 20:26:44.900913 1454 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r41/2:{-}] 3  applying snapshot 8f8d632e from (n1,s1):1 at applied index 15
+I251128 20:26:45.137942 1600 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r2/2:{-}] 4  applying snapshot 630e6fa9 from (n1,s1):1 at applied index 19
+I251128 20:26:45.392953 1650 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r33/2:{-}] 5  applying snapshot e49ec5c5 from (n1,s1):1 at applied index 21
+I251128 20:26:45.507928 1677 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r66/2:{-}] 6  applying snapshot f045f4b4 from (n1,s1):1 at applied index 15
+I251128 20:26:45.755021 1612 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r25/2:{-}] 7  applying snapshot 86b0655a from (n1,s1):1 at applied index 15
+I251128 20:26:45.875988 1727 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r38/2:{-}] 8  applying snapshot a11d3487 from (n1,s1):1 at applied index 15
+I251128 20:26:46.282957 1768 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r29/2:{-}] 9  applying snapshot 76e0992d from (n1,s1):1 at applied index 15
+I251128 20:26:46.664153 1635 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r42/2:{-}] 10  applying snapshot f3151659 from (n1,s1):1 at applied index 18
+I251128 20:26:46.925144 1739 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r7/2:{-}] 11  applying snapshot 242cb90f from (n1,s1):1 at applied index 25
+I251128 20:26:47.056962 1745 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r45/2:{-}] 12  applying snapshot d51a5c93 from (n1,s1):1 at applied index 15
+I251128 20:26:47.417265 1842 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r1/2:{-}] 13  applying snapshot 4577cddd from (n1,s1):1 at applied index 115
+I251128 20:26:47.691064 1757 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r14/2:{-}] 14  applying snapshot ff9d65b4 from (n1,s1):1 at applied index 174
+I251128 20:26:47.840973 1758 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r18/2:{-}] 15  applying snapshot 5b1d5ef5 from (n1,s1):1 at applied index 63
+I251128 20:26:48.310009 1853 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r44/2:{-}] 16  applying snapshot ff08ed2f from (n1,s1):1 at applied index 15
+I251128 20:26:48.444015 1896 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r64/2:{-}] 17  applying snapshot 8947b20e from (n1,s1):1 at applied index 15
+I251128 20:26:48.757989 1710 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r27/2:{-}] 18  applying snapshot f7f7116d from (n1,s1):1 at applied index 15
+I251128 20:26:48.772143 1959 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r27/2:/Table/2{4-5}] 19  expected leaseholder store to be in the slice of existing replicas
+I251128 20:26:49.189969 1976 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r32/2:{-}] 20  applying snapshot a6f3dbdf from (n1,s1):1 at applied index 15
+I251128 20:26:49.204177 1979 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r32/2:/{Table/29-NamespaceTab…}] 21  expected leaseholder store to be in the slice of existing replicas
+I251128 20:26:49.467981 1996 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r9/2:{-}] 22  applying snapshot d9bdc114 from (n1,s1):1 at applied index 33
+I251128 20:26:49.486350 2067 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r9/2:/Table/{5-6}] 23  expected leaseholder store to be in the slice of existing replicas
+I251128 20:26:49.664005 1932 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r4/2:{-}] 24  applying snapshot 7c86b553 from (n1,s1):1 at applied index 22
+I251128 20:26:50.052985 1551 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r40/2:{-}] 25  applying snapshot ccd9152b from (n1,s1):1 at applied index 25
+I251128 20:26:50.068132 2086 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r40/2:/Table/3{7-8}] 26  expected leaseholder store to be in the slice of existing replicas
+I251128 20:26:50.519052 2062 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r24/2:{-}] 27  applying snapshot 4d5dd00e from (n1,s1):1 at applied index 20
+I251128 20:26:50.533225 2139 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r24/2:/Table/2{1-2}] 28  expected leaseholder store to be in the slice of existing replicas
+I251128 20:26:50.669982 2146 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r12/2:{-}] 29  applying snapshot a6772427 from (n1,s1):1 at applied index 15
+I251128 20:26:50.683263 2173 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r12/2:/Table/{8-9}] 30  expected leaseholder store to be in the slice of existing replicas
+I251128 20:26:51.159162 2093 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r57/2:{-}] 31  applying snapshot 75464885 from (n1,s1):1 at applied index 15
+I251128 20:26:51.183601 2189 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r57/2:/Table/5{5-6}] 32  expected leaseholder store to be in the slice of existing replicas
+I251128 20:26:51.473013 2124 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r59/2:{-}] 33  applying snapshot 5b5dec0d from (n1,s1):1 at applied index 15
+I251128 20:26:51.499290 2145 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r59/2:/Table/5{7-8}] 34  expected leaseholder store to be in the slice of existing replicas
+I251128 20:26:51.835085 2218 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r67/2:{-}] 35  applying snapshot 9e7e1cb8 from (n1,s1):1 at applied index 15
+I251128 20:26:51.848377 2202 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r67/2:/Table/6{5-6}] 36  expected leaseholder store to be in the slice of existing replicas
+I251128 20:26:52.168023 2275 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r19/2:{-}] 37  applying snapshot 6681df13 from (n1,s1):1 at applied index 15
+I251128 20:26:52.183213 2279 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r19/2:/Table/1{6-7}] 38  expected leaseholder store to be in the slice of existing replicas
+I251128 20:26:52.329097 2262 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r63/2:{-}] 39  applying snapshot 10baa347 from (n1,s1):1 at applied index 15
+I251128 20:26:52.349313 2323 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r63/2:/Table/6{1-2}] 40  expected leaseholder store to be in the slice of existing replicas
+I251128 20:26:52.680092 2325 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r34/2:{-}] 41  applying snapshot 69d91047 from (n1,s1):1 at applied index 15
+I251128 20:26:52.696313 2286 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r34/2:/{NamespaceTab…-Table/32}] 42  expected leaseholder store to be in the slice of existing replicas
+I251128 20:26:53.032050 2288 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r72/2:{-}] 43  applying snapshot 3f9f78d2 from (n1,s1):1 at applied index 15
+I251128 20:26:53.047244 2350 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r72/2:/Table/7{0-1}] 44  expected leaseholder store to be in the slice of existing replicas
+I251128 20:26:53.829061 2300 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r68/2:{-}] 45  applying snapshot 999d25cf from (n1,s1):1 at applied index 15
+I251128 20:26:53.848264 2389 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r68/2:/Table/6{6-7}] 46  expected leaseholder store to be in the slice of existing replicas
+I251128 20:26:54.167301 2425 13@kv/kvserver/allocator/plan/replicate.go:417 ⋮ [T1,Vsystem,n3,replicate,s3,r45/2:/Table/4{2-3}] 47  adding voter n2,s2: [1:22, 2*:22]
+I251128 20:26:54.198325 969 13@spanconfig/spanconfigstore/store.go:364 ⋮ [T1,Vsystem,n3] 48  changing the spanconfig for span:‹/Table/4{2-3}› from:{RangeMinBytes:134217728 RangeMaxBytes:536870912 GCPolicy:{TTLSeconds:14400 ProtectionPolicies:[] IgnoreStrictEnforcement:true} GlobalReads:false NumReplicas:5 NumVoters:0 Constraints:[] VoterConstraints:[] LeasePreferences:[] RangefeedEnabled:true ExcludeDataFromBackup:false} to:{RangeMinBytes:134217728 RangeMaxBytes:536870912 GCPolicy:{TTLSeconds:3600 ProtectionPolicies:[] IgnoreStrictEnforcement:true} GlobalReads:false NumReplicas:5 NumVoters:0 Constraints:[] VoterConstraints:[] LeasePreferences:[] RangefeedEnabled:true ExcludeDataFromBackup:false}
+I251128 20:26:54.198409 969 13@spanconfig/spanconfigstore/store.go:364 ⋮ [T1,Vsystem,n3] 49  changing the spanconfig for span:‹/Table/4{3-4}› from:{RangeMinBytes:134217728 RangeMaxBytes:536870912 GCPolicy:{TTLSeconds:14400 ProtectionPolicies:[] IgnoreStrictEnforcement:true} GlobalReads:false NumReplicas:5 NumVoters:0 Constraints:[] VoterConstraints:[] LeasePreferences:[] RangefeedEnabled:true ExcludeDataFromBackup:false} to:{RangeMinBytes:134217728 RangeMaxBytes:536870912 GCPolicy:{TTLSeconds:3600 ProtectionPolicies:[] IgnoreStrictEnforcement:true} GlobalReads:false NumReplicas:5 NumVoters:0 Constraints:[] VoterConstraints:[] LeasePreferences:[] RangefeedEnabled:true ExcludeDataFromBackup:false}
+I251128 20:26:54.198428 969 13@spanconfig/spanconfigstore/store.go:364 ⋮ [T1,Vsystem,n3] 50  changing the spanconfig for span:‹/Table/5{8-9}› from:{RangeMinBytes:134217728 RangeMaxBytes:536870912 GCPolicy:{TTLSeconds:14400 ProtectionPolicies:[] IgnoreStrictEnforcement:true} GlobalReads:false NumReplicas:5 NumVoters:0 Constraints:[] VoterConstraints:[] LeasePreferences:[] RangefeedEnabled:true ExcludeDataFromBackup:false} to:{RangeMinBytes:134217728 RangeMaxBytes:536870912 GCPolicy:{TTLSeconds:3600 ProtectionPolicies:[] IgnoreStrictEnforcement:true} GlobalReads:false NumReplicas:5 NumVoters:0 Constraints:[] VoterConstraints:[] LeasePreferences:[] RangefeedEnabled:true ExcludeDataFromBackup:false}
+I251128 20:26:54.198446 969 13@spanconfig/spanconfigstore/store.go:364 ⋮ [T1,Vsystem,n3] 51  changing the spanconfig for span:‹/Table/6{1-2}› from:{RangeMinBytes:134217728 RangeMaxBytes:536870912 GCPolicy:{TTLSeconds:14400 ProtectionPolicies:[] IgnoreStrictEnforcement:true} GlobalReads:false NumReplicas:5 NumVoters:0 Constraints:[] VoterConstraints:[] LeasePreferences:[] RangefeedEnabled:true ExcludeDataFromBackup:false} to:{RangeMinBytes:134217728 RangeMaxBytes:536870912 GCPolicy:{TTLSeconds:3600 ProtectionPolicies:[] IgnoreStrictEnforcement:true} GlobalReads:false NumReplicas:5 NumVoters:0 Constraints:[] VoterConstraints:[] LeasePreferences:[] RangefeedEnabled:true ExcludeDataFromBackup:false}
+I251128 20:26:54.198464 969 13@spanconfig/spanconfigstore/store.go:364 ⋮ [T1,Vsystem,n3] 52  changing the spanconfig for span:‹/Table/6{2-3}› from:{RangeMinBytes:134217728 RangeMaxBytes:536870912 GCPolicy:{TTLSeconds:14400 ProtectionPolicies:[] IgnoreStrictEnforcement:true} GlobalReads:false NumReplicas:5 NumVoters:0 Constraints:[] VoterConstraints:[] LeasePreferences:[] RangefeedEnabled:true ExcludeDataFromBackup:false} to:{RangeMinBytes:134217728 RangeMaxBytes:536870912 GCPolicy:{TTLSeconds:3600 ProtectionPolicies:[] IgnoreStrictEnforcement:true} GlobalReads:false NumReplicas:5 NumVoters:0 Constraints:[] VoterConstraints:[] LeasePreferences:[] RangefeedEnabled:true ExcludeDataFromBackup:false}
+I251128 20:26:54.223412 2425 13@kv/kvserver/replica_command.go:2535 ⋮ [T1,Vsystem,n3,replicate,s3,r45/2:/Table/4{2-3}] 53  change replicas (add [(n2,s2):3LEARNER] remove []): existing descriptor r45:/Table/4{2-3} [(n1,s1):1, (n3,s3):2, next=3, gen=2]
+I251128 20:26:54.243390 2425 13@kv/kvserver/replica_raft.go:419 ⋮ [T1,Vsystem,n3,s3,r45/2:/Table/4{2-3}] 54  proposing SIMPLE(l3) [(n2,s2):3LEARNER]: after=[(n1,s1):1 (n3,s3):2 (n2,s2):3LEARNER] next=4
+I251128 20:26:54.283380 1478 13@kv/kvserver/store_snapshot.go:894 ⋮ [T1,Vsystem,n3,s3,r45/2:/Table/4{2-3}] 55  streamed snapshot 9a0d60f2 at applied index 25 to (n2,s2):3LEARNER with 770 B in 0.00s @ 6.5 MiB/s: kvs=12 rangeKVs=0 sharedSSTs=0, externalSSTs=0, rate-limit: 32 MiB/s, queued: 0.02s
+I251128 20:26:54.392069 2469 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r50/2:{-}] 56  applying snapshot 96d55abb from (n1,s1):1 at applied index 20
+I251128 20:26:54.419272 2457 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r50/2:/Table/4{7-8}] 57  expected leaseholder store to be in the slice of existing replicas
+I251128 20:26:54.454688 2425 13@kv/kvserver/replica_command.go:2535 ⋮ [T1,Vsystem,n3,replicate,s3,r45/2:/Table/4{2-3}] 58  change replicas (add [(n2,s2):3] remove []): existing descriptor r45:/Table/4{2-3} [(n1,s1):1, (n3,s3):2, (n2,s2):3LEARNER, next=4, gen=3]
+I251128 20:26:54.476470 2425 13@kv/kvserver/replica_raft.go:419 ⋮ [T1,Vsystem,n3,s3,r45/2:/Table/4{2-3}] 59  proposing SIMPLE(v3) [(n2,s2):3]: after=[(n1,s1):1 (n3,s3):2 (n2,s2):3] next=4
+I251128 20:26:54.613080 1357 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r46/2:{-}] 60  applying snapshot 9f4a5b10 from (n1,s1):1 at applied index 15
+I251128 20:26:54.636336 2553 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r46/2:/Table/4{3-4}] 61  expected leaseholder store to be in the slice of existing replicas
+I251128 20:26:54.875085 1358 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r69/2:{-}] 62  applying snapshot 26aedf16 from (n1,s1):1 at applied index 15
+I251128 20:26:54.902322 2576 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r69/2:/Table/6{7-8}] 63  expected leaseholder store to be in the slice of existing replicas
+I251128 20:26:55.682067 2594 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r47/2:{-}] 64  applying snapshot 7725aae9 from (n1,s1):1 at applied index 15
+I251128 20:26:55.697318 2629 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r47/2:/Table/4{4-5}] 65  expected leaseholder store to be in the slice of existing replicas
+I251128 20:26:55.937077 2597 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r56/2:{-}] 66  applying snapshot 9923f418 from (n1,s1):1 at applied index 72
+I251128 20:26:55.968355 2647 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r56/2:/Table/5{4-5}] 67  expected leaseholder store to be in the slice of existing replicas
+I251128 20:26:56.433100 2474 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r62/3:{-}] 68  applying snapshot bc722f07 from (n2,s2):2 at applied index 24
+I251128 20:26:56.462137 2661 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r71/2:{-}] 69  applying snapshot 7064240e from (n1,s1):1 at applied index 28
+I251128 20:26:56.495372 2665 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r71/2:/Table/{69-70}] 70  expected leaseholder store to be in the slice of existing replicas
+I251128 20:26:56.951074 2520 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r52/3:{-}] 71  applying snapshot 8a3805b7 from (n1,s1):1 at applied index 21
+I251128 20:26:56.979684 2726 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r52/3:/Table/5{0-1}] 72  expected leaseholder store to be in the slice of existing replicas
+I251128 20:26:57.154118 2742 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r36/3:{-}] 73  applying snapshot bc3973b2 from (n1,s1):1 at applied index 21
+I251128 20:26:57.182304 2705 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r36/3:/Table/3{3-4}] 74  expected leaseholder store to be in the slice of existing replicas
+I251128 20:26:57.405113 2748 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r13/3:{-}] 75  applying snapshot afcfe0e1 from (n2,s2):2 at applied index 24
+I251128 20:26:57.701165 2803 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r3/3:{-}] 76  applying snapshot e3751948 from (n1,s1):1 at applied index 40
+I251128 20:26:57.921641 2842 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r3/3:/System/{NodeLive…-tsd}] 77  expected leaseholder store to be in the slice of existing replicas
+I251128 20:26:58.186350 2782 13@kv/kvserver/allocator/plan/replicate.go:417 ⋮ [T1,Vsystem,n3,replicate,s3,r67/2:/Table/6{5-6}] 78  adding voter n2,s2: [1:22, 2*:22]
+I251128 20:26:58.233357 2782 13@kv/kvserver/replica_command.go:2535 ⋮ [T1,Vsystem,n3,replicate,s3,r67/2:/Table/6{5-6}] 79  change replicas (add [(n2,s2):3LEARNER] remove []): existing descriptor r67:/Table/6{5-6} [(n1,s1):1, (n3,s3):2, next=3, gen=2]
+I251128 20:26:58.254261 2782 13@kv/kvserver/replica_raft.go:419 ⋮ [T1,Vsystem,n3,s3,r67/2:/Table/6{5-6}] 80  proposing SIMPLE(l3) [(n2,s2):3LEARNER]: after=[(n1,s1):1 (n3,s3):2 (n2,s2):3LEARNER] next=4
+I251128 20:26:58.305242 2848 13@kv/kvserver/store_snapshot.go:894 ⋮ [T1,Vsystem,n3,s3,r67/2:/Table/6{5-6}] 81  streamed snapshot a98644cc at applied index 24 to (n2,s2):3LEARNER with 782 B in 0.00s @ 4.2 MiB/s: kvs=12 rangeKVs=0 sharedSSTs=0, externalSSTs=0, rate-limit: 32 MiB/s, queued: 0.03s
+I251128 20:26:58.415260 2870 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r65/3:{-}] 82  applying snapshot 42563500 from (n1,s1):1 at applied index 21
+I251128 20:26:58.447333 2877 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r65/3:/Table/6{3-4}] 83  expected leaseholder store to be in the slice of existing replicas
+I251128 20:26:58.502697 2782 13@kv/kvserver/replica_command.go:2535 ⋮ [T1,Vsystem,n3,replicate,s3,r67/2:/Table/6{5-6}] 84  change replicas (add [(n2,s2):3] remove []): existing descriptor r67:/Table/6{5-6} [(n1,s1):1, (n3,s3):2, (n2,s2):3LEARNER, next=4, gen=3]
+I251128 20:26:58.524288 2782 13@kv/kvserver/replica_raft.go:419 ⋮ [T1,Vsystem,n3,s3,r67/2:/Table/6{5-6}] 85  proposing SIMPLE(v3) [(n2,s2):3]: after=[(n1,s1):1 (n3,s3):2 (n2,s2):3] next=4
+I251128 20:26:58.948172 2881 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r28/3:{-}] 86  applying snapshot 9e5e6ba0 from (n1,s1):1 at applied index 21
+I251128 20:26:58.978390 2965 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r28/3:/Table/2{5-6}] 87  expected leaseholder store to be in the slice of existing replicas
+I251128 20:26:59.713119 2967 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r23/3:{-}] 88  applying snapshot 49bd0f0e from (n1,s1):1 at applied index 21
+I251128 20:26:59.750605 2973 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r23/3:/Table/2{0-1}] 89  expected leaseholder store to be in the slice of existing replicas
+I251128 20:27:00.470124 3006 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r15/3:{-}] 90  applying snapshot 11dc2388 from (n1,s1):1 at applied index 60
+I251128 20:27:00.500345 3026 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r15/3:/Table/1{2-3}] 91  expected leaseholder store to be in the slice of existing replicas
+I251128 20:27:00.976265 3029 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r22/3:{-}] 92  applying snapshot e3d7fc4b from (n1,s1):1 at applied index 21
+I251128 20:27:01.004935 3076 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r22/3:/Table/{19-20}] 93  expected leaseholder store to be in the slice of existing replicas
+I251128 20:27:01.245193 3066 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r37/3:{-}] 94  applying snapshot d620b37c from (n1,s1):1 at applied index 21
+I251128 20:27:01.272366 3106 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r37/3:/Table/3{4-5}] 95  expected leaseholder store to be in the slice of existing replicas
+I251128 20:27:01.812182 2945 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r61/3:{-}] 96  applying snapshot d44f3b38 from (n1,s1):1 at applied index 21
+I251128 20:27:01.839439 3116 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r61/3:/Table/{59-60}] 97  expected leaseholder store to be in the slice of existing replicas
+I251128 20:27:02.326211 3085 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r10/3:{-}] 98  applying snapshot c46d5cb8 from (n1,s1):1 at applied index 24
+I251128 20:27:02.343507 3152 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r10/3:/Table/{6-7}] 99  expected leaseholder store to be in the slice of existing replicas
+I251128 20:27:02.829199 3050 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r74/3:{-}] 100  applying snapshot 41dd6825 from (n1,s1):1 at applied index 21
+I251128 20:27:02.875434 3176 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r74/3:/{Table/72-Max}] 101  expected leaseholder store to be in the slice of existing replicas
+I251128 20:27:03.597231 3178 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r35/3:{-}] 102  applying snapshot 2ab34d7e from (n1,s1):1 at applied index 21
+I251128 20:27:03.622526 3182 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r35/3:/Table/3{2-3}] 103  expected leaseholder store to be in the slice of existing replicas
+I251128 20:27:03.846208 3104 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r43/3:{-}] 104  applying snapshot 2253efc2 from (n1,s1):1 at applied index 23
+I251128 20:27:03.865381 3238 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r43/3:/Table/4{0-1}] 105  expected leaseholder store to be in the slice of existing replicas
+I251128 20:27:04.361216 3298 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r53/3:{-}] 106  applying snapshot 1a4ce605 from (n2,s2):2 at applied index 24
+I251128 20:27:04.601251 3269 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r73/3:{-}] 107  applying snapshot d58a9114 from (n1,s1):1 at applied index 25
+I251128 20:27:04.634788 3348 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r73/3:/Table/7{1-2}] 108  expected leaseholder store to be in the slice of existing replicas
+I251128 20:27:05.133234 3361 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r8/3:{-}] 109  applying snapshot 8065be5d from (n1,s1):1 at applied index 26
+I251128 20:27:05.158395 3279 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r8/3:/Table/{4-5}] 110  expected leaseholder store to be in the slice of existing replicas
+I251128 20:27:05.399234 3367 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r20/3:{-}] 111  applying snapshot e2afc7b9 from (n1,s1):1 at applied index 21
+I251128 20:27:05.425430 3297 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r20/3:/Table/1{7-8}] 112  expected leaseholder store to be in the slice of existing replicas
+I251128 20:27:05.842215 3381 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r31/3:{-}] 113  applying snapshot 940ebd11 from (n1,s1):1 at applied index 21
+I251128 20:27:05.863501 3401 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r31/3:/Table/2{8-9}] 114  expected leaseholder store to be in the slice of existing replicas
+I251128 20:27:06.770260 3215 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r17/3:{-}] 115  applying snapshot b5960657 from (n1,s1):1 at applied index 21
+I251128 20:27:06.793517 3452 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r17/3:/Table/1{4-5}] 116  expected leaseholder store to be in the slice of existing replicas
+I251128 20:27:07.282242 3457 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r60/3:{-}] 117  applying snapshot 80920d15 from (n1,s1):1 at applied index 21
+I251128 20:27:07.308439 3392 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r60/3:/Table/5{8-9}] 118  expected leaseholder store to be in the slice of existing replicas
+I251128 20:27:07.517310 3468 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r16/3:{-}] 119  applying snapshot 26ee2e95 from (n1,s1):1 at applied index 265
+I251128 20:27:07.540457 3477 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r16/3:/Table/1{3-4}] 120  expected leaseholder store to be in the slice of existing replicas
+I251128 20:27:08.175442 3543 13@kv/kvserver/allocator/plan/replicate.go:417 ⋮ [T1,Vsystem,n3,replicate,s3,r34/2:/{NamespaceTab…-Table/32}] 121  adding voter n2,s2: [1:22, 2*:22]
+I251128 20:27:08.222440 3543 13@kv/kvserver/replica_command.go:2535 ⋮ [T1,Vsystem,n3,replicate,s3,r34/2:/{NamespaceTab…-Table/32}] 122  change replicas (add [(n2,s2):3LEARNER] remove []): existing descriptor r34:/{NamespaceTable/Max-Table/32} [(n1,s1):1, (n3,s3):2, next=3, gen=2]
+I251128 20:27:08.242651 3543 13@kv/kvserver/replica_raft.go:419 ⋮ [T1,Vsystem,n3,s3,r34/2:/{NamespaceTab…-Table/32}] 123  proposing SIMPLE(l3) [(n2,s2):3LEARNER]: after=[(n1,s1):1 (n3,s3):2 (n2,s2):3LEARNER] next=4
+I251128 20:27:08.284854 3481 13@kv/kvserver/store_snapshot.go:894 ⋮ [T1,Vsystem,n3,s3,r34/2:/{NamespaceTab…-Table/32}] 124  streamed snapshot 1fe83d94 at applied index 24 to (n2,s2):3LEARNER with 780 B in 0.00s @ 8.2 MiB/s: kvs=12 rangeKVs=0 sharedSSTs=0, externalSSTs=0, rate-limit: 32 MiB/s, queued: 0.02s
+I251128 20:27:08.389273 3492 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r30/3:{-}] 125  applying snapshot 193116ae from (n1,s1):1 at applied index 21
+I251128 20:27:08.412469 3573 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r30/3:/Table/2{7-8}] 126  expected leaseholder store to be in the slice of existing replicas
+I251128 20:27:08.496991 3543 13@kv/kvserver/replica_command.go:2535 ⋮ [T1,Vsystem,n3,replicate,s3,r34/2:/{NamespaceTab…-Table/32}] 127  change replicas (add [(n2,s2):3] remove []): existing descriptor r34:/{NamespaceTable/Max-Table/32} [(n1,s1):1, (n3,s3):2, (n2,s2):3LEARNER, next=4, gen=3]
+I251128 20:27:08.510651 3543 13@kv/kvserver/replica_raft.go:419 ⋮ [T1,Vsystem,n3,s3,r34/2:/{NamespaceTab…-Table/32}] 128  proposing SIMPLE(v3) [(n2,s2):3]: after=[(n1,s1):1 (n3,s3):2 (n2,s2):3] next=4
+I251128 20:27:08.699319 3515 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r55/3:{-}] 129  applying snapshot 42ba1f00 from (n1,s1):1 at applied index 21
+I251128 20:27:08.738623 3620 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r55/3:/Table/5{3-4}] 130  expected leaseholder store to be in the slice of existing replicas
+I251128 20:27:09.243281 3643 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r21/3:{-}] 131  applying snapshot af28f286 from (n1,s1):1 at applied index 21
+I251128 20:27:09.275592 3614 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r21/3:/Table/1{8-9}] 132  expected leaseholder store to be in the slice of existing replicas
+I251128 20:27:09.751351 3503 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r58/3:{-}] 133  applying snapshot 89d3ae84 from (n1,s1):1 at applied index 21
+I251128 20:27:09.777624 3690 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r58/3:/Table/5{6-7}] 134  expected leaseholder store to be in the slice of existing replicas
+I251128 20:27:09.982308 3627 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r39/3:{-}] 135  applying snapshot a5692d4e from (n1,s1):1 at applied index 21
+I251128 20:27:10.004642 3733 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r39/3:/Table/3{6-7}] 136  expected leaseholder store to be in the slice of existing replicas
+I251128 20:27:10.469291 3717 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r54/3:{-}] 137  applying snapshot f2399a8b from (n2,s2):2 at applied index 24
+I251128 20:27:10.857360 3677 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r6/3:{-}] 138  applying snapshot 7b9805d8 from (n1,s1):1 at applied index 21
+I251128 20:27:10.877572 3704 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r6/3:/Table/{0-3}] 139  expected leaseholder store to be in the slice of existing replicas
+I251128 20:27:11.124303 3768 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r11/3:{-}] 140  applying snapshot 6579f0be from (n1,s1):1 at applied index 27
+I251128 20:27:11.157566 3878 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r11/3:/Table/{7-8}] 141  expected leaseholder store to be in the slice of existing replicas
+I251128 20:27:11.851307 4116 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r5/3:{-}] 142  applying snapshot f967bb58 from (n1,s1):1 at applied index 4387
+I251128 20:27:11.944028 4063 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r5/3:/{System‹tse›-Table/0}] 143  expected leaseholder store to be in the slice of existing replicas
+I251128 20:27:12.579302 3853 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r51/3:{-}] 144  applying snapshot 558e0a0d from (n1,s1):1 at applied index 21
+I251128 20:27:12.599505 4145 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r51/3:/Table/{48-50}] 145  expected leaseholder store to be in the slice of existing replicas
+I251128 20:27:13.756342 3854 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r49/3:{-}] 146  applying snapshot 78b3c862 from (n1,s1):1 at applied index 24
+I251128 20:27:13.790569 4253 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r49/3:/Table/4{6-7}] 147  expected leaseholder store to be in the slice of existing replicas
+I251128 20:27:14.785375 4231 13@kv/kvserver/replica_raftstorage.go:535 ⋮ [T1,Vsystem,n3,s3,r70/3:{-}] 148  applying snapshot a58dab04 from (n1,s1):1 at applied index 51
+I251128 20:27:14.821695 4325 13@kv/kvserver/allocator/allocatorimpl/allocator.go:2212 ⋮ [T1,Vsystem,n3,lease,s3,r70/3:/Table/6{8-9}] 149  expected leaseholder store to be in the slice of existing replicas
+I251128 21:06:43.706374 79723 13@kv/kvserver/replicate_queue.go:1026 ⋮ [T1,Vsystem,drain,n3,s3,r21/3:/Table/1{8-9}] 150  transferring lease to s2
+I251128 21:06:43.706422 79745 13@kv/kvserver/replicate_queue.go:1026 ⋮ [T1,Vsystem,drain,n3,s3,r18/2:/Table/1{5-6}] 152  transferring lease to s2
+I251128 21:06:43.706416 79724 13@kv/kvserver/replicate_queue.go:1026 ⋮ [T1,Vsystem,drain,n3,s3,r60/3:/Table/5{8-9}] 151  transferring lease to s2
+I251128 21:06:43.706436 78795 13@kv/kvserver/replicate_queue.go:1026 ⋮ [T1,Vsystem,drain,n3,s3,r36/3:/Table/3{3-4}] 153  transferring lease to s2
+I251128 21:06:43.706445 79734 13@kv/kvserver/replicate_queue.go:1026 ⋮ [T1,Vsystem,drain,n3,s3,r10/3:/Table/{6-7}] 154  transferring lease to s2
+I251128 21:06:43.706457 78794 13@kv/kvserver/replicate_queue.go:1026 ⋮ [T1,Vsystem,drain,n3,s3,r14/2:/Table/1{1-2}] 155  transferring lease to s2
+I251128 21:06:43.706462 79720 13@kv/kvserver/replicate_queue.go:1026 ⋮ [T1,Vsystem,drain,n3,s3,r38/2:/Table/3{5-6}] 156  transferring lease to s2
+I251128 21:06:43.706491 79733 13@kv/kvserver/replicate_queue.go:1026 ⋮ [T1,Vsystem,drain,n3,s3,r65/3:/{Table/63-Max}] 157  transferring lease to s2
+I251128 21:06:43.706510 79756 13@kv/kvserver/replicate_queue.go:1026 ⋮ [T1,Vsystem,drain,n3,s3,r35/3:/Table/3{2-3}] 158  transferring lease to s2
+I251128 21:06:43.706538 79744 13@kv/kvserver/replicate_queue.go:1026 ⋮ [T1,Vsystem,drain,n3,s3,r28/3:/Table/2{5-6}] 160  transferring lease to s2
+I251128 21:06:43.706531 79748 13@kv/kvserver/replicate_queue.go:1026 ⋮ [T1,Vsystem,drain,n3,s3,r1/2:/{Min-System/NodeL…}] 159  transferring lease to s2
+I251128 21:06:43.706561 79752 13@kv/kvserver/replicate_queue.go:1026 ⋮ [T1,Vsystem,drain,n3,s3,r8/3:/Table/{4-5}] 161  transferring lease to s2
+I251128 21:06:43.706571 78801 13@kv/kvserver/replicate_queue.go:1026 ⋮ [T1,Vsystem,drain,n3,s3,r42/2:/Table/{39-40}] 162  transferring lease to s2
+I251128 21:06:43.706577 79753 13@kv/kvserver/replicate_queue.go:1026 ⋮ [T1,Vsystem,drain,n3,s3,r41/2:/Table/3{8-9}] 163  transferring lease to s2
+I251128 21:06:43.706596 78800 13@kv/kvserver/replicate_queue.go:1026 ⋮ [T1,Vsystem,drain,n3,s3,r31/3:/Table/2{8-9}] 164  transferring lease to s2
+I251128 21:06:43.706633 79729 13@kv/kvserver/replicate_queue.go:1026 ⋮ [T1,Vsystem,drain,n3,s3,r43/3:/Table/4{0-1}] 165  transferring lease to s2
+I251128 21:06:43.706629 79717 13@kv/kvserver/replicate_queue.go:1026 ⋮ [T1,Vsystem,drain,n3,s3,r22/3:/Table/{19-20}] 166  transferring lease to s2
+I251128 21:06:43.706651 79722 13@kv/kvserver/replicate_queue.go:1026 ⋮ [T1,Vsystem,drain,n3,s3,r20/3:/Table/1{7-8}] 167  transferring lease to s2
+I251128 21:06:43.706655 78799 13@kv/kvserver/replicate_queue.go:1026 ⋮ [T1,Vsystem,drain,n3,s3,r2/2:/System/NodeLiveness{-Max}] 168  transferring lease to s2
+I251128 21:06:43.706668 79725 13@kv/kvserver/replicate_queue.go:1026 ⋮ [T1,Vsystem,drain,n3,s3,r49/3:/Table/4{6-7}] 169  transferring lease to s2
+I251128 21:06:43.706673 78798 13@kv/kvserver/replicate_queue.go:1026 ⋮ [T1,Vsystem,drain,n3,s3,r4/2:/System{/tsd-‹tse›}] 170  transferring lease to s2
+I251128 21:06:43.706687 79728 13@kv/kvserver/replicate_queue.go:1026 ⋮ [T1,Vsystem,drain,n3,s3,r3/3:/System/{NodeLive…-tsd}] 171  transferring lease to s2
+I251128 21:06:43.706701 79757 13@kv/kvserver/replicate_queue.go:1026 ⋮ [T1,Vsystem,drain,n3,s3,r46/2:/Table/4{3-4}] 172  transferring lease to s2
+I251128 21:06:43.706710 79736 13@kv/kvserver/replicate_queue.go:1026 ⋮ [T1,Vsystem,drain,n3,s3,r61/3:/Table/{59-61}] 173  transferring lease to s2
+I251128 21:06:43.706712 79721 13@kv/kvserver/replicate_queue.go:1026 ⋮ [T1,Vsystem,drain,n3,s3,r45/2:/Table/4{2-3}] 174  transferring lease to s2
+I251128 21:06:43.706736 79740 13@kv/kvserver/replicate_queue.go:1026 ⋮ [T1,Vsystem,drain,n3,s3,r37/3:/Table/3{4-5}] 175  transferring lease to s2
+I251128 21:06:43.706741 79747 13@kv/kvserver/replicate_queue.go:1026 ⋮ [T1,Vsystem,drain,n3,s3,r34/2:/{NamespaceTab…-Table/32}] 176  transferring lease to s2
+I251128 21:06:43.706745 79755 13@kv/kvserver/replicate_queue.go:1026 ⋮ [T1,Vsystem,drain,n3,s3,r33/2:/NamespaceTable/{30-Max}] 177  transferring lease to s2

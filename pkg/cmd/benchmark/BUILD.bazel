@@ -12,6 +12,7 @@ go_library(
         "client.go",
         "init_data.go",
         "main.go",
+        "workload.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/benchmark",
     visibility = ["//visibility:private"],

@@ -39,52 +39,81 @@ class MetricsCollector:
 
     @staticmethod
     def parse_benchmark_output(output: str) -> BenchmarkMetrics:
-        
+
         metrics = BenchmarkMetrics()
 
-        if match := re.search(r'Total.*?:\s*(\d+)', output, re.IGNORECASE):
-            metrics.tx_count = int(match.group(1))
+        # Try parsing new METRICS: format first (from new benchmark binary)
+        if "METRICS:" in output:
+            # Parse key=value format
+            if match := re.search(r'latency_p50_ms=([\d.]+)', output):
+                metrics.latency_p50 = float(match.group(1))
 
-        if match := re.search(r'Commit.*?:\s*(\d+)', output, re.IGNORECASE):
-            metrics.commit_count = int(match.group(1))
+            if match := re.search(r'latency_p95_ms=([\d.]+)', output):
+                metrics.latency_p95 = float(match.group(1))
 
-        if match := re.search(r'Abort.*?:\s*(\d+)', output, re.IGNORECASE):
-            metrics.abort_count = int(match.group(1))
+            if match := re.search(r'latency_p99_ms=([\d.]+)', output):
+                metrics.latency_p99 = float(match.group(1))
 
-        
-        if match := re.search(r'Abort\s+rate.*?:\s*([\d.]+)%', output, re.IGNORECASE):
-            metrics.abort_rate = float(match.group(1))
+            if match := re.search(r'throughput_ops_per_sec=([\d.]+)', output):
+                metrics.throughput = float(match.group(1))
 
-        latency_patterns = {
-            'p50': r'P50.*?:\s*([\d.]+)\s*(ms|μs|us)',
-            'p90': r'P90.*?:\s*([\d.]+)\s*(ms|μs|us)',
-            'p95': r'P95.*?:\s*([\d.]+)\s*(ms|μs|us)',
-            'p99': r'P99[^.].*?:\s*([\d.]+)\s*(ms|μs|us)',
-            'p999': r'P99\.9.*?:\s*([\d.]+)\s*(ms|μs|us)'
-        }
+            if match := re.search(r'abort_rate_percent=([\d.]+)', output):
+                metrics.abort_rate = float(match.group(1))
 
-        for pct, pattern in latency_patterns.items():
-            if match := re.search(pattern, output, re.IGNORECASE):
-                value = float(match.group(1))
-                unit = match.group(2).lower()
-                
-                if unit in ('μs', 'us'):
-                    value = value / 1000.0
-                setattr(metrics, f'latency_{pct}', value)
+            if match := re.search(r'total_txs=(\d+)', output):
+                metrics.tx_count = int(match.group(1))
 
-        if match := re.search(r'Throughput.*?:\s*([\d.]+)', output, re.IGNORECASE):
-            metrics.throughput = float(match.group(1))
+            if match := re.search(r'committed_txs=(\d+)', output):
+                metrics.commit_count = int(match.group(1))
 
-        
-        if match := re.search(r'Duration.*?:\s*([\d.]+)\s*s', output, re.IGNORECASE):
-            metrics.duration_seconds = float(match.group(1))
+            if match := re.search(r'aborted_txs=(\d+)', output):
+                metrics.abort_count = int(match.group(1))
 
+        else:
+            # Fallback: parse old human-readable format
+            if match := re.search(r'Total.*?:\s*(\d+)', output, re.IGNORECASE):
+                metrics.tx_count = int(match.group(1))
+
+            if match := re.search(r'Commit.*?:\s*(\d+)', output, re.IGNORECASE):
+                metrics.commit_count = int(match.group(1))
+
+            if match := re.search(r'Abort.*?:\s*(\d+)', output, re.IGNORECASE):
+                metrics.abort_count = int(match.group(1))
+
+            if match := re.search(r'Abort\s+rate.*?:\s*([\d.]+)%', output, re.IGNORECASE):
+                metrics.abort_rate = float(match.group(1))
+
+            latency_patterns = {
+                'p50': r'P50.*?:\s*([\d.]+)\s*(ms|μs|us)',
+                'p90': r'P90.*?:\s*([\d.]+)\s*(ms|μs|us)',
+                'p95': r'P95.*?:\s*([\d.]+)\s*(ms|μs|us)',
+                'p99': r'P99[^.].*?:\s*([\d.]+)\s*(ms|μs|us)',
+                'p999': r'P99\.9.*?:\s*([\d.]+)\s*(ms|μs|us)'
+            }
+
+            for pct, pattern in latency_patterns.items():
+                if match := re.search(pattern, output, re.IGNORECASE):
+                    value = float(match.group(1))
+                    unit = match.group(2).lower()
+
+                    if unit in ('μs', 'us'):
+                        value = value / 1000.0
+                    setattr(metrics, f'latency_{pct}', value)
+
+            if match := re.search(r'Throughput.*?:\s*([\d.]+)', output, re.IGNORECASE):
+                metrics.throughput = float(match.group(1))
+
+            if match := re.search(r'Duration.*?:\s*([\d.]+)\s*s', output, re.IGNORECASE):
+                metrics.duration_seconds = float(match.group(1))
+
+        # Check for errors (works for both formats)
         error_patterns = [
             r'ERROR:.*',
             r'FATAL:.*',
-            r'panic:.*'
+            r'panic:.*',
+            r'error:.*'
         ]
-        
+
         for pattern in error_patterns:
             for match in re.finditer(pattern, output, re.MULTILINE):
                 metrics.errors.append(match.group(0))

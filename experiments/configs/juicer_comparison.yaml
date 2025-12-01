@@ -1,0 +1,45 @@
+# Experiment: Juicer Performance Comparison
+# Purpose: High-contention workload to demonstrate Juicer's benefits
+
+experiment:
+  name: "juicer-high-contention"
+  output_dir: "../results/juicer_comparison"
+  repeat_count: 2           # 2 trials instead of 3
+  timeout_seconds: 300
+
+workload:
+  tx_count: [200]           # Fewer transactions for speed
+  ops_per_tx: [10]          # Single value
+  key_range: [50]           # Single small key range
+  distribution: ["uniform"]
+  zipfian_s: [1.1]
+  zipfian_v: [1.0]
+  read_write_ratio: [0.3]   # 70% WRITES = high lock contention
+
+concurrency:
+  num_clients: [1]
+  workers_per_client: [4, 8]  # Just 2 concurrency levels instead of 3
+
+juicer:
+  enabled: [false, true]
+  flush_time_us: [100]
+
+protocol:
+  type: ["2PL-WW"]
+
+cluster:
+  num_nodes: 1
+  base_port: 26257
+  base_http_port: 8080
+  data_dir: "./cockroach-data"
+  log_dir: "./logs"
+  store_size: "10GB"
+
+data_init:
+  enabled: true
+  num_keys: 50              # Match key_range
+  key_prefix: "key"
+  key_range: 50
+  batch_size: 50
+  concurrent: 1
+  use_bulk: false

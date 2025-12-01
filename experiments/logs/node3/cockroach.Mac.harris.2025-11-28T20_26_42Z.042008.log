@@ -1,0 +1,590 @@
+I251128 20:26:42.083161 1 util/log/file_sync_buffer.go:237 ⋮ [config]   file created at: 2025/11/28 20:26:42
+I251128 20:26:42.083166 1 util/log/file_sync_buffer.go:237 ⋮ [config]   running on machine: ‹Mac.lan›
+I251128 20:26:42.083169 1 util/log/file_sync_buffer.go:237 ⋮ [config]   binary: CockroachDB CCL v25.3.5-dev (darwin arm64, built , go1.23.12 X:nocoverageredesign)
+I251128 20:26:42.083298 1 util/log/file_sync_buffer.go:237 ⋮ [config]   arguments: [‹/Users/harris/Documents/cpi-ns/juicer/juicer-cc/cockroach-juicer/cockroach› ‹start› ‹--store=path=cockroach-data/node3,size=5GB› ‹--listen-addr=localhost:26259› ‹--http-addr=localhost:8082› ‹--join=localhost:26257,localhost:26258,localhost:26259› ‹--log-dir=logs/node3› ‹--cluster-name=default› ‹--insecure›]
+I251128 20:26:42.083303 1 util/log/file_sync_buffer.go:237 ⋮ [config]   log format (utf8=✓): crdb-v2
+I251128 20:26:42.083305 1 util/log/file_sync_buffer.go:237 ⋮ [config]   line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid [chan@]file:line redactionmark \[tags\] [counter] msg
+W251128 20:26:42.083079 1 1@cli/start.go:1446 ⋮ [n?] 1  ALL SECURITY CONTROLS HAVE BEEN DISABLED!
+W251128 20:26:42.083079 1 1@cli/start.go:1446 ⋮ [n?] 1 +
+W251128 20:26:42.083079 1 1@cli/start.go:1446 ⋮ [n?] 1 +This mode is intended for non-production testing only.
+W251128 20:26:42.083079 1 1@cli/start.go:1446 ⋮ [n?] 1 +
+W251128 20:26:42.083079 1 1@cli/start.go:1446 ⋮ [n?] 1 +In this mode:
+W251128 20:26:42.083079 1 1@cli/start.go:1446 ⋮ [n?] 1 +- Your cluster is open to any client that can access ‹localhost›.
+W251128 20:26:42.083079 1 1@cli/start.go:1446 ⋮ [n?] 1 +- Intruders with access to your machine or network can observe client-server traffic.
+W251128 20:26:42.083079 1 1@cli/start.go:1446 ⋮ [n?] 1 +- Intruders can log in without password and read or write any data in the cluster.
+W251128 20:26:42.083079 1 1@cli/start.go:1446 ⋮ [n?] 1 +- Intruders can consume all your server's resources and cause unavailability.
+I251128 20:26:42.083409 1 1@cli/start.go:1456 ⋮ [n?] 2  To start a secure server without mandating TLS for clients,
+I251128 20:26:42.083409 1 1@cli/start.go:1456 ⋮ [n?] 2 +consider --accept-sql-without-tls instead. For other options, see:
+I251128 20:26:42.083409 1 1@cli/start.go:1456 ⋮ [n?] 2 +
+I251128 20:26:42.083409 1 1@cli/start.go:1456 ⋮ [n?] 2 +- https://go.crdb.dev/issue-v/53404/v25.3
+I251128 20:26:42.083409 1 1@cli/start.go:1456 ⋮ [n?] 2 +- https://www.cockroachlabs.com/docs/v25.3/secure-a-cluster.html
+W251128 20:26:42.083445 1 1@cli/start.go:1368 ⋮ [n?] 3  Using the default setting for --cache (128 MiB).
+W251128 20:26:42.083445 1 1@cli/start.go:1368 ⋮ [n?] 3 +  A significantly larger value is usually needed for good performance.
+W251128 20:26:42.083445 1 1@cli/start.go:1368 ⋮ [n?] 3 +  If you have a dedicated server a reasonable setting is --cache=.25 (6.0 GiB).
+I251128 20:26:42.083455 1 1@cli/start.go:1485 ⋮ [n?] 4  CockroachDB CCL v25.3.5-dev (darwin arm64, built , go1.23.12 X:nocoverageredesign)
+I251128 20:26:42.083601 1 1@cli/start.go:562 ⋮ [n?] 5  soft memory limit of Go runtime is set to 14 GiB
+I251128 20:26:42.083609 1 1@cli/start.go:599 ⋮ [n?] 6  GC target percentage of Go runtime is set to 300%
+I251128 20:26:42.083785 1 server/config.go:680 ⋮ [T1,Vsystem,n?] 7  system total memory: 24 GiB
+I251128 20:26:42.083791 1 server/config.go:682 ⋮ [T1,Vsystem,n?] 8  server configuration:
+I251128 20:26:42.083791 1 server/config.go:682 ⋮ [T1,Vsystem,n?] 8 +max offset             500000000
+I251128 20:26:42.083791 1 server/config.go:682 ⋮ [T1,Vsystem,n?] 8 +cache size             128 MiB
+I251128 20:26:42.083791 1 server/config.go:682 ⋮ [T1,Vsystem,n?] 8 +SQL memory pool size   6.0 GiB
+I251128 20:26:42.083791 1 server/config.go:682 ⋮ [T1,Vsystem,n?] 8 +scan interval          10m0s
+I251128 20:26:42.083791 1 server/config.go:682 ⋮ [T1,Vsystem,n?] 8 +scan min idle time     10ms
+I251128 20:26:42.083791 1 server/config.go:682 ⋮ [T1,Vsystem,n?] 8 +scan max idle time     1s
+I251128 20:26:42.083791 1 server/config.go:682 ⋮ [T1,Vsystem,n?] 8 +event log enabled      true
+I251128 20:26:42.083846 1 1@cli/start.go:1346 ⋮ [T1,Vsystem,n?] 9  using local environment variables:
+I251128 20:26:42.083846 1 1@cli/start.go:1346 ⋮ [T1,Vsystem,n?] 9 +LANG=en_US.UTF-8
+I251128 20:26:42.083846 1 1@cli/start.go:1346 ⋮ [T1,Vsystem,n?] 9 +TERM=xterm-256color
+I251128 20:26:42.083856 1 1@cli/start.go:1353 ⋮ [T1,Vsystem,n?] 10  process identity: uid 501 euid 501 gid 20 egid 20
+W251128 20:26:42.084005 1 1@cli/start.go:1510 ⋮ [T1,Vsystem,n?] 11  could not initialize GEOS - spatial functions may not be available: geos: error during GEOS init: geos: cannot load GEOS from dir ‹"/usr/local/lib/cockroach"›: ‹geos error: dlopen(/usr/local/lib/cockroach/libgeos.dylib, 0x0001): tried: '/usr/local/lib/cockroach/libgeos.dylib' (no such file), '/System/Volumes/Preboot/Cryptexes/OS/usr/local/lib/cockroach/libgeos.dylib' (no such file), '/usr/local/lib/cockroach/libgeos.dylib' (no such file)›
+W251128 20:26:42.084005 1 1@cli/start.go:1510 ⋮ [T1,Vsystem,n?] 11 +HINT: ‹Ensure you have the spatial libraries installed as per the instructions in https://www.cockroachlabs.com/docs/v25.3/install-cockroachdb-mac›
+I251128 20:26:42.084089 1 1@cli/start.go:785 ⋮ [T1,Vsystem,n?] 12  starting cockroach node
+I251128 20:26:42.146949 51 server/config.go:887 ⋮ [T1,Vsystem,n?] 13  1 storage engine initialized
+I251128 20:26:42.146961 51 server/config.go:890 ⋮ [T1,Vsystem,n?] 14  Pebble cache size: 128 MiB
+I251128 20:26:42.146967 51 server/config.go:890 ⋮ [T1,Vsystem,n?] 15  store 0: disk deviceID: 1:14
+I251128 20:26:42.146969 51 server/config.go:890 ⋮ [T1,Vsystem,n?] 16  store 0: max size 4.7 GiB, max open file limit 9223372036854770807
+I251128 20:26:42.146972 51 server/config.go:890 ⋮ [T1,Vsystem,n?] 17  store 0: /Users/harris/Documents/cpi-ns/juicer/juicer-cc/cockroach-juicer/experiments/cockroach-data/node3: rw encrypted=false fs:{bdev=/dev/disk3s1s1 fstype=apfs mountpoint=/ mountopts=}
+W251128 20:26:42.147292 51 server/status/runtime.go:842 ⋮ [T1,Vsystem,n?] 18  could not parse build timestamp: ‹parsing time "" as "2006/01/02 15:04:05": cannot parse "" as "2006"›
+I251128 20:26:42.154078 109 util/cidr/cidr.go:299 ⋮ [T1,Vsystem,n?] 19  CIDR lookup updated with 0 destinations
+I251128 20:26:42.219849 51 1@server/clock_monotonicity.go:61 ⋮ [T1,Vsystem,n?] 20  monitoring forward clock jumps based on server.clock.forward_jump_check.enabled
+W251128 20:26:42.220662 51 1@cli/start.go:1307 ⋮ [T1,Vsystem,n?] 21  Running a server without --sql-addr, with a combined RPC/SQL listener, is deprecated.
+W251128 20:26:42.220662 51 1@cli/start.go:1307 ⋮ [T1,Vsystem,n?] 21 +This feature will be removed in a later version of CockroachDB.
+I251128 20:26:42.220673 51 1@cli/start.go:1564 ⋮ [T1,Vsystem,n?] 22  initial startup completed.
+I251128 20:26:42.220673 51 1@cli/start.go:1564 ⋮ [T1,Vsystem,n?] 22 +Node will now attempt to join a running cluster, or wait for `cockroach init`.
+I251128 20:26:42.220673 51 1@cli/start.go:1564 ⋮ [T1,Vsystem,n?] 22 +Client connections will be accepted after this completes successfully.
+I251128 20:26:42.220673 51 1@cli/start.go:1564 ⋮ [T1,Vsystem,n?] 22 +Check the log file(s) for progress. 
+I251128 20:26:42.220687 51 server/init.go:197 ⋮ [T1,Vsystem,n?] 23  no stores initialized
+I251128 20:26:42.220695 51 server/init.go:198 ⋮ [T1,Vsystem,n?] 24  awaiting `cockroach init` or join with an already initialized node
+I251128 20:26:42.222143 564 server/init.go:373 ⋮ [T1,Vsystem,n?] 25  ‹localhost:26257› is itself waiting for init, will retry
+I251128 20:26:42.223281 564 server/init.go:373 ⋮ [T1,Vsystem,n?] 26  ‹localhost:26258› is itself waiting for init, will retry
+I251128 20:26:43.319960 51 server/init.go:285 ⋮ [T1,Vsystem,n?] 27  joined cluster c9f8e557-43ac-4ffd-ae95-eeaf0d3f362c through join rpc
+I251128 20:26:43.319969 51 server/init.go:286 ⋮ [T1,Vsystem,n?] 28  received node ID: 2
+I251128 20:26:43.319974 51 server/init.go:287 ⋮ [T1,Vsystem,n?] 29  received cluster version: 25.3
+W251128 20:26:43.320199 51 2@gossip/gossip.go:1489 ⋮ [T1,Vsystem,n2] 30  no incoming or outgoing connections
+I251128 20:26:43.320207 633 1@server/server.go:1840 ⋮ [T1,Vsystem,n2] 31  connecting to gossip network to verify cluster ID "c9f8e557-43ac-4ffd-ae95-eeaf0d3f362c"
+I251128 20:26:43.324461 229 gossip/client.go:411 ⋮ [T1,Vsystem,n2] 32  unvalidated bootstrap gossip dial to ‹localhost:26257›
+I251128 20:26:43.326939 229 gossip/client.go:126 ⋮ [T1,Vsystem,n2] 33  started gossip client to n0 (‹localhost:26257›)
+I251128 20:26:43.327432 633 1@server/server.go:1843 ⋮ [T1,Vsystem,n2] 34  node connected via gossip
+I251128 20:26:43.331887 639 kv/kvserver/kvstorage/init.go:250 ⋮ [T1,Vsystem,n2,s2] 35  beginning range descriptor iteration
+I251128 20:26:43.331914 639 kv/kvserver/kvstorage/init.go:374 ⋮ [T1,Vsystem,n2,s2] 36  range descriptor iteration done: 0 range descriptors, 0 intents, 0 tombstones; stats: ‹seeked 2 times (2 internal); stepped 0 times (0 internal)›
+I251128 20:26:43.331929 639 kv/kvserver/kvstorage/init.go:501 ⋮ [T1,Vsystem,n2,s2] 37  loaded replica ID for 0/0 replicas
+I251128 20:26:43.331936 639 kv/kvserver/kvstorage/init.go:518 ⋮ [T1,Vsystem,n2,s2] 38  loaded Raft state for 0/0 replicas
+I251128 20:26:43.331939 639 kv/kvserver/kvstorage/init.go:545 ⋮ [T1,Vsystem,n2,s2] 39  loaded 0 replicas
+I251128 20:26:43.331942 639 kv/kvserver/kvstorage/init.go:576 ⋮ [T1,Vsystem,n2,s2] 40  verified 0/0 replicas
+I251128 20:26:43.331945 639 kv/kvserver/store.go:2356 ⋮ [T1,Vsystem,n2,s2] 41  initialized 0/0 replicas
+I251128 20:26:43.332034 639 server/node.go:698 ⋮ [T1,Vsystem,n2] 42  initialized store s2 in 7ms (0 replicas)
+I251128 20:26:43.332047 51 kv/kvserver/stores.go:261 ⋮ [T1,Vsystem,n2] 43  read 0 node addresses from persistent storage
+I251128 20:26:43.345919 51 kv/kvserver/stores.go:280 ⋮ [T1,Vsystem,n2] 44  wrote 1 node addresses to persistent storage
+I251128 20:26:43.345955 51 server/node.go:809 ⋮ [T1,Vsystem,n2] 45  started with attributes []
+I251128 20:26:43.346309 51 server/goroutinedumper/goroutinedumper.go:117 ⋮ [T1,Vsystem,n2] 46  writing goroutine dumps to ‹/Users/harris/Documents/cpi-ns/juicer/juicer-cc/cockroach-juicer/experiments/logs/node3/goroutine_dump›
+I251128 20:26:43.346405 51 server/profiler/heapprofiler.go:74 ⋮ [T1,Vsystem,n2] 47  writing go heap profiles to ‹/Users/harris/Documents/cpi-ns/juicer/juicer-cc/cockroach-juicer/experiments/logs/node3/heap_profiler› at least every 1h0m0s
+I251128 20:26:43.346414 51 server/profiler/memory_monitoring_profiler.go:66 ⋮ [T1,Vsystem,n2] 48  writing memory monitoring dumps to ‹/Users/harris/Documents/cpi-ns/juicer/juicer-cc/cockroach-juicer/experiments/logs/node3/heap_profiler› at least every 1h0m0s
+I251128 20:26:43.346425 51 server/profiler/cgoprofiler.go:66 ⋮ [T1,Vsystem,n2] 49  to enable jmalloc profiling: "export MALLOC_CONF=prof:true" or "ln -s prof:true /etc/malloc.conf"
+I251128 20:26:43.346439 51 server/profiler/statsprofiler.go:68 ⋮ [T1,Vsystem,n2] 50  writing memory stats to ‹/Users/harris/Documents/cpi-ns/juicer/juicer-cc/cockroach-juicer/experiments/logs/node3/heap_profiler› at last every 1h0m0s
+W251128 20:26:43.346457 51 server/env_sampler.go:152 ⋮ [T1,Vsystem,n2] 51  failed to start query profiler worker: failed to detect cgroup memory limit: failed to read memory cgroup from cgroups file: ‹/proc/self/cgroup›: open ‹/proc/self/cgroup›: no such file or directory
+I251128 20:26:43.346538 51 server/profiler/cpuprofiler.go:87 ⋮ [T1,Vsystem,n2] 52  writing cpu profile dumps to ‹/Users/harris/Documents/cpi-ns/juicer/juicer-cc/cockroach-juicer/experiments/logs/node3/pprof_dump›
+I251128 20:26:43.346722 51 1@server/server.go:2030 ⋮ [T1,Vsystem,n2] 53  starting http server at ‹127.0.0.1:8082› (use: ‹localhost:8082›)
+I251128 20:26:43.346730 51 1@server/server.go:2038 ⋮ [T1,Vsystem,n2] 54  starting grpc/postgres server at ‹127.0.0.1:26259›
+I251128 20:26:43.346737 51 1@server/server.go:2039 ⋮ [T1,Vsystem,n2] 55  advertising CockroachDB node at ‹localhost:26259›
+I251128 20:26:43.362486 51 1@util/log/event_log.go:39 ⋮ [T1,Vsystem,n2] 56 ={"Timestamp":1764361603362482000,"EventType":"node_join","NodeID":2,"StartedAt":1764361603324285000,"LastUp":1764361603324285000}
+I251128 20:26:43.362556 715 kv/kvclient/rangefeed/rangefeedcache/watcher.go:340 ⋮ [T1,Vsystem,n2] 57  spanconfig-subscriber: established range feed cache
+I251128 20:26:43.362590 717 kv/kvclient/rangefeed/rangefeedcache/watcher.go:340 ⋮ [T1,Vsystem,n2] 58  settings-watcher: established range feed cache
+I251128 20:26:43.363509 51 sql/sqlliveness/slinstance/slinstance.go:433 ⋮ [T1,Vsystem,n2] 59  starting SQL liveness instance
+I251128 20:26:43.380020 975 sql/sqlliveness/slstorage/slstorage.go:538 ⋮ [T1,Vsystem,n2] 60  inserted sqlliveness session 01018033f99d9f2a8244c8b0084d8201d8cca7 with expiry 1764361643.363528000,0
+I251128 20:26:43.380038 975 sql/sqlliveness/slinstance/slinstance.go:247 ⋮ [T1,Vsystem,n2] 61  created new SQL liveness session 01018033f99d9f2a8244c8b0084d8201d8cca7
+I251128 20:26:43.380051 51 sql/sqlinstance/instancestorage/instancestorage.go:338 ⋮ [T1,Vsystem,n2] 62  assigning instance id to rpc addr ‹localhost:26259› and sql addr ‹localhost:26259›
+I251128 20:26:43.388168 51 server/server_sql.go:1614 ⋮ [T1,Vsystem,n2] 63  bound sqlinstance: Instance{RegionPrefix: gA==, InstanceID: 2, SQLAddr: ‹localhost:26259›, RPCAddr: ‹localhost:26259›, SessionID: 01018033f99d9f2a8244c8b0084d8201d8cca7, Locality: , BinaryVersion: 25.3}
+I251128 20:26:43.388273 911 sql/sqlstats/persistedsqlstats/provider.go:157 ⋮ [T1,Vsystem,n2] 64  starting sql-stats-worker with initial delay: 8m32.690704172s
+I251128 20:26:43.388284 908 sql/temporary_schema.go:488 ⋮ [T1,Vsystem,n2] 65  skipping temporary object cleanup run as it is not the leaseholder
+I251128 20:26:43.388298 908 sql/temporary_schema.go:489 ⋮ [T1,Vsystem,n2] 66  completed temporary object cleanup job
+I251128 20:26:43.388307 908 sql/temporary_schema.go:641 ⋮ [T1,Vsystem,n2] 67  temporary object cleaner next scheduled to run at 2025-11-28 20:56:43.388281 +0000 UTC m=+1801.672156251
+I251128 20:26:43.388472 51 upgrade/upgrademanager/manager.go:178 ⋮ [T1,Vsystem,n2] 68  running permanent upgrades up to version: 25.3
+I251128 20:26:43.388614 936 kv/kvclient/rangefeed/rangefeedcache/watcher.go:340 ⋮ [T1,Vsystem,n2] 69  system-config-cache: established range feed cache
+I251128 20:26:43.410623 51 upgrade/upgrademanager/manager.go:246 ⋮ [T1,Vsystem,n2] 70  the last permanent upgrade (v0.0-upgrading-step-004) does not appear to have completed; attempting to run all upgrades
+I251128 20:26:43.410638 51 upgrade/upgrademanager/manager.go:252 ⋮ [T1,Vsystem,n2] 71  running permanent upgrade for version 0.0-upgrading-step-002
+I251128 20:26:43.456163 51 upgrade/upgrademanager/manager.go:818 ⋮ [T1,Vsystem,n2] 72  found existing migration job 1128173415295483905 for version 0.0-upgrading-step-002 in status running, waiting
+I251128 20:26:43.456226 51 upgrade/upgrademanager/manager.go:723 ⋮ [T1,Vsystem,n2] 73  waiting for intitialize the system cluster
+I251128 20:26:43.456232 51 jobs/wait.go:56 ⋮ [T1,Vsystem,n2] 74  waiting for 1 [1128173415295483905] queued jobs to complete
+I251128 20:26:43.865075 1179 kv/kvserver/liveness/storage.go:180 ⋮ [T1,Vsystem,n2] 75  created liveness record for n3
+I251128 20:26:43.865091 1179 server/node.go:2788 ⋮ [T1,Vsystem,n2] 76  allocated IDs: n3, s3
+I251128 20:26:43.913761 51 jobs/wait.go:148 ⋮ [T1,Vsystem,n2] 77  waited for 1 [1128173415295483905] queued jobs to complete 457.494166ms
+I251128 20:26:43.913784 51 upgrade/upgrademanager/manager.go:252 ⋮ [T1,Vsystem,n2] 78  running permanent upgrade for version 0.0-upgrading-step-004
+I251128 20:26:43.915840 51 upgrade/upgrademanager/manager.go:818 ⋮ [T1,Vsystem,n2] 79  found existing migration job 1128173416209776641 for version 0.0-upgrading-step-004 in status running, waiting
+I251128 20:26:43.915870 51 upgrade/upgrademanager/manager.go:723 ⋮ [T1,Vsystem,n2] 80  waiting for intitialize the cluster
+I251128 20:26:43.915876 51 jobs/wait.go:56 ⋮ [T1,Vsystem,n2] 81  waiting for 1 [1128173416209776641] queued jobs to complete
+I251128 20:26:43.968907 89 kv/kvserver/stores.go:280 ⋮ [T1,Vsystem,n2] 82  wrote 2 node addresses to persistent storage
+I251128 20:26:44.153084 695 kv/kvserver/storeliveness/supporter_state.go:298 ⋮ [T1,Vsystem,n2,s2] 83  provided support for store {NodeID:1 StoreID:1}; old = {Target:{NodeID:1 StoreID:1} Epoch:0 Expiration:0,0}, new = {Target:{NodeID:1 StoreID:1} Epoch:1 Expiration:1764361607.131025000,0}
+I251128 20:26:44.232166 1192 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r52/2:/Table/5{0-1}] 84  applied snapshot ea62dc0b from (n1,s1):1 at applied index 15 as write (total=26ms data=654 B excise=true ingestion=6@11ms)
+I251128 20:26:44.338137 1152 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r36/2:/Table/3{3-4}] 85  applied snapshot 0fee4ffe from (n1,s1):1 at applied index 15 as write (total=9ms data=654 B excise=true ingestion=6@5ms)
+I251128 20:26:44.431486 638 1@gossip/gossip.go:1503 ⋮ [T1,Vsystem,n2] 86  node has connected to cluster via gossip
+I251128 20:26:44.439885 638 kv/kvserver/stores.go:280 ⋮ [T1,Vsystem,n2] 87  wrote 2 node addresses to persistent storage
+I251128 20:26:44.448231 51 jobs/wait.go:148 ⋮ [T1,Vsystem,n2] 88  waited for 1 [1128173416209776641] queued jobs to complete 532.342584ms
+I251128 20:26:44.448251 51 server/server_sql.go:1716 ⋮ [T1,Vsystem,n2] 89  done ensuring all necessary startup migrations have run
+I251128 20:26:44.448782 51 server/license/enforcer.go:262 ⋮ [T1,Vsystem,n2] 90  trial license expiry initialized to 1970-01-01 00:00:00 +0000 UTC
+I251128 20:26:44.449016 51 server/license/enforcer.go:298 ⋮ [T1,Vsystem,n2] 91  fetched existing cluster init grace period end time: 2025-12-05 20:26:41 +0000 UTC
+I251128 20:26:44.449060 51 server/license/enforcer.go:498 ⋮ [T1,Vsystem,n2] 92  enforcer license updated: type is none, grace period ends at "2025-12-05 20:26:41 +0000 UTC", telemetry required: false
+I251128 20:26:44.449071 51 server/license/enforcer.go:498 ⋮ [T1,Vsystem,n2] 93  enforcer license updated: type is none, grace period ends at "2025-12-05 20:26:41 +0000 UTC", telemetry required: false
+I251128 20:26:44.449489 1289 jobs/job_scheduler.go:407 ⋮ [T1,Vsystem,n2] 94  waiting 2m0s before scheduled jobs daemon start
+I251128 20:26:44.452476 1316 kv/kvclient/rangefeed/rangefeedcache/watcher.go:340 ⋮ [T1,Vsystem,n2] 95  tenant-settings-watcher: established range feed cache
+I251128 20:26:44.452812 761 kv/kvclient/rangefeed/rangefeedcache/watcher.go:340 ⋮ [T1,Vsystem,n2] 96  tenant-entry-watcher: established range feed cache
+I251128 20:26:44.453519 1268 sql/catalog/lease/lease.go:2361 ⋮ [T1,Vsystem,n2] 97  starting orphaned lease cleanup from stale sessions in region ‹�?›
+I251128 20:26:44.453646 761 multitenant/tenantcapabilities/tenantcapabilitieswatcher/watcher.go:285 ⋮ [T1,Vsystem,n2] 98  received results of a full table scan for tenant capabilities
+I251128 20:26:44.458932 1268 sql/catalog/lease/lease.go:2413 ⋮ [T1,Vsystem,n2] 99  completed orphaned lease cleanup for region ‹�?›: 0 sessions processed, 0 leases deleted
+I251128 20:26:44.461420 1274 sql/syntheticprivilegecache/cache.go:202 ⋮ [T1,Vsystem,n2] 100  warmed privileges for virtual tables in 12.885791ms
+I251128 20:26:44.468779 51 1@server/server_sql.go:1967 ⋮ [T1,Vsystem,n2] 101  serving sql connections
+I251128 20:26:44.468900 51 1@cli/start.go:1294 ⋮ [T1,Vsystem,n2] 102  node startup completed:
+I251128 20:26:44.468900 51 1@cli/start.go:1294 ⋮ [T1,Vsystem,n2] 102 +CockroachDB node starting at 2025-11-28 20:26:44.468818 +0000 UTC m=+2.752679043 (took 2.7s)
+I251128 20:26:44.468900 51 1@cli/start.go:1294 ⋮ [T1,Vsystem,n2] 102 +build:               CCL v25.3.5-dev @  (go1.23.12 X:nocoverageredesign)
+I251128 20:26:44.468900 51 1@cli/start.go:1294 ⋮ [T1,Vsystem,n2] 102 +malloc_conf:         prof:false,prof_active:true,background_thread:false,thp:not supported,metadata_thp:disabled,narenas:48,dirty_decay_ms:10000,muzzy_decay_ms:0
+I251128 20:26:44.468900 51 1@cli/start.go:1294 ⋮ [T1,Vsystem,n2] 102 +webui:               ‹http://localhost:8082›
+I251128 20:26:44.468900 51 1@cli/start.go:1294 ⋮ [T1,Vsystem,n2] 102 +sql:                 ‹postgresql://root@localhost:26259/defaultdb?sslmode=disable›
+I251128 20:26:44.468900 51 1@cli/start.go:1294 ⋮ [T1,Vsystem,n2] 102 +sql (JDBC):          ‹jdbc:postgresql://localhost:26259/defaultdb?sslmode=disable&user=root›
+I251128 20:26:44.468900 51 1@cli/start.go:1294 ⋮ [T1,Vsystem,n2] 102 +RPC client flags:    ‹/Users/harris/Documents/cpi-ns/juicer/juicer-cc/cockroach-juicer/cockroach <client cmd> --host=localhost:26259 --insecure›
+I251128 20:26:44.468900 51 1@cli/start.go:1294 ⋮ [T1,Vsystem,n2] 102 +logs:                ‹/Users/harris/Documents/cpi-ns/juicer/juicer-cc/cockroach-juicer/experiments/logs/node3›
+I251128 20:26:44.468900 51 1@cli/start.go:1294 ⋮ [T1,Vsystem,n2] 102 +temp dir:            ‹/Users/harris/Documents/cpi-ns/juicer/juicer-cc/cockroach-juicer/experiments/cockroach-data/node3/cockroach-temp2642322195›
+I251128 20:26:44.468900 51 1@cli/start.go:1294 ⋮ [T1,Vsystem,n2] 102 +external I/O path:   ‹/Users/harris/Documents/cpi-ns/juicer/juicer-cc/cockroach-juicer/experiments/cockroach-data/node3/extern›
+I251128 20:26:44.468900 51 1@cli/start.go:1294 ⋮ [T1,Vsystem,n2] 102 +store[0]:            ‹path=/Users/harris/Documents/cpi-ns/juicer/juicer-cc/cockroach-juicer/experiments/cockroach-data/node3,size=4.7 GiB›
+I251128 20:26:44.468900 51 1@cli/start.go:1294 ⋮ [T1,Vsystem,n2] 102 +cluster name:        ‹default›
+I251128 20:26:44.468900 51 1@cli/start.go:1294 ⋮ [T1,Vsystem,n2] 102 +clusterID:           c9f8e557-43ac-4ffd-ae95-eeaf0d3f362c
+I251128 20:26:44.468900 51 1@cli/start.go:1294 ⋮ [T1,Vsystem,n2] 102 +status:              initialized new node, joined pre-existing cluster
+I251128 20:26:44.468900 51 1@cli/start.go:1294 ⋮ [T1,Vsystem,n2] 102 +nodeID:              2
+I251128 20:26:44.471013 1295 server/auto_upgrade.go:81 ⋮ [T1,Vsystem,n2] 103  no need to upgrade, cluster already at the newest version
+I251128 20:26:44.474881 1268 sql/catalog/lease/lease.go:2503 ⋮ [T1,Vsystem,n2] 104  found 0 orphaned leases to clean up for instance ID 2
+I251128 20:26:44.607854 229 gossip/client.go:135 ⋮ [T1,Vsystem,n2] 105  closing client to n1 (‹localhost:26257›): stopping outgoing client to n1 (‹localhost:26257›); already have incoming
+I251128 20:26:44.654699 1290 server/diagnostics/update_checker.go:143 ⋮ [T1,Vsystem,n2] 106  a new version is available: ‹25.4.0›, details: ‹https://www.cockroachlabs.com/docs/releases/v25.4#v25-4-0›
+I251128 20:26:44.755713 1312 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r3/2:/System/{NodeLive…-tsd}] 107  applied snapshot 759b5db1 from (n1,s1):1 at applied index 28 (total=78ms data=480 KiB excise=true ingestion=6@70ms)
+I251128 20:26:45.028050 1534 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r65/2:/Table/6{3-4}] 108  applied snapshot 017b4ea8 from (n1,s1):1 at applied index 15 as write (total=15ms data=676 B excise=true ingestion=6@8ms)
+I251128 20:26:45.276075 1463 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r28/2:/Table/2{5-6}] 109  applied snapshot 55093c9c from (n1,s1):1 at applied index 15 as write (total=15ms data=654 B excise=true ingestion=6@8ms)
+I251128 20:26:45.651102 1580 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r23/2:/Table/2{0-1}] 110  applied snapshot a4d6b16f from (n1,s1):1 at applied index 15 as write (total=15ms data=656 B excise=true ingestion=6@8ms)
+I251128 20:26:46.028153 1599 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r62/2:/Table/6{0-1}] 111  applied snapshot 202b7916 from (n1,s1):1 at applied index 15 as write (total=15ms data=654 B excise=true ingestion=6@8ms)
+I251128 20:26:46.180213 1647 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r15/2:/Table/1{2-3}] 112  applied snapshot cff22abf from (n1,s1):1 at applied index 54 as write (total=19ms data=8.9 KiB excise=true ingestion=6@7ms)
+I251128 20:26:46.440379 1658 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r22/2:/Table/{19-20}] 113  applied snapshot e7fabac4 from (n1,s1):1 at applied index 15 as write (total=13ms data=654 B excise=true ingestion=6@6ms)
+I251128 20:26:46.558126 1709 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r37/2:/Table/3{4-5}] 114  applied snapshot f5482bc8 from (n1,s1):1 at applied index 15 as write (total=16ms data=658 B excise=true ingestion=6@8ms)
+I251128 20:26:46.806099 1665 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r61/2:/Table/{59-60}] 115  applied snapshot 43a2cbd5 from (n1,s1):1 at applied index 15 as write (total=15ms data=656 B excise=true ingestion=6@8ms)
+I251128 20:26:47.191409 1672 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r13/2:/Table/{9-11}] 116  applied snapshot 1b7e989c from (n1,s1):1 at applied index 15 as write (total=15ms data=656 B excise=true ingestion=6@8ms)
+I251128 20:26:47.315523 1778 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r10/2:/Table/{6-7}] 117  applied snapshot b67d21b6 from (n1,s1):1 at applied index 18 as write (total=16ms data=848 B excise=true ingestion=6@8ms)
+I251128 20:26:47.563136 1781 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r74/2:/{Table/72-Max}] 118  applied snapshot 3c15db82 from (n1,s1):1 at applied index 15 as write (total=13ms data=663 B excise=true ingestion=6@7ms)
+I251128 20:26:47.998244 1776 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r35/2:/Table/3{2-3}] 119  applied snapshot bd989e88 from (n1,s1):1 at applied index 15 as write (total=18ms data=654 B excise=true ingestion=6@11ms)
+I251128 20:26:48.146197 1678 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r43/2:/Table/4{0-1}] 120  applied snapshot 48939d2e from (n1,s1):1 at applied index 17 as write (total=13ms data=711 B excise=true ingestion=6@7ms)
+I251128 20:26:48.606212 1871 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r73/2:/Table/7{1-2}] 121  applied snapshot 86837d9b from (n1,s1):1 at applied index 19 as write (total=16ms data=762 B excise=true ingestion=6@8ms)
+I251128 20:26:48.905129 1831 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r8/2:/Table/{4-5}] 122  applied snapshot e10e8e7a from (n1,s1):1 at applied index 20 as write (total=16ms data=833 B excise=true ingestion=6@8ms)
+I251128 20:26:49.062206 1894 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r20/2:/Table/1{7-8}] 123  applied snapshot 7a803972 from (n1,s1):1 at applied index 15 as write (total=14ms data=656 B excise=true ingestion=6@7ms)
+I251128 20:26:49.338098 1690 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r31/2:/Table/2{8-9}] 124  applied snapshot a1ce6a4d from (n1,s1):1 at applied index 15 as write (total=14ms data=658 B excise=true ingestion=6@7ms)
+I251128 20:26:49.909153 2118 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r17/2:/Table/1{4-5}] 125  applied snapshot a39fd2ef from (n1,s1):1 at applied index 15 as write (total=16ms data=656 B excise=true ingestion=6@8ms)
+I251128 20:26:50.231384 2150 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r60/2:/Table/5{8-9}] 126  applied snapshot 47bbb069 from (n1,s1):1 at applied index 15 as write (total=15ms data=658 B excise=true ingestion=6@8ms)
+I251128 20:26:50.385205 2133 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r16/2:/Table/1{3-4}] 127  applied snapshot 3620a701 from (n1,s1):1 at applied index 104 as write (total=15ms data=53 KiB excise=true ingestion=6@8ms)
+I251128 20:26:50.837636 2218 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r30/2:/Table/2{7-8}] 128  applied snapshot 557a3227 from (n1,s1):1 at applied index 15 as write (total=17ms data=662 B excise=true ingestion=6@9ms)
+I251128 20:26:50.999186 2231 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r55/2:/Table/5{3-4}] 129  applied snapshot a0f711d1 from (n1,s1):1 at applied index 15 as write (total=15ms data=654 B excise=true ingestion=6@8ms)
+I251128 20:26:51.336170 2258 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r21/2:/Table/1{8-9}] 130  applied snapshot 0b655b04 from (n1,s1):1 at applied index 15 as write (total=16ms data=658 B excise=true ingestion=6@8ms)
+I251128 20:26:51.681188 2272 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r58/2:/Table/5{6-7}] 131  applied snapshot 14f0058c from (n1,s1):1 at applied index 15 as write (total=21ms data=656 B excise=true ingestion=6@11ms)
+I251128 20:26:51.997179 2176 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r39/2:/Table/3{6-7}] 132  applied snapshot 6a64faf9 from (n1,s1):1 at applied index 15 as write (total=14ms data=656 B excise=true ingestion=6@7ms)
+I251128 20:26:52.524397 2207 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r6/2:/Table/{0-3}] 133  applied snapshot c75da16a from (n1,s1):1 at applied index 15 as write (total=14ms data=656 B excise=true ingestion=6@7ms)
+I251128 20:26:52.864288 2296 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r11/2:/Table/{7-8}] 134  applied snapshot c910a986 from (n1,s1):1 at applied index 21 as write (total=14ms data=752 B excise=true ingestion=6@7ms)
+I251128 20:26:53.332672 2361 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r5/2:/{System‹tse›-Table/0}] 135  applied snapshot 1426e443 from (n1,s1):1 at applied index 1706 (total=69ms data=286 KiB excise=true ingestion=6@60ms)
+W251128 20:26:53.347167 895 1@server/status/runtime.go:1021 ⋮ [T1,Vsystem,n2] 136  unable to get file descriptor usage (will not try again): ‹not implemented on darwin›
+I251128 20:26:53.633357 2379 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r53/2:/Table/5{1-2}] 137  applied snapshot 969bc19f from (n1,s1):1 at applied index 15 as write (total=36ms data=654 B excise=true ingestion=6@20ms)
+I251128 20:26:54.097266 2427 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r51/2:/Table/{48-50}] 138  applied snapshot f99e06f9 from (n1,s1):1 at applied index 15 as write (total=26ms data=679 B excise=true ingestion=6@12ms)
+I251128 20:26:54.285240 695 kv/kvserver/storeliveness/supporter_state.go:298 ⋮ [T1,Vsystem,n2,s2] 139  provided support for store {NodeID:3 StoreID:3}; old = {Target:{NodeID:3 StoreID:3} Epoch:0 Expiration:0,0}, new = {Target:{NodeID:3 StoreID:3} Epoch:1 Expiration:1764361617.267216000,0}
+I251128 20:26:54.429247 2444 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r45/3:/Table/4{2-3}] 140  applied snapshot 9a0d60f2 from (n3,s3):2 at applied index 25 as write (total=25ms data=794 B excise=true ingestion=6@10ms)
+I251128 20:26:55.145278 2522 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r54/2:/Table/5{2-3}] 141  applied snapshot f0160099 from (n1,s1):1 at applied index 15 as write (total=32ms data=654 B excise=true ingestion=6@16ms)
+I251128 20:26:55.436246 2567 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r49/2:/Table/4{6-7}] 142  applied snapshot 204711f2 from (n1,s1):1 at applied index 18 as write (total=18ms data=898 B excise=true ingestion=6@7ms)
+I251128 20:26:56.135223 695 kv/kvserver/storeliveness/support_manager.go:293 ⋮ [T1,Vsystem,n2,s2] 143  starting to heartbeat store {NodeID:1 StoreID:1}
+I251128 20:26:56.135246 695 kv/kvserver/storeliveness/support_manager.go:293 ⋮ [T1,Vsystem,n2,s2] 144  starting to heartbeat store {NodeID:2 StoreID:2}
+I251128 20:26:56.179061 695 kv/kvserver/storeliveness/supporter_state.go:298 ⋮ [T1,Vsystem,n2,s2] 145  provided support for store {NodeID:2 StoreID:2}; old = {Target:{NodeID:2 StoreID:2} Epoch:0 Expiration:0,0}, new = {Target:{NodeID:2 StoreID:2} Epoch:1 Expiration:1764361619.135248000,0}
+I251128 20:26:56.192122 695 kv/kvserver/storeliveness/requester_state.go:425 ⋮ [T1,Vsystem,n2,s2] 146  received support from store {NodeID:1 StoreID:1}; old = {Target:{NodeID:1 StoreID:1} Epoch:1 Expiration:0,0}, new = {Target:{NodeID:1 StoreID:1} Epoch:1 Expiration:1764361619.135248000,0}
+I251128 20:26:56.192134 695 kv/kvserver/storeliveness/requester_state.go:425 ⋮ [T1,Vsystem,n2,s2] 147  received support from store {NodeID:2 StoreID:2}; old = {Target:{NodeID:2 StoreID:2} Epoch:1 Expiration:0,0}, new = {Target:{NodeID:2 StoreID:2} Epoch:1 Expiration:1764361619.135248000,0}
+I251128 20:26:56.235365 2623 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r70/2:/Table/6{8-9}] 148  applied snapshot d377bf2d from (n1,s1):1 at applied index 32 as write (total=18ms data=1.0 KiB excise=true ingestion=6@11ms)
+I251128 20:26:56.257306 695 kv/kvserver/storeliveness/support_manager.go:293 ⋮ [T1,Vsystem,n2,s2] 149  starting to heartbeat store {NodeID:3 StoreID:3}
+I251128 20:26:56.316253 695 kv/kvserver/storeliveness/requester_state.go:425 ⋮ [T1,Vsystem,n2,s2] 150  received support from store {NodeID:3 StoreID:3}; old = {Target:{NodeID:3 StoreID:3} Epoch:1 Expiration:0,0}, new = {Target:{NodeID:3 StoreID:3} Epoch:1 Expiration:1764361619.257323000,0}
+I251128 20:26:56.759330 2743 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r48/3:/Table/4{5-6}] 151  applied snapshot d3a8d955 from (n1,s1):1 at applied index 21 as write (total=22ms data=763 B excise=true ingestion=6@11ms)
+I251128 20:26:57.435363 2791 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r26/3:/Table/2{3-4}] 152  applied snapshot 0d6d32d5 from (n1,s1):1 at applied index 24 as write (total=26ms data=993 B excise=true ingestion=6@10ms)
+I251128 20:26:58.126653 2797 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r41/3:/Table/3{8-9}] 153  applied snapshot 6fb92096 from (n1,s1):1 at applied index 21 as write (total=31ms data=762 B excise=true ingestion=6@16ms)
+I251128 20:26:58.472353 2801 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r67/3:/Table/6{5-6}] 154  applied snapshot a98644cc from (n3,s3):2 at applied index 24 as write (total=29ms data=806 B excise=true ingestion=6@15ms)
+I251128 20:26:58.713304 2865 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r2/3:/System/NodeLiveness{-Max}] 155  applied snapshot 1668f630 from (n1,s1):1 at applied index 43 as write (total=23ms data=1.7 KiB excise=true ingestion=6@11ms)
+I251128 20:26:59.229357 2873 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r33/3:/NamespaceTable/{30-Max}] 156  applied snapshot 4d9d5dcb from (n1,s1):1 at applied index 27 as write (total=30ms data=2.8 KiB excise=true ingestion=6@15ms)
+I251128 20:26:59.491340 2927 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r66/3:/Table/6{4-5}] 157  applied snapshot d4c8aa77 from (n1,s1):1 at applied index 21 as write (total=26ms data=762 B excise=true ingestion=6@12ms)
+I251128 20:26:59.997714 2839 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r25/3:/Table/2{2-3}] 158  applied snapshot 1a464bc4 from (n1,s1):1 at applied index 21 as write (total=30ms data=762 B excise=true ingestion=6@17ms)
+I251128 20:27:00.273296 3006 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r38/3:/Table/3{5-6}] 159  applied snapshot 85e4e422 from (n1,s1):1 at applied index 21 as write (total=19ms data=764 B excise=true ingestion=6@8ms)
+I251128 20:27:00.738386 2842 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r29/3:/Table/2{6-7}] 160  applied snapshot d300c971 from (n1,s1):1 at applied index 21 as write (total=38ms data=764 B excise=true ingestion=6@19ms)
+I251128 20:27:01.537396 3095 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r42/3:/Table/{39-40}] 161  applied snapshot 09a8f26c from (n1,s1):1 at applied index 33 as write (total=30ms data=1.4 KiB excise=true ingestion=6@15ms)
+I251128 20:27:02.099326 3109 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r7/3:/Table/{3-4}] 162  applied snapshot c1e344ed from (n1,s1):1 at applied index 31 as write (total=23ms data=69 KiB excise=true ingestion=6@11ms)
+I251128 20:27:02.579874 3099 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r1/3:/{Min-System/NodeL…}] 163  applied snapshot 2d667be1 from (n1,s1):1 at applied index 422 as write (total=32ms data=12 KiB excise=true ingestion=6@17ms)
+I251128 20:27:03.116393 3166 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r14/3:/Table/1{1-2}] 164  applied snapshot 332dcf51 from (n1,s1):1 at applied index 181 as write (total=30ms data=2.7 KiB excise=true ingestion=6@14ms)
+I251128 20:27:03.383526 3087 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r18/3:/Table/1{5-6}] 165  applied snapshot fd93267e from (n1,s1):1 at applied index 69 as write (total=37ms data=4.1 KiB excise=true ingestion=6@17ms)
+I251128 20:27:04.132374 3267 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r44/3:/Table/4{1-2}] 166  applied snapshot 555fb298 from (n1,s1):1 at applied index 21 as write (total=26ms data=764 B excise=true ingestion=6@11ms)
+I251128 20:27:04.382391 2698 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r64/3:/Table/6{2-3}] 167  applied snapshot 6056ce55 from (n1,s1):1 at applied index 21 as write (total=25ms data=764 B excise=true ingestion=6@10ms)
+I251128 20:27:04.890341 3335 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r27/3:/Table/2{4-5}] 168  applied snapshot cbd48bcd from (n1,s1):1 at applied index 21 as write (total=25ms data=766 B excise=true ingestion=6@11ms)
+I251128 20:27:05.634363 3427 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r32/3:/{Table/29-NamespaceTab…}] 169  applied snapshot db0d4358 from (n1,s1):1 at applied index 21 as write (total=22ms data=762 B excise=true ingestion=6@11ms)
+I251128 20:27:06.125441 3445 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r9/3:/Table/{5-6}] 170  applied snapshot 94a3a5d0 from (n1,s1):1 at applied index 39 as write (total=30ms data=1.2 KiB excise=true ingestion=6@11ms)
+I251128 20:27:06.485980 3342 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r4/3:/System{/tsd-‹tse›}] 171  applied snapshot 40d97767 from (n1,s1):1 at applied index 40 (total=85ms data=1.2 MiB excise=true ingestion=6@66ms)
+I251128 20:27:07.051563 3495 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r40/3:/Table/3{7-8}] 172  applied snapshot 845c130c from (n1,s1):1 at applied index 31 as write (total=19ms data=1.3 KiB excise=true ingestion=6@11ms)
+I251128 20:27:07.832436 3550 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r24/3:/Table/2{1-2}] 173  applied snapshot ab454300 from (n1,s1):1 at applied index 26 as write (total=28ms data=1.0 KiB excise=true ingestion=6@15ms)
+I251128 20:27:08.102444 3484 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r12/3:/Table/{8-9}] 174  applied snapshot 12372350 from (n1,s1):1 at applied index 21 as write (total=20ms data=838 B excise=true ingestion=6@10ms)
+I251128 20:27:08.466429 3610 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r34/3:/{NamespaceTab…-Table/32}] 175  applied snapshot 1fe83d94 from (n3,s3):2 at applied index 24 as write (total=30ms data=804 B excise=true ingestion=6@15ms)
+I251128 20:27:08.997413 3393 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r57/3:/Table/5{5-6}] 176  applied snapshot 20b59ba3 from (n1,s1):1 at applied index 21 as write (total=23ms data=764 B excise=true ingestion=6@11ms)
+I251128 20:27:09.516776 3518 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r59/3:/Table/5{7-8}] 177  applied snapshot d9550ff4 from (n1,s1):1 at applied index 21 as write (total=25ms data=762 B excise=true ingestion=6@13ms)
+I251128 20:27:10.300514 3684 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r19/3:/Table/1{6-7}] 178  applied snapshot 1ba62c67 from (n1,s1):1 at applied index 21 as write (total=27ms data=764 B excise=true ingestion=6@12ms)
+I251128 20:27:10.621580 3712 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r63/3:/Table/6{1-2}] 179  applied snapshot b1102ee1 from (n1,s1):1 at applied index 21 as write (total=38ms data=764 B excise=true ingestion=6@18ms)
+I251128 20:27:11.536539 3742 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r72/3:/Table/7{0-1}] 180  applied snapshot 49bba6c0 from (n1,s1):1 at applied index 21 as write (total=44ms data=764 B excise=true ingestion=6@22ms)
+I251128 20:27:12.290600 3860 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r68/3:/Table/6{6-7}] 181  applied snapshot 91738623 from (n1,s1):1 at applied index 21 as write (total=37ms data=764 B excise=true ingestion=6@26ms)
+I251128 20:27:12.901584 3883 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r50/3:/Table/4{7-8}] 182  applied snapshot 5b9c8d84 from (n1,s1):1 at applied index 26 as write (total=37ms data=3.8 KiB excise=true ingestion=6@20ms)
+I251128 20:27:13.190534 3929 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r46/3:/Table/4{3-4}] 183  applied snapshot 6c142b69 from (n1,s1):1 at applied index 21 as write (total=39ms data=763 B excise=true ingestion=6@31ms)
+I251128 20:27:13.446786 3933 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r69/3:/Table/6{7-8}] 184  applied snapshot a6758178 from (n1,s1):1 at applied index 21 as write (total=36ms data=762 B excise=true ingestion=6@21ms)
+I251128 20:27:14.083564 4011 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r47/3:/Table/4{4-5}] 185  applied snapshot ba734cbc from (n1,s1):1 at applied index 21 as write (total=37ms data=762 B excise=true ingestion=6@23ms)
+I251128 20:27:14.428582 4052 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r56/3:/Table/5{4-5}] 186  applied snapshot 8303123f from (n1,s1):1 at applied index 102 as write (total=23ms data=5.3 KiB excise=true ingestion=6@12ms)
+I251128 20:27:15.153609 4115 kv/kvserver/replica_raftstorage.go:555 ⋮ [T1,Vsystem,n2,s2,r71/3:/Table/{69-70}] 187  applied snapshot 28ffe724 from (n1,s1):1 at applied index 45 as write (total=35ms data=1.3 KiB excise=true ingestion=6@15ms)
+I251128 20:27:21.158697 789 kv/kvserver/kvserverbase/forced_error.go:87 ⋮ [T1,Vsystem,n2,s2,r72/3:/Table/7{0-1},raft] 188  rejected lease request repl=(n3,s3):2 seq=2 start=1764361641.101141000,1 exp=1764361647.112354000,0 pro=1764361641.112354000,0 acq=Request; current lease repl=(n3,s3):2 seq=2 start=1764361641.101141000,1 exp=1764361647.112354000,0 pro=1764361641.112354000,0 acq=Request; err: cannot replace lease repl=(n3,s3):2 seq=2 start=1764361641.101141000,1 exp=1764361647.112354000,0 pro=1764361641.112354000,0 acq=Request with repl=(n3,s3):2 seq=2 start=1764361641.101141000,1 exp=1764361647.112354000,0 pro=1764361641.112354000,0 acq=Request: ‹proposed under invalid lease›
+I251128 20:27:31.176855 854 kv/kvserver/kvserverbase/forced_error.go:87 ⋮ [T1,Vsystem,n2,s2,r70/2:/Table/6{8-9},raft] 189  rejected lease request repl=(n2,s2):2 seq=2 start=1764361651.102017000,1 exp=1764361657.118944000,0 pro=1764361651.118944000,0 acq=Request; current lease repl=(n2,s2):2 seq=2 start=1764361651.102017000,1 exp=1764361657.118944000,0 pro=1764361651.118944000,0 acq=Request; err: cannot replace lease repl=(n2,s2):2 seq=2 start=1764361651.102017000,1 exp=1764361657.118944000,0 pro=1764361651.118944000,0 acq=Request with repl=(n2,s2):2 seq=2 start=1764361651.102017000,1 exp=1764361657.118944000,0 pro=1764361651.118944000,0 acq=Request: ‹proposed under invalid lease›
+I251128 20:27:44.451611 4876 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 190  concurrent create stats job found, skipping
+I251128 20:27:44.528632 4947 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 191  concurrent create stats job found, skipping
+I251128 20:27:44.546544 4577 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 192  concurrent create stats job found, skipping
+I251128 20:27:44.562650 4955 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 193  concurrent create stats job found, skipping
+I251128 20:27:44.580628 4969 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 194  concurrent create stats job found, skipping
+I251128 20:27:44.890994 4925 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 195 ={"Timestamp":1764361664890991000,"EventType":"status_change","JobID":1128173616210640898,"JobType":"AUTO CREATE STATS","Description":"state changed to: running","PreviousStatus":"running","NewStatus":"running","RunNum":0}
+E251128 20:27:44.913279 4925 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 196  AUTO CREATE STATS job 1128173616210640898: stepping through state reverting with unexpected error: ‹another CREATE STATISTICS job is already running›
+E251128 20:27:44.913279 4925 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 196 +(1) ‹another CREATE STATISTICS job is already running›
+E251128 20:27:44.913279 4925 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 196 +Error types: (1) stats.concurrentCreateStatisticsError
+I251128 20:27:45.066021 4925 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 197 ={"Timestamp":1764361665066014000,"EventType":"status_change","JobID":1128173616210640898,"JobType":"AUTO CREATE STATS","Description":"state changed to: reverting","PreviousStatus":"running","NewStatus":"reverting","RunNum":0,"Error":"‹another CREATE STATISTICS job is already running›","FinalResumeErr":"‹another CREATE STATISTICS job is already running›"}
+E251128 20:27:45.066058 4925 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 198  AUTO CREATE STATS job 1128173616210640898: stepping through state failed with unexpected error: ‹another CREATE STATISTICS job is already running›
+E251128 20:27:45.066058 4925 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 198 +(1) ‹another CREATE STATISTICS job is already running›
+E251128 20:27:45.066058 4925 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 198 +Error types: (1) stats.concurrentCreateStatisticsError
+I251128 20:27:45.192933 4925 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 199 ={"Timestamp":1764361665192930000,"EventType":"status_change","JobID":1128173616210640898,"JobType":"AUTO CREATE STATS","Description":"state changed to: failed","PreviousStatus":"reverting","NewStatus":"failed","RunNum":0,"Error":"‹another CREATE STATISTICS job is already running›","FinalResumeErr":"‹another CREATE STATISTICS job is already running›"}
+E251128 20:27:45.192968 4925 jobs/adopt.go:415 ⋮ [T1,Vsystem,n2] 200  job 1128173616210640898: adoption completed with error ‹another CREATE STATISTICS job is already running›
+I251128 20:27:45.422912 5162 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 201 ={"Timestamp":1764361665422909000,"EventType":"status_change","JobID":1128173618102730754,"JobType":"AUTO CREATE STATS","Description":"state changed to: running","PreviousStatus":"running","NewStatus":"running","RunNum":0}
+E251128 20:27:45.438437 5162 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 202  AUTO CREATE STATS job 1128173618102730754: stepping through state reverting with unexpected error: ‹another CREATE STATISTICS job is already running›
+E251128 20:27:45.438437 5162 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 202 +(1) ‹another CREATE STATISTICS job is already running›
+E251128 20:27:45.438437 5162 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 202 +Error types: (1) stats.concurrentCreateStatisticsError
+I251128 20:27:45.573905 5162 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 203 ={"Timestamp":1764361665573903000,"EventType":"status_change","JobID":1128173618102730754,"JobType":"AUTO CREATE STATS","Description":"state changed to: reverting","PreviousStatus":"running","NewStatus":"reverting","RunNum":0,"Error":"‹another CREATE STATISTICS job is already running›","FinalResumeErr":"‹another CREATE STATISTICS job is already running›"}
+E251128 20:27:45.573948 5162 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 204  AUTO CREATE STATS job 1128173618102730754: stepping through state failed with unexpected error: ‹another CREATE STATISTICS job is already running›
+E251128 20:27:45.573948 5162 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 204 +(1) ‹another CREATE STATISTICS job is already running›
+E251128 20:27:45.573948 5162 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 204 +Error types: (1) stats.concurrentCreateStatisticsError
+I251128 20:27:45.710336 5162 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 205 ={"Timestamp":1764361665710333000,"EventType":"status_change","JobID":1128173618102730754,"JobType":"AUTO CREATE STATS","Description":"state changed to: failed","PreviousStatus":"reverting","NewStatus":"failed","RunNum":0,"Error":"‹another CREATE STATISTICS job is already running›","FinalResumeErr":"‹another CREATE STATISTICS job is already running›"}
+E251128 20:27:45.710402 5162 jobs/adopt.go:415 ⋮ [T1,Vsystem,n2] 206  job 1128173618102730754: adoption completed with error ‹another CREATE STATISTICS job is already running›
+I251128 20:27:45.987033 5209 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 207 ={"Timestamp":1764361665987031000,"EventType":"status_change","JobID":1128173619944325122,"JobType":"AUTO CREATE STATS","Description":"state changed to: running","PreviousStatus":"running","NewStatus":"running","RunNum":0}
+E251128 20:27:46.003270 5209 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 208  AUTO CREATE STATS job 1128173619944325122: stepping through state reverting with unexpected error: ‹another CREATE STATISTICS job is already running›
+E251128 20:27:46.003270 5209 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 208 +(1) ‹another CREATE STATISTICS job is already running›
+E251128 20:27:46.003270 5209 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 208 +Error types: (1) stats.concurrentCreateStatisticsError
+I251128 20:27:46.122054 5209 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 209 ={"Timestamp":1764361666122052000,"EventType":"status_change","JobID":1128173619944325122,"JobType":"AUTO CREATE STATS","Description":"state changed to: reverting","PreviousStatus":"running","NewStatus":"reverting","RunNum":0,"Error":"‹another CREATE STATISTICS job is already running›","FinalResumeErr":"‹another CREATE STATISTICS job is already running›"}
+E251128 20:27:46.122102 5209 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 210  AUTO CREATE STATS job 1128173619944325122: stepping through state failed with unexpected error: ‹another CREATE STATISTICS job is already running›
+E251128 20:27:46.122102 5209 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 210 +(1) ‹another CREATE STATISTICS job is already running›
+E251128 20:27:46.122102 5209 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 210 +Error types: (1) stats.concurrentCreateStatisticsError
+I251128 20:27:46.266044 5209 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 211 ={"Timestamp":1764361666266042000,"EventType":"status_change","JobID":1128173619944325122,"JobType":"AUTO CREATE STATS","Description":"state changed to: failed","PreviousStatus":"reverting","NewStatus":"failed","RunNum":0,"Error":"‹another CREATE STATISTICS job is already running›","FinalResumeErr":"‹another CREATE STATISTICS job is already running›"}
+E251128 20:27:46.266080 5209 jobs/adopt.go:415 ⋮ [T1,Vsystem,n2] 212  job 1128173619944325122: adoption completed with error ‹another CREATE STATISTICS job is already running›
+I251128 20:27:46.345834 5308 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 213  concurrent create stats job found, skipping
+I251128 20:27:46.617054 5443 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 214 ={"Timestamp":1764361666617053000,"EventType":"status_change","JobID":1128173622028992514,"JobType":"AUTO CREATE STATS","Description":"state changed to: running","PreviousStatus":"running","NewStatus":"running","RunNum":0}
+E251128 20:27:46.657401 5443 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 215  AUTO CREATE STATS job 1128173622028992514: stepping through state reverting with unexpected error: ‹another CREATE STATISTICS job is already running›
+E251128 20:27:46.657401 5443 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 215 +(1) ‹another CREATE STATISTICS job is already running›
+E251128 20:27:46.657401 5443 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 215 +Error types: (1) stats.concurrentCreateStatisticsError
+I251128 20:27:46.774020 5443 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 216 ={"Timestamp":1764361666774018000,"EventType":"status_change","JobID":1128173622028992514,"JobType":"AUTO CREATE STATS","Description":"state changed to: reverting","PreviousStatus":"running","NewStatus":"reverting","RunNum":0,"Error":"‹another CREATE STATISTICS job is already running›","FinalResumeErr":"‹another CREATE STATISTICS job is already running›"}
+E251128 20:27:46.774061 5443 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 217  AUTO CREATE STATS job 1128173622028992514: stepping through state failed with unexpected error: ‹another CREATE STATISTICS job is already running›
+E251128 20:27:46.774061 5443 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 217 +(1) ‹another CREATE STATISTICS job is already running›
+E251128 20:27:46.774061 5443 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 217 +Error types: (1) stats.concurrentCreateStatisticsError
+I251128 20:27:46.898713 5443 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 218 ={"Timestamp":1764361666898709000,"EventType":"status_change","JobID":1128173622028992514,"JobType":"AUTO CREATE STATS","Description":"state changed to: failed","PreviousStatus":"reverting","NewStatus":"failed","RunNum":0,"Error":"‹another CREATE STATISTICS job is already running›","FinalResumeErr":"‹another CREATE STATISTICS job is already running›"}
+E251128 20:27:46.898759 5443 jobs/adopt.go:415 ⋮ [T1,Vsystem,n2] 219  job 1128173622028992514: adoption completed with error ‹another CREATE STATISTICS job is already running›
+I251128 20:27:47.371051 5571 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 220 ={"Timestamp":1764361667371049000,"EventType":"status_change","JobID":1128173624027676674,"JobType":"AUTO CREATE STATS","Description":"state changed to: running","PreviousStatus":"running","NewStatus":"running","RunNum":0}
+I251128 20:27:47.384950 5571 sql/distsql_plan_stats.go:208 ⋮ [T1,Vsystem,n2,job=AUTO CREATE STATS id=1128173624027676674,create-stats-distsql] 221  using computed sample size of 10000 for histogram construction
+I251128 20:27:47.771230 5571 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 222 ={"Timestamp":1764361667771227000,"EventType":"status_change","JobID":1128173624027676674,"JobType":"AUTO CREATE STATS","Description":"state changed to: succeeded","PreviousStatus":"running","NewStatus":"succeeded","RunNum":0}
+I251128 20:27:47.848626 5702 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 223  concurrent create stats job found, skipping
+I251128 20:27:47.850211 5715 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 224  concurrent create stats job found, skipping
+I251128 20:27:47.956398 5584 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 225  concurrent create stats job found, skipping
+I251128 20:27:48.105606 5641 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 226  concurrent create stats job found, skipping
+I251128 20:27:48.123583 5664 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 227  concurrent create stats job found, skipping
+I251128 20:27:48.272860 5748 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 228  concurrent create stats job found, skipping
+I251128 20:27:48.293952 5723 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 229  concurrent create stats job found, skipping
+I251128 20:27:48.315902 5713 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 230  concurrent create stats job found, skipping
+I251128 20:27:48.343132 5796 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 231  concurrent create stats job found, skipping
+I251128 20:27:48.368517 5737 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 232  concurrent create stats job found, skipping
+I251128 20:27:48.391210 5741 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 233  concurrent create stats job found, skipping
+I251128 20:27:48.412964 5804 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 234  concurrent create stats job found, skipping
+I251128 20:27:48.436119 5835 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 235  concurrent create stats job found, skipping
+I251128 20:27:48.453838 5782 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 236  concurrent create stats job found, skipping
+I251128 20:27:48.455146 5841 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 237  concurrent create stats job found, skipping
+I251128 20:27:48.456369 5784 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 238  concurrent create stats job found, skipping
+I251128 20:27:48.457446 5786 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 239  concurrent create stats job found, skipping
+I251128 20:27:48.474761 5845 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 240  concurrent create stats job found, skipping
+I251128 20:27:48.491547 5821 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 241  concurrent create stats job found, skipping
+I251128 20:27:48.528416 5876 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 242  concurrent create stats job found, skipping
+I251128 20:27:48.546460 5908 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 243  concurrent create stats job found, skipping
+I251128 20:27:48.547768 5893 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 244  concurrent create stats job found, skipping
+I251128 20:27:48.548799 5910 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 245  concurrent create stats job found, skipping
+I251128 20:27:48.565404 5855 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 246  concurrent create stats job found, skipping
+I251128 20:27:48.824981 5903 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 247 ={"Timestamp":1764361668824978000,"EventType":"status_change","JobID":1128173629244309506,"JobType":"AUTO CREATE STATS","Description":"state changed to: running","PreviousStatus":"running","NewStatus":"running","RunNum":0}
+E251128 20:27:48.843181 5903 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 248  AUTO CREATE STATS job 1128173629244309506: stepping through state reverting with unexpected error: ‹another CREATE STATISTICS job is already running›
+E251128 20:27:48.843181 5903 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 248 +(1) ‹another CREATE STATISTICS job is already running›
+E251128 20:27:48.843181 5903 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 248 +Error types: (1) stats.concurrentCreateStatisticsError
+I251128 20:27:48.949069 5903 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 249 ={"Timestamp":1764361668949067000,"EventType":"status_change","JobID":1128173629244309506,"JobType":"AUTO CREATE STATS","Description":"state changed to: reverting","PreviousStatus":"running","NewStatus":"reverting","RunNum":0,"Error":"‹another CREATE STATISTICS job is already running›","FinalResumeErr":"‹another CREATE STATISTICS job is already running›"}
+E251128 20:27:48.949101 5903 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 250  AUTO CREATE STATS job 1128173629244309506: stepping through state failed with unexpected error: ‹another CREATE STATISTICS job is already running›
+E251128 20:27:48.949101 5903 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 250 +(1) ‹another CREATE STATISTICS job is already running›
+E251128 20:27:48.949101 5903 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 250 +Error types: (1) stats.concurrentCreateStatisticsError
+I251128 20:27:49.086945 5903 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 251 ={"Timestamp":1764361669086943000,"EventType":"status_change","JobID":1128173629244309506,"JobType":"AUTO CREATE STATS","Description":"state changed to: failed","PreviousStatus":"reverting","NewStatus":"failed","RunNum":0,"Error":"‹another CREATE STATISTICS job is already running›","FinalResumeErr":"‹another CREATE STATISTICS job is already running›"}
+E251128 20:27:49.086980 5903 jobs/adopt.go:415 ⋮ [T1,Vsystem,n2] 252  job 1128173629244309506: adoption completed with error ‹another CREATE STATISTICS job is already running›
+I251128 20:27:49.168697 5999 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 253  concurrent create stats job found, skipping
+I251128 20:27:49.187333 6038 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 254  concurrent create stats job found, skipping
+I251128 20:27:49.208432 6055 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 255  concurrent create stats job found, skipping
+I251128 20:27:49.209435 6001 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 256  concurrent create stats job found, skipping
+I251128 20:27:49.228455 6078 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 257  concurrent create stats job found, skipping
+I251128 20:27:49.245397 6090 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 258  concurrent create stats job found, skipping
+I251128 20:27:49.264109 6094 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 259  concurrent create stats job found, skipping
+I251128 20:27:49.264979 5935 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 260  concurrent create stats job found, skipping
+I251128 20:27:49.283693 6046 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 261  concurrent create stats job found, skipping
+I251128 20:27:49.284584 6025 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 262  concurrent create stats job found, skipping
+I251128 20:27:49.303196 6106 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 263  concurrent create stats job found, skipping
+I251128 20:27:49.342476 6150 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 264  concurrent create stats job found, skipping
+I251128 20:27:49.360384 6193 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 265  concurrent create stats job found, skipping
+I251128 20:27:49.382318 6227 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 266  concurrent create stats job found, skipping
+I251128 20:27:49.402320 6172 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 267  concurrent create stats job found, skipping
+I251128 20:27:49.403211 6174 sql/create_stats.go:177 ⋮ [T1,Vsystem,n2,intExec=create-stats] 268  concurrent create stats job found, skipping
+I251128 20:27:49.699975 6143 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 269 ={"Timestamp":1764361669699974000,"EventType":"status_change","JobID":1128173632118161410,"JobType":"AUTO CREATE STATS","Description":"state changed to: running","PreviousStatus":"running","NewStatus":"running","RunNum":0}
+E251128 20:27:49.715095 6143 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 270  AUTO CREATE STATS job 1128173632118161410: stepping through state reverting with unexpected error: ‹another CREATE STATISTICS job is already running›
+E251128 20:27:49.715095 6143 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 270 +(1) ‹another CREATE STATISTICS job is already running›
+E251128 20:27:49.715095 6143 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 270 +Error types: (1) stats.concurrentCreateStatisticsError
+I251128 20:27:49.825025 6143 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 271 ={"Timestamp":1764361669825023000,"EventType":"status_change","JobID":1128173632118161410,"JobType":"AUTO CREATE STATS","Description":"state changed to: reverting","PreviousStatus":"running","NewStatus":"reverting","RunNum":0,"Error":"‹another CREATE STATISTICS job is already running›","FinalResumeErr":"‹another CREATE STATISTICS job is already running›"}
+E251128 20:27:49.825057 6143 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 272  AUTO CREATE STATS job 1128173632118161410: stepping through state failed with unexpected error: ‹another CREATE STATISTICS job is already running›
+E251128 20:27:49.825057 6143 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 272 +(1) ‹another CREATE STATISTICS job is already running›
+E251128 20:27:49.825057 6143 jobs/registry.go:1676 ⋮ [T1,Vsystem,n2] 272 +Error types: (1) stats.concurrentCreateStatisticsError
+I251128 20:27:49.968141 6143 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 273 ={"Timestamp":1764361669968139000,"EventType":"status_change","JobID":1128173632118161410,"JobType":"AUTO CREATE STATS","Description":"state changed to: failed","PreviousStatus":"reverting","NewStatus":"failed","RunNum":0,"Error":"‹another CREATE STATISTICS job is already running›","FinalResumeErr":"‹another CREATE STATISTICS job is already running›"}
+E251128 20:27:49.968160 6143 jobs/adopt.go:415 ⋮ [T1,Vsystem,n2] 274  job 1128173632118161410: adoption completed with error ‹another CREATE STATISTICS job is already running›
+I251128 20:27:50.229887 6334 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 275 ={"Timestamp":1764361670229886000,"EventType":"status_change","JobID":1128173633857781762,"JobType":"AUTO CREATE STATS","Description":"state changed to: running","PreviousStatus":"running","NewStatus":"running","RunNum":0}
+I251128 20:27:50.252172 6334 sql/distsql_plan_stats.go:208 ⋮ [T1,Vsystem,n2,job=AUTO CREATE STATS id=1128173633857781762,create-stats-distsql] 276  using computed sample size of 10000 for histogram construction
+I251128 20:27:50.650914 6334 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 277 ={"Timestamp":1764361670650912000,"EventType":"status_change","JobID":1128173633857781762,"JobType":"AUTO CREATE STATS","Description":"state changed to: succeeded","PreviousStatus":"running","NewStatus":"succeeded","RunNum":0}
+I251128 20:28:50.806842 9099 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 278 ={"Timestamp":1764361730806840000,"EventType":"status_change","JobID":1128173832287846402,"JobType":"AUTO CREATE STATS","Description":"state changed to: running","PreviousStatus":"running","NewStatus":"running","RunNum":0}
+I251128 20:28:50.827218 9099 sql/distsql_plan_stats.go:208 ⋮ [T1,Vsystem,n2,job=AUTO CREATE STATS id=1128173832287846402,create-stats-distsql] 279  using computed sample size of 10000 for histogram construction
+I251128 20:28:51.306853 9099 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 280 ={"Timestamp":1764361731306851000,"EventType":"status_change","JobID":1128173832287846402,"JobType":"AUTO CREATE STATS","Description":"state changed to: succeeded","PreviousStatus":"running","NewStatus":"succeeded","RunNum":0}
+I251128 20:28:51.466750 9220 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 281 ={"Timestamp":1764361731466748000,"EventType":"status_change","JobID":1128173834479271938,"JobType":"AUTO CREATE STATS","Description":"state changed to: running","PreviousStatus":"running","NewStatus":"running","RunNum":0}
+I251128 20:28:51.494973 9220 sql/distsql_plan_stats.go:208 ⋮ [T1,Vsystem,n2,job=AUTO CREATE STATS id=1128173834479271938,create-stats-distsql] 282  using computed sample size of 10000 for histogram construction
+I251128 20:28:51.941990 9220 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 283 ={"Timestamp":1764361731941988000,"EventType":"status_change","JobID":1128173834479271938,"JobType":"AUTO CREATE STATS","Description":"state changed to: succeeded","PreviousStatus":"running","NewStatus":"succeeded","RunNum":0}
+I251128 20:28:52.102834 9352 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 284 ={"Timestamp":1764361732102829000,"EventType":"status_change","JobID":1128173836563283970,"JobType":"AUTO CREATE PARTIAL STATS","Description":"state changed to: running","PreviousStatus":"running","NewStatus":"running","RunNum":0}
+I251128 20:28:52.123962 9352 sql/distsql_plan_stats.go:208 ⋮ [T1,Vsystem,n2,job=AUTO CREATE PARTIAL STATS id=1128173836563283970,create-stats-distsql] 285  using computed sample size of 10000 for histogram construction
+I251128 20:28:52.246803 9352 sql/distsql_plan_stats.go:208 ⋮ [T1,Vsystem,n2,job=AUTO CREATE PARTIAL STATS id=1128173836563283970,create-stats-distsql] 286  using computed sample size of 10000 for histogram construction
+I251128 20:28:52.347037 9352 sql/distsql_plan_stats.go:208 ⋮ [T1,Vsystem,n2,job=AUTO CREATE PARTIAL STATS id=1128173836563283970,create-stats-distsql] 287  using computed sample size of 10000 for histogram construction
+I251128 20:28:52.451173 9352 sql/distsql_plan_stats.go:208 ⋮ [T1,Vsystem,n2,job=AUTO CREATE PARTIAL STATS id=1128173836563283970,create-stats-distsql] 288  using computed sample size of 10000 for histogram construction
+I251128 20:28:52.793981 9352 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 289 ={"Timestamp":1764361732793978000,"EventType":"status_change","JobID":1128173836563283970,"JobType":"AUTO CREATE PARTIAL STATS","Description":"state changed to: succeeded","PreviousStatus":"running","NewStatus":"succeeded","RunNum":0}
+I251128 20:28:52.959768 9512 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 290 ={"Timestamp":1764361732959766000,"EventType":"status_change","JobID":1128173839374123010,"JobType":"AUTO CREATE PARTIAL STATS","Description":"state changed to: running","PreviousStatus":"running","NewStatus":"running","RunNum":0}
+I251128 20:28:52.976569 9512 sql/distsql_plan_stats.go:208 ⋮ [T1,Vsystem,n2,job=AUTO CREATE PARTIAL STATS id=1128173839374123010,create-stats-distsql] 291  using computed sample size of 10000 for histogram construction
+I251128 20:28:53.332867 9512 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 292 ={"Timestamp":1764361733332865000,"EventType":"status_change","JobID":1128173839374123010,"JobType":"AUTO CREATE PARTIAL STATS","Description":"state changed to: succeeded","PreviousStatus":"running","NewStatus":"succeeded","RunNum":0}
+I251128 20:28:53.522813 9532 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 293 ={"Timestamp":1764361733522811000,"EventType":"status_change","JobID":1128173841118560258,"JobType":"AUTO CREATE STATS","Description":"state changed to: running","PreviousStatus":"running","NewStatus":"running","RunNum":0}
+I251128 20:28:53.555134 9532 sql/distsql_plan_stats.go:208 ⋮ [T1,Vsystem,n2,job=AUTO CREATE STATS id=1128173841118560258,create-stats-distsql] 294  using computed sample size of 10000 for histogram construction
+I251128 20:28:54.076120 9532 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 295 ={"Timestamp":1764361734076118000,"EventType":"status_change","JobID":1128173841118560258,"JobType":"AUTO CREATE STATS","Description":"state changed to: succeeded","PreviousStatus":"running","NewStatus":"succeeded","RunNum":0}
+I251128 20:28:54.236872 9768 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 296 ={"Timestamp":1764361734236871000,"EventType":"status_change","JobID":1128173843566395394,"JobType":"AUTO CREATE STATS","Description":"state changed to: running","PreviousStatus":"running","NewStatus":"running","RunNum":0}
+I251128 20:28:54.253214 9768 sql/distsql_plan_stats.go:208 ⋮ [T1,Vsystem,n2,job=AUTO CREATE STATS id=1128173843566395394,create-stats-distsql] 297  using computed sample size of 10000 for histogram construction
+I251128 20:28:54.743947 9768 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 298 ={"Timestamp":1764361734743932000,"EventType":"status_change","JobID":1128173843566395394,"JobType":"AUTO CREATE STATS","Description":"state changed to: succeeded","PreviousStatus":"running","NewStatus":"succeeded","RunNum":0}
+I251128 20:29:54.879637 11419 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 299 ={"Timestamp":1764361794879635000,"EventType":"status_change","JobID":1128174042307198978,"JobType":"AUTO CREATE PARTIAL STATS","Description":"state changed to: running","PreviousStatus":"running","NewStatus":"running","RunNum":0}
+I251128 20:29:54.900436 11419 sql/distsql_plan_stats.go:208 ⋮ [T1,Vsystem,n2,job=AUTO CREATE PARTIAL STATS id=1128174042307198978,create-stats-distsql] 300  using computed sample size of 10000 for histogram construction
+I251128 20:29:55.268970 11419 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 301 ={"Timestamp":1764361795268967000,"EventType":"status_change","JobID":1128174042307198978,"JobType":"AUTO CREATE PARTIAL STATS","Description":"state changed to: succeeded","PreviousStatus":"running","NewStatus":"succeeded","RunNum":0}
+I251128 20:29:55.428627 11564 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 302 ={"Timestamp":1764361795428626000,"EventType":"status_change","JobID":1128174044070608898,"JobType":"AUTO CREATE PARTIAL STATS","Description":"state changed to: running","PreviousStatus":"running","NewStatus":"running","RunNum":0}
+I251128 20:29:55.453705 11564 sql/distsql_plan_stats.go:208 ⋮ [T1,Vsystem,n2,job=AUTO CREATE PARTIAL STATS id=1128174044070608898,create-stats-distsql] 303  using computed sample size of 10000 for histogram construction
+I251128 20:29:55.801784 11564 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 304 ={"Timestamp":1764361795801782000,"EventType":"status_change","JobID":1128174044070608898,"JobType":"AUTO CREATE PARTIAL STATS","Description":"state changed to: succeeded","PreviousStatus":"running","NewStatus":"succeeded","RunNum":0}
+I251128 20:29:55.993614 11644 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 305 ={"Timestamp":1764361795993613000,"EventType":"status_change","JobID":1128174045856694274,"JobType":"AUTO CREATE PARTIAL STATS","Description":"state changed to: running","PreviousStatus":"running","NewStatus":"running","RunNum":0}
+I251128 20:29:56.018441 11644 sql/distsql_plan_stats.go:208 ⋮ [T1,Vsystem,n2,job=AUTO CREATE PARTIAL STATS id=1128174045856694274,create-stats-distsql] 306  using computed sample size of 10000 for histogram construction
+I251128 20:29:56.375777 11644 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 307 ={"Timestamp":1764361796375775000,"EventType":"status_change","JobID":1128174045856694274,"JobType":"AUTO CREATE PARTIAL STATS","Description":"state changed to: succeeded","PreviousStatus":"running","NewStatus":"succeeded","RunNum":0}
+I251128 20:30:56.520379 13495 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 308 ={"Timestamp":1764361856520377000,"EventType":"status_change","JobID":1128174244265361410,"JobType":"AUTO CREATE PARTIAL STATS","Description":"state changed to: running","PreviousStatus":"running","NewStatus":"running","RunNum":0}
+I251128 20:30:56.541426 13495 sql/distsql_plan_stats.go:208 ⋮ [T1,Vsystem,n2,job=AUTO CREATE PARTIAL STATS id=1128174244265361410,create-stats-distsql] 309  using computed sample size of 10000 for histogram construction
+I251128 20:30:56.893807 13495 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 310 ={"Timestamp":1764361856893804000,"EventType":"status_change","JobID":1128174244265361410,"JobType":"AUTO CREATE PARTIAL STATS","Description":"state changed to: succeeded","PreviousStatus":"running","NewStatus":"succeeded","RunNum":0}
+I251128 20:31:13.363782 895 server/status/runtime_jemalloc.go:226 ⋮ [T1,Vsystem,n2] 311  jemalloc arenas purged (took 860.667µs)
+I251128 20:31:57.059518 15099 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 312 ={"Timestamp":1764361917059516000,"EventType":"status_change","JobID":1128174442568187906,"JobType":"AUTO CREATE PARTIAL STATS","Description":"state changed to: running","PreviousStatus":"running","NewStatus":"running","RunNum":0}
+I251128 20:31:57.080394 15099 sql/distsql_plan_stats.go:208 ⋮ [T1,Vsystem,n2,job=AUTO CREATE PARTIAL STATS id=1128174442568187906,create-stats-distsql] 313  using computed sample size of 10000 for histogram construction
+I251128 20:31:57.440331 15099 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 314 ={"Timestamp":1764361917440330000,"EventType":"status_change","JobID":1128174442568187906,"JobType":"AUTO CREATE PARTIAL STATS","Description":"state changed to: succeeded","PreviousStatus":"running","NewStatus":"succeeded","RunNum":0}
+I251128 20:32:18.311697 703 kv/kvserver/store_remove_replica.go:165 ⋮ [T1,Vsystem,n2,s2,r66/3:/Table/6{4-5},raft] 315  removing replica r67/3 (merge trigger)
+I251128 20:32:28.318887 801 kv/kvserver/store_remove_replica.go:165 ⋮ [T1,Vsystem,n2,s2,r61/2:/Table/{59-60},raft] 316  removing replica r62/2 (merge trigger)
+I251128 20:32:44.109982 16523 kv/kvserver/replica_command.go:838 ⋮ [T1,Vsystem,n2,merge,s2,r53/2:/Table/5{1-2}] 317  initiating a merge of r54:/Table/5{2-3} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=4] into this range (lhs+rhs size (0 B+0 B=0 B) below threshold (128 MiB) lhs+rhs cpu (588µs+595µs=1ms) below threshold (250ms))
+I251128 20:32:44.198835 863 kv/kvserver/store_remove_replica.go:165 ⋮ [T1,Vsystem,n2,s2,r53/2:/Table/5{1-2},raft] 318  removing replica r54/2 (merge trigger)
+W251128 20:32:49.296920 16693 kv/kvserver/intentresolver/intent_resolver.go:549 ⋮ [-] 319  failed to push during intent resolution: {<nil> 0 {‹0x14002031000›} ‹index:0 › 1764361969.296842000,0}
+I251128 20:32:49.363997 834 kv/kvserver/store_remove_replica.go:165 ⋮ [T1,Vsystem,n2,s2,r69/3:/Table/6{7-8},raft] 320  removing replica r70/2 (merge trigger)
+I251128 20:32:57.598054 16903 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 321 ={"Timestamp":1764361977598051000,"EventType":"status_change","JobID":1128174640969220098,"JobType":"AUTO CREATE PARTIAL STATS","Description":"state changed to: running","PreviousStatus":"running","NewStatus":"running","RunNum":0}
+I251128 20:32:57.618974 16903 sql/distsql_plan_stats.go:208 ⋮ [T1,Vsystem,n2,job=AUTO CREATE PARTIAL STATS id=1128174640969220098,create-stats-distsql] 322  using computed sample size of 10000 for histogram construction
+I251128 20:32:58.003126 16903 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 323 ={"Timestamp":1764361978003124000,"EventType":"status_change","JobID":1128174640969220098,"JobType":"AUTO CREATE PARTIAL STATS","Description":"state changed to: succeeded","PreviousStatus":"running","NewStatus":"succeeded","RunNum":0}
+I251128 20:33:03.310359 796 kv/kvserver/store_remove_replica.go:165 ⋮ [T1,Vsystem,n2,s2,r66/3:/Table/6{4-6},raft] 324  removing replica r68/3 (merge trigger)
+I251128 20:33:08.314167 832 kv/kvserver/store_remove_replica.go:165 ⋮ [T1,Vsystem,n2,s2,r63/3:/Table/6{1-2},raft] 325  removing replica r64/3 (merge trigger)
+I251128 20:33:09.110661 17314 kv/kvserver/replica_command.go:838 ⋮ [T1,Vsystem,n2,merge,s2,r53/2:/Table/5{1-3}] 326  initiating a merge of r55:/Table/5{3-4} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=4] into this range (lhs+rhs size (0 B+0 B=0 B) below threshold (128 MiB) lhs+rhs cpu (1ms+3µs=1ms) below threshold (250ms))
+I251128 20:33:09.202244 863 kv/kvserver/store_remove_replica.go:165 ⋮ [T1,Vsystem,n2,s2,r53/2:/Table/5{1-3},raft] 327  removing replica r55/2 (merge trigger)
+I251128 20:33:23.362861 895 server/status/runtime_jemalloc.go:226 ⋮ [T1,Vsystem,n2] 328  jemalloc arenas purged (took 786.916µs)
+I251128 20:33:28.304580 788 kv/kvserver/store_remove_replica.go:165 ⋮ [T1,Vsystem,n2,s2,r66/3:/Table/6{4-7},raft] 329  removing replica r69/3 (merge trigger)
+I251128 20:33:29.157725 17804 kv/kvserver/replica_command.go:838 ⋮ [T1,Vsystem,n2,merge,s2,r6/2:/Table/{0-3}] 330  initiating a merge of r7:/Table/{3-4} [(n1,s1):1, (n3,s3):2, (n2,s2):3, next=4, gen=4] into this range (lhs+rhs size (0 B+73 KiB=73 KiB) below threshold (128 MiB) lhs+rhs cpu (3µs+1ms=1ms) below threshold (250ms))
+I251128 20:33:29.228492 703 kv/kvserver/store_remove_replica.go:165 ⋮ [T1,Vsystem,n2,s2,r6/2:/Table/{0-3},raft] 331  removing replica r7/3 (merge trigger)
+I251128 20:33:38.308740 873 kv/kvserver/store_remove_replica.go:165 ⋮ [T1,Vsystem,n2,s2,r65/2:/Table/6{3-4},raft] 332  removing replica r66/3 (merge trigger)
+I251128 20:33:39.111870 18141 kv/kvserver/replica_command.go:838 ⋮ [T1,Vsystem,n2,merge,s2,r53/2:/Table/5{1-4}] 333  initiating a merge of r56:/Table/5{4-5} [(n1,s1):1, (n3,s3):2, (n2,s2):3, next=4, gen=4] into this range (lhs+rhs size (0 B+340 KiB=340 KiB) below threshold (128 MiB) lhs+rhs cpu (1ms+53ms=54ms) below threshold (250ms))
+I251128 20:33:39.195789 871 kv/kvserver/store_remove_replica.go:165 ⋮ [T1,Vsystem,n2,s2,r53/2:/Table/5{1-4},raft] 334  removing replica r56/3 (merge trigger)
+I251128 20:33:44.112001 18253 kv/kvserver/replica_command.go:838 ⋮ [T1,Vsystem,n2,merge,s2,r58/2:/Table/5{6-7}] 335  initiating a merge of r59:/Table/5{7-8} [(n1,s1):1, (n3,s3):2, (n2,s2):3, next=4, gen=4] into this range (lhs+rhs size (0 B+0 B=0 B) below threshold (128 MiB) lhs+rhs cpu (2µs+3µs=5µs) below threshold (250ms))
+I251128 20:33:44.179707 848 kv/kvserver/store_remove_replica.go:165 ⋮ [T1,Vsystem,n2,s2,r58/2:/Table/5{6-7},raft] 336  removing replica r59/3 (merge trigger)
+I251128 20:33:54.111738 18725 kv/kvserver/replica_command.go:838 ⋮ [T1,Vsystem,n2,merge,s2,r57/3:/Table/5{5-6}] 337  initiating a merge of r58:/Table/5{6-8} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=5] into this range (lhs+rhs size (0 B+0 B=0 B) below threshold (128 MiB) lhs+rhs cpu (8µs+468µs=476µs) below threshold (250ms))
+I251128 20:33:54.190730 837 kv/kvserver/store_remove_replica.go:165 ⋮ [T1,Vsystem,n2,s2,r57/3:/Table/5{5-6},raft] 338  removing replica r58/2 (merge trigger)
+I251128 20:33:59.395242 860 kv/kvserver/store_remove_replica.go:165 ⋮ [T1,Vsystem,n2,s2,r52/2:/Table/5{0-1},raft] 339  removing replica r53/2 (merge trigger)
+I251128 20:34:09.157792 18751 kv/kvserver/replica_command.go:838 ⋮ [T1,Vsystem,n2,merge,s2,r51/2:/Table/{48-50}] 340  initiating a merge of r52:/Table/5{0-5} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=8] into this range (lhs+rhs size (24 B+344 KiB=344 KiB) below threshold (128 MiB) lhs+rhs cpu (0µs+54ms=54ms) below threshold (250ms))
+I251128 20:34:09.234191 836 kv/kvserver/store_remove_replica.go:165 ⋮ [T1,Vsystem,n2,s2,r51/2:/Table/{48-50},raft] 341  removing replica r52/2 (merge trigger)
+I251128 20:34:14.361658 786 kv/kvserver/store_remove_replica.go:165 ⋮ [T1,Vsystem,n2,s2,r72/3:/Table/7{0-1},raft] 342  removing replica r73/2 (merge trigger)
+I251128 20:34:19.354310 874 kv/kvserver/store_remove_replica.go:165 ⋮ [T1,Vsystem,n2,s2,r71/3:/Table/{69-70},raft] 343  removing replica r72/3 (merge trigger)
+I251128 20:34:40.086377 865 kv/kvserver/store_remove_replica.go:165 ⋮ [T1,Vsystem,n2,s2,r71/3:/Table/{69-72},raft] 344  removing replica r74/2 (merge trigger)
+I251128 20:34:53.316962 863 kv/kvserver/store_remove_replica.go:165 ⋮ [T1,Vsystem,n2,s2,r65/2:/Table/6{3-9},raft] 345  removing replica r71/3 (merge trigger)
+I251128 20:34:59.113396 20410 kv/kvserver/replica_command.go:838 ⋮ [T1,Vsystem,n2,merge,s2,r51/2:/Table/{48-55}] 346  initiating a merge of r57:/Table/5{5-8} [(n1,s1):1, (n3,s3):2, (n2,s2):3, next=4, gen=6] into this range (lhs+rhs size (348 KiB+0 B=348 KiB) below threshold (128 MiB) lhs+rhs cpu (54ms+501µs=54ms) below threshold (250ms))
+I251128 20:34:59.217747 838 kv/kvserver/store_remove_replica.go:165 ⋮ [T1,Vsystem,n2,s2,r51/2:/Table/{48-55},raft] 347  removing replica r57/3 (merge trigger)
+I251128 20:36:58.155418 23961 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 348 ={"Timestamp":1764362218155416000,"EventType":"status_change","JobID":1128175429258477570,"JobType":"AUTO CREATE PARTIAL STATS","Description":"state changed to: running","PreviousStatus":"running","NewStatus":"running","RunNum":0}
+I251128 20:36:58.176654 23961 sql/distsql_plan_stats.go:208 ⋮ [T1,Vsystem,n2,job=AUTO CREATE PARTIAL STATS id=1128175429258477570,create-stats-distsql] 349  using computed sample size of 10000 for histogram construction
+I251128 20:36:58.547432 23961 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 350 ={"Timestamp":1764362218547430000,"EventType":"status_change","JobID":1128175429258477570,"JobType":"AUTO CREATE PARTIAL STATS","Description":"state changed to: succeeded","PreviousStatus":"running","NewStatus":"succeeded","RunNum":0}
+I251128 20:36:58.716520 23807 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 351 ={"Timestamp":1764362218716517000,"EventType":"status_change","JobID":1128175431071596546,"JobType":"AUTO CREATE PARTIAL STATS","Description":"state changed to: running","PreviousStatus":"running","NewStatus":"running","RunNum":0}
+I251128 20:36:58.741587 23807 sql/distsql_plan_stats.go:208 ⋮ [T1,Vsystem,n2,job=AUTO CREATE PARTIAL STATS id=1128175431071596546,create-stats-distsql] 352  using computed sample size of 10000 for histogram construction
+I251128 20:36:59.128268 23807 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 353 ={"Timestamp":1764362219128266000,"EventType":"status_change","JobID":1128175431071596546,"JobType":"AUTO CREATE PARTIAL STATS","Description":"state changed to: succeeded","PreviousStatus":"running","NewStatus":"succeeded","RunNum":0}
+I251128 20:37:13.368275 895 server/status/runtime_jemalloc.go:226 ⋮ [T1,Vsystem,n2] 354  jemalloc arenas purged (took 978.834µs)
+I251128 20:37:59.271069 26008 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 355 ={"Timestamp":1764362279271067000,"EventType":"status_change","JobID":1128175629540818946,"JobType":"AUTO CREATE PARTIAL STATS","Description":"state changed to: running","PreviousStatus":"running","NewStatus":"running","RunNum":0}
+I251128 20:37:59.296069 26008 sql/distsql_plan_stats.go:208 ⋮ [T1,Vsystem,n2,job=AUTO CREATE PARTIAL STATS id=1128175629540818946,create-stats-distsql] 356  using computed sample size of 10000 for histogram construction
+I251128 20:37:59.620088 26008 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 357 ={"Timestamp":1764362279620087000,"EventType":"status_change","JobID":1128175629540818946,"JobType":"AUTO CREATE PARTIAL STATS","Description":"state changed to: succeeded","PreviousStatus":"running","NewStatus":"succeeded","RunNum":0}
+I251128 20:37:59.776052 26120 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 358 ={"Timestamp":1764362279776050000,"EventType":"status_change","JobID":1128175631204876290,"JobType":"AUTO CREATE STATS","Description":"state changed to: running","PreviousStatus":"running","NewStatus":"running","RunNum":0}
+I251128 20:37:59.788403 26120 sql/distsql_plan_stats.go:208 ⋮ [T1,Vsystem,n2,job=AUTO CREATE STATS id=1128175631204876290,create-stats-distsql] 359  using computed sample size of 10000 for histogram construction
+I251128 20:38:00.193117 26120 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 360 ={"Timestamp":1764362280193115000,"EventType":"status_change","JobID":1128175631204876290,"JobType":"AUTO CREATE STATS","Description":"state changed to: succeeded","PreviousStatus":"running","NewStatus":"succeeded","RunNum":0}
+I251128 20:39:00.345878 27711 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 361 ={"Timestamp":1764362340345876000,"EventType":"status_change","JobID":1128175829637267458,"JobType":"AUTO CREATE PARTIAL STATS","Description":"state changed to: running","PreviousStatus":"running","NewStatus":"running","RunNum":0}
+I251128 20:39:00.367028 27711 sql/distsql_plan_stats.go:208 ⋮ [T1,Vsystem,n2,job=AUTO CREATE PARTIAL STATS id=1128175829637267458,create-stats-distsql] 362  using computed sample size of 10000 for histogram construction
+I251128 20:39:00.687862 27711 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 363 ={"Timestamp":1764362340687860000,"EventType":"status_change","JobID":1128175829637267458,"JobType":"AUTO CREATE PARTIAL STATS","Description":"state changed to: succeeded","PreviousStatus":"running","NewStatus":"succeeded","RunNum":0}
+I251128 20:39:00.865919 27820 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 364 ={"Timestamp":1764362340865916000,"EventType":"status_change","JobID":1128175831315382274,"JobType":"AUTO CREATE PARTIAL STATS","Description":"state changed to: running","PreviousStatus":"running","NewStatus":"running","RunNum":0}
+I251128 20:39:00.891044 27820 sql/distsql_plan_stats.go:208 ⋮ [T1,Vsystem,n2,job=AUTO CREATE PARTIAL STATS id=1128175831315382274,create-stats-distsql] 365  using computed sample size of 10000 for histogram construction
+I251128 20:39:01.218897 27820 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 366 ={"Timestamp":1764362341218894000,"EventType":"status_change","JobID":1128175831315382274,"JobType":"AUTO CREATE PARTIAL STATS","Description":"state changed to: succeeded","PreviousStatus":"running","NewStatus":"succeeded","RunNum":0}
+I251128 20:40:13.373571 895 server/status/runtime_jemalloc.go:226 ⋮ [T1,Vsystem,n2] 367  jemalloc arenas purged (took 1.401625ms)
+I251128 20:43:53.384528 895 server/status/runtime_jemalloc.go:226 ⋮ [T1,Vsystem,n2] 368  jemalloc arenas purged (took 1.351458ms)
+I251128 20:46:01.345475 39689 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 369 ={"Timestamp":1764362761345473000,"EventType":"status_change","JobID":1128177209280135170,"JobType":"AUTO CREATE PARTIAL STATS","Description":"state changed to: running","PreviousStatus":"running","NewStatus":"running","RunNum":0}
+I251128 20:46:01.363059 39689 sql/distsql_plan_stats.go:208 ⋮ [T1,Vsystem,n2,job=AUTO CREATE PARTIAL STATS id=1128177209280135170,create-stats-distsql] 370  using computed sample size of 10000 for histogram construction
+I251128 20:46:01.670409 39689 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 371 ={"Timestamp":1764362761670407000,"EventType":"status_change","JobID":1128177209280135170,"JobType":"AUTO CREATE PARTIAL STATS","Description":"state changed to: succeeded","PreviousStatus":"running","NewStatus":"succeeded","RunNum":0}
+I251128 20:46:03.383251 895 server/status/runtime_jemalloc.go:226 ⋮ [T1,Vsystem,n2] 372  jemalloc arenas purged (took 1.921ms)
+I251128 20:47:01.842265 41701 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 373 ={"Timestamp":1764362821842263000,"EventType":"status_change","JobID":1128177407341821954,"JobType":"AUTO CREATE STATS","Description":"state changed to: running","PreviousStatus":"running","NewStatus":"running","RunNum":0}
+I251128 20:47:01.871086 41701 sql/distsql_plan_stats.go:208 ⋮ [T1,Vsystem,n2,job=AUTO CREATE STATS id=1128177407341821954,create-stats-distsql] 374  using computed sample size of 10000 for histogram construction
+I251128 20:47:02.551620 41701 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2] 375 ={"Timestamp":1764362822551618000,"EventType":"status_change","JobID":1128177407341821954,"JobType":"AUTO CREATE STATS","Description":"state changed to: succeeded","PreviousStatus":"running","NewStatus":"succeeded","RunNum":0}
+I251128 20:48:13.382343 895 server/status/runtime_jemalloc.go:226 ⋮ [T1,Vsystem,n2] 376  jemalloc arenas purged (took 1.465667ms)
+I251128 20:50:13.386008 895 server/status/runtime_jemalloc.go:226 ⋮ [T1,Vsystem,n2] 377  jemalloc arenas purged (took 1.162708ms)
+I251128 20:52:13.389819 895 server/status/runtime_jemalloc.go:226 ⋮ [T1,Vsystem,n2] 378  jemalloc arenas purged (took 1.491125ms)
+I251128 20:54:13.394639 895 server/status/runtime_jemalloc.go:226 ⋮ [T1,Vsystem,n2] 379  jemalloc arenas purged (took 1.122667ms)
+I251128 20:56:23.395461 895 server/status/runtime_jemalloc.go:226 ⋮ [T1,Vsystem,n2] 380  jemalloc arenas purged (took 2.388583ms)
+I251128 20:56:43.413352 908 sql/temporary_schema.go:488 ⋮ [T1,Vsystem,n2] 381  skipping temporary object cleanup run as it is not the leaseholder
+I251128 20:56:43.413369 908 sql/temporary_schema.go:489 ⋮ [T1,Vsystem,n2] 382  completed temporary object cleanup job
+I251128 20:56:43.413373 908 sql/temporary_schema.go:641 ⋮ [T1,Vsystem,n2] 383  temporary object cleaner next scheduled to run at 2025-11-28 21:26:43.388281 +0000 UTC m=+3601.672156251
+I251128 20:58:23.398347 895 server/status/runtime_jemalloc.go:226 ⋮ [T1,Vsystem,n2] 384  jemalloc arenas purged (took 1.211667ms)
+I251128 21:00:21.333093 1289 jobs/job_scheduler.go:171 ⋮ [T1,Vsystem,n2] 385  Starting job for schedule 1128173415311245313 (‹"sql-stats-compaction"›); scheduled to run at 2025-11-28 21:00:00 +0000 UTC; next run scheduled for 2025-11-28 22:00:00 +0000 UTC
+I251128 21:00:22.996519 986 jobs/adopt.go:105 ⋮ [T1,Vsystem,n2] 386  claimed 1 jobs
+I251128 21:00:23.029296 69715 jobs/adopt.go:224 ⋮ [T1,Vsystem,n2,job=1128180027664531458] 387  job 1128180027664531458: resuming execution
+I251128 21:00:23.030796 69719 jobs/registry.go:1682 ⋮ [T1,Vsystem,n2,job=1128180027664531458] 388  AUTO SQL STATS COMPACTION job 1128180027664531458: stepping through state running
+I251128 21:00:23.077348 69719 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2,job=1128180027664531458] 389 ={"Timestamp":1764363623077347000,"EventType":"status_change","JobID":1128180027664531458,"JobType":"AUTO SQL STATS COMPACTION","Description":"state changed to: running","PreviousStatus":"running","NewStatus":"running","RunNum":0}
+I251128 21:00:23.077380 69719 sql/compact_sql_stats.go:37 ⋮ [T1,Vsystem,n2,job=AUTO SQL STATS COMPACTION id=1128180027664531458] 390  starting sql stats compaction job
+I251128 21:00:23.114342 69719 sql/compact_sql_stats.go:101 ⋮ [T1,Vsystem,n2,job=AUTO SQL STATS COMPACTION id=1128180027664531458] 391  sql stats compaction job terminated with status = succeeded
+I251128 21:00:23.147073 69719 jobs/registry.go:1682 ⋮ [T1,Vsystem,n2,job=1128180027664531458] 392  AUTO SQL STATS COMPACTION job 1128180027664531458: stepping through state succeeded
+I251128 21:00:23.259149 69719 1@jobs/structured_log.go:49 ⋮ [T1,Vsystem,n2,job=1128180027664531458] 393 ={"Timestamp":1764363623259147000,"EventType":"status_change","JobID":1128180027664531458,"JobType":"AUTO SQL STATS COMPACTION","Description":"state changed to: succeeded","PreviousStatus":"running","NewStatus":"succeeded","RunNum":0}
+I251128 21:00:33.399309 895 server/status/runtime_jemalloc.go:226 ⋮ [T1,Vsystem,n2] 394  jemalloc arenas purged (took 1.985ms)
+I251128 21:02:43.405044 895 server/status/runtime_jemalloc.go:226 ⋮ [T1,Vsystem,n2] 395  jemalloc arenas purged (took 2.93675ms)
+I251128 21:04:53.401365 895 server/status/runtime_jemalloc.go:226 ⋮ [T1,Vsystem,n2] 396  jemalloc arenas purged (took 1.313916ms)
+W251128 21:06:40.926185 1533 kv/kvserver/raft_transport.go:919 ⋮ [T1,Vsystem,n2] 397  while processing outgoing Raft queue to node 1: ‹EOF›:
+W251128 21:06:40.926229 1194 kv/kvserver/raft_transport.go:919 ⋮ [T1,Vsystem,n2] 398  while processing outgoing Raft queue to node 1: ‹EOF›:
+W251128 21:06:40.926293 1200 kv/kvserver/raft_transport.go:919 ⋮ [T1,Vsystem,n2] 399  while processing outgoing Raft queue to node 1: ‹EOF›:
+E251128 21:06:41.041810 1125 2@rpc/peer.go:654 ⋮ [T1,Vsystem,n2,rnode=1,raddr=‹localhost:26257›,class=raft,rpc] 400  disconnected (was healthy for 39m56.782s): grpc: ‹node unavailable; try another peer› [code 2/Unknown]
+E251128 21:06:41.042597 1125 2@rpc/peer.go:675 ⋮ [T1,Vsystem,n2,rnode=1,raddr=‹localhost:26257›,class=raft,rpc] 401  failed connection attempt (last connected 1ms ago): grpc: ‹connection error: desc = "transport: error while dialing: dial tcp [::1]:26257: connect: connection refused"› [code 14/Unavailable]
+E251128 21:06:41.060431 745 2@rpc/peer.go:654 ⋮ [T1,Vsystem,n2,rnode=1,raddr=‹localhost:26257›,class=default,rpc] 402  disconnected (was healthy for 39m57.682s): grpc: ‹node unavailable; try another peer› [code 2/Unknown]
+E251128 21:06:41.060498 230 2@rpc/peer.go:654 ⋮ [T1,Vsystem,n2,rnode=?,raddr=‹localhost:26257›,class=system,rpc] 403  disconnected (was healthy for 39m57.707s): grpc: ‹node unavailable; try another peer› [code 2/Unknown]
+E251128 21:06:41.060546 587 2@rpc/peer.go:654 ⋮ [T1,Vsystem,n2,rnode=1,raddr=‹localhost:26257›,class=system,rpc] 404  disconnected (was healthy for 39m57.705s): grpc: ‹node unavailable; try another peer› [code 2/Unknown]
+E251128 21:06:41.061116 587 2@rpc/peer.go:675 ⋮ [T1,Vsystem,n2,rnode=1,raddr=‹localhost:26257›,class=system,rpc] 405  failed connection attempt (last connected 1ms ago): grpc: ‹connection error: desc = "transport: error while dialing: dial tcp [::1]:26257: connect: connection refused"› [code 14/Unavailable]
+E251128 21:06:41.061149 230 2@rpc/peer.go:675 ⋮ [T1,Vsystem,n2,rnode=?,raddr=‹localhost:26257›,class=system,rpc] 406  failed connection attempt (last connected 1ms ago): grpc: ‹connection error: desc = "transport: error while dialing: dial tcp [::1]:26257: connect: connection refused"› [code 14/Unavailable]
+E251128 21:06:41.061176 745 2@rpc/peer.go:675 ⋮ [T1,Vsystem,n2,rnode=1,raddr=‹localhost:26257›,class=default,rpc] 407  failed connection attempt (last connected 1ms ago): grpc: ‹connection error: desc = "transport: error while dialing: dial tcp [::1]:26257: connect: connection refused"› [code 14/Unavailable]
+W251128 21:06:41.184998 695 kv/kvserver/storeliveness/support_manager.go:329 ⋮ [T1,Vsystem,n2,s2] 408  failed to send heartbeat to store {NodeID:1 StoreID:1}
+E251128 21:06:41.189397 994 2@rpc/peer.go:654 ⋮ [T1,Vsystem,n2,rnode=1,raddr=‹localhost:26257›,class=rangefeed,rpc] 409  disconnected (was healthy for 39m57.773s): grpc: ‹node unavailable; try another peer› [code 2/Unknown]
+W251128 21:06:41.189437 1272 kv/kvclient/rangefeed/rangefeed.go:399 ⋮ [T1,Vsystem,n2,rangefeed=‹table-stats-cache›] 410  rangefeed failed 0 times, restarting: grpc: ‹grpc: the client connection is closing› [code 1/Canceled]
+W251128 21:06:41.189456 933 kv/kvclient/rangefeed/rangefeed.go:399 ⋮ [T1,Vsystem,n2,rangefeed=‹spanconfig-subscriber›] 411  rangefeed failed 0 times, restarting: grpc: ‹error reading from server: read tcp 127.0.0.1:57277->127.0.0.1:26257: use of closed network connection› [code 14/Unavailable]
+W251128 21:06:41.189483 762 kv/kvclient/rangefeed/rangefeed.go:399 ⋮ [T1,Vsystem,n2,rangefeed=‹tenant-entry-watcher›] 412  rangefeed failed 0 times, restarting: grpc: ‹error reading from server: read tcp 127.0.0.1:57277->127.0.0.1:26257: use of closed network connection› [code 14/Unavailable]
+W251128 21:06:41.189443 1026 kv/kvclient/rangefeed/rangefeed.go:399 ⋮ [T1,Vsystem,n2,rangefeed=‹sql_instances›] 413  rangefeed failed 0 times, restarting: grpc: ‹error reading from server: read tcp 127.0.0.1:57277->127.0.0.1:26257: use of closed network connection› [code 14/Unavailable]
+W251128 21:06:41.189493 1098 kv/kvclient/rangefeed/rangefeed.go:399 ⋮ [T1,Vsystem,n2,rangefeed=‹tenant-boundaries-watcher›] 414  rangefeed failed 0 times, restarting: grpc: ‹error reading from server: read tcp 127.0.0.1:57277->127.0.0.1:26257: use of closed network connection› [code 14/Unavailable]
+W251128 21:06:41.189511 718 kv/kvclient/rangefeed/rangefeed.go:399 ⋮ [T1,Vsystem,n2,rangefeed=‹settings-watcher›] 415  rangefeed failed 0 times, restarting: grpc: ‹error reading from server: read tcp 127.0.0.1:57277->127.0.0.1:26257: use of closed network connection› [code 14/Unavailable]
+W251128 21:06:41.189570 17809 kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:406 ⋮ [T1,Vsystem,n2,rangefeed=‹system-config-cache›,mux_n=2,gen=5] 416  error closing mux rangefeed client: context canceled
+W251128 21:06:41.189693 612 kv/kvclient/rangefeed/rangefeed.go:399 ⋮ [T1,Vsystem,n2,rangefeed=‹system-config-cache›] 417  rangefeed failed 0 times, restarting: grpc: ‹error reading from server: read tcp 127.0.0.1:57277->127.0.0.1:26257: use of closed network connection› [code 14/Unavailable]
+W251128 21:06:41.189724 17703 kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:406 ⋮ [T1,Vsystem,n2,rangefeed=‹lease›,mux_n=2,gen=4] 418  error closing mux rangefeed client: context canceled
+W251128 21:06:41.189930 981 kv/kvclient/rangefeed/rangefeed.go:399 ⋮ [T1,Vsystem,n2,rangefeed=‹lease›] 419  rangefeed failed 0 times, restarting: grpc: ‹error reading from server: read tcp 127.0.0.1:57277->127.0.0.1:26257: use of closed network connection› [code 14/Unavailable]
+E251128 21:06:41.190254 994 2@rpc/peer.go:675 ⋮ [T1,Vsystem,n2,rnode=1,raddr=‹localhost:26257›,class=rangefeed,rpc] 420  failed connection attempt (last connected 1ms ago): grpc: ‹connection error: desc = "transport: error while dialing: dial tcp [::1]:26257: connect: connection refused"› [code 14/Unavailable]
+W251128 21:06:41.795084 638 2@gossip/gossip.go:1489 ⋮ [T1,Vsystem,n2] 421  no incoming or outgoing connections
+I251128 21:06:41.795146 85814 gossip/client.go:411 ⋮ [T1,Vsystem,n2] 422  unvalidated bootstrap gossip dial to ‹localhost:26257›
+W251128 21:06:41.795153 85814 gossip/client.go:120 ⋮ [T1,Vsystem,n2] 423  failed to start gossip client to ‹localhost:26257›: initial connection heartbeat failed: grpc: ‹connection error: desc = "transport: error while dialing: dial tcp [::1]:26257: connect: connection refused"› [code 14/Unavailable]
+E251128 21:06:42.042653 1125 2@rpc/peer.go:675 ⋮ [T1,Vsystem,n2,rnode=1,raddr=‹localhost:26257›,class=raft,rpc] 424  failed connection attempt (last connected 1.001s ago): grpc: ‹connection error: desc = "transport: error while dialing: dial tcp [::1]:26257: connect: connection refused"› [code 14/Unavailable]
+E251128 21:06:42.061231 745 2@rpc/peer.go:675 ⋮ [T1,Vsystem,n2,rnode=1,raddr=‹localhost:26257›,class=default,rpc] 425  failed connection attempt (last connected 1.001s ago): grpc: ‹connection error: desc = "transport: error while dialing: dial tcp [::1]:26257: connect: connection refused"› [code 14/Unavailable]
+E251128 21:06:42.061271 587 2@rpc/peer.go:675 ⋮ [T1,Vsystem,n2,rnode=1,raddr=‹localhost:26257›,class=system,rpc] 426  failed connection attempt (last connected 1.001s ago): grpc: ‹connection error: desc = "transport: error while dialing: dial tcp [::1]:26257: connect: connection refused"› [code 14/Unavailable]
+E251128 21:06:42.061292 230 2@rpc/peer.go:675 ⋮ [T1,Vsystem,n2,rnode=?,raddr=‹localhost:26257›,class=system,rpc] 427  failed connection attempt (last connected 1.001s ago): grpc: ‹connection error: desc = "transport: error while dialing: dial tcp [::1]:26257: connect: connection refused"› [code 14/Unavailable]
+W251128 21:06:42.184837 695 kv/kvserver/storeliveness/support_manager.go:329 ⋮ [T1,Vsystem,n2,s2] 428  failed to send heartbeat to store {NodeID:1 StoreID:1}
+E251128 21:06:42.190558 994 2@rpc/peer.go:675 ⋮ [T1,Vsystem,n2,rnode=1,raddr=‹localhost:26257›,class=rangefeed,rpc] 429  failed connection attempt (last connected 1.001s ago): grpc: ‹connection error: desc = "transport: error while dialing: dial tcp [::1]:26257: connect: connection refused"› [code 14/Unavailable]
+I251128 21:06:42.559464 638 1@gossip/gossip.go:1503 ⋮ [T1,Vsystem,n2] 430  node has connected to cluster via gossip
+I251128 21:06:42.795167 86071 gossip/client.go:411 ⋮ [T1,Vsystem,n2] 431  unvalidated bootstrap gossip dial to ‹localhost:26258›
+I251128 21:06:42.797029 86071 gossip/client.go:126 ⋮ [T1,Vsystem,n2] 432  started gossip client to n0 (‹localhost:26258›)
+W251128 21:06:43.188575 695 kv/kvserver/storeliveness/support_manager.go:329 ⋮ [T1,Vsystem,n2,s2] 433  failed to send heartbeat to store {NodeID:1 StoreID:1}
+I251128 21:06:43.758601 695 kv/kvserver/storeliveness/supporter_state.go:321 ⋮ [T1,Vsystem,n2,s2] 434  withdrew support for store {NodeID:1 StoreID:1}; old = {Target:{NodeID:1 StoreID:1} Epoch:1 Expiration:1764364003.733710000,0}, new = {Target:{NodeID:1 StoreID:1} Epoch:2 Expiration:0,0}
+I251128 21:06:43.774639 695 kv/kvserver/storeliveness/support_manager.go:366 ⋮ [T1,Vsystem,n2,s2] 435  withdrew support from 1 stores
+I251128 21:06:43.774672 695 kv/kvserver/storeliveness/support_manager.go:376 ⋮ [T1,Vsystem,n2,s2] 436  invoked callback for 1 stores
+W251128 21:06:44.032506 2047 kv/kvserver/closedts/sidetransport/receiver.go:150 ⋮ [n2,remote=3] 437  closed timestamps side-transport connection dropped from node: 3 (grpc: ‹context canceled› [code 1/Canceled])
+W251128 21:06:44.087822 638 2@gossip/gossip.go:1489 ⋮ [T1,Vsystem,n2] 438  no incoming or outgoing connections
+I251128 21:06:44.087872 86338 gossip/client.go:411 ⋮ [T1,Vsystem,n2] 439  unvalidated bootstrap gossip dial to ‹localhost:26257›
+W251128 21:06:44.088050 1280 kv/kvserver/raft_transport.go:919 ⋮ [T1,Vsystem,n2] 440  while processing outgoing Raft queue to node 3: ‹EOF›:
+W251128 21:06:44.088120 2565 kv/kvserver/raft_transport.go:919 ⋮ [T1,Vsystem,n2] 441  while processing outgoing Raft queue to node 3: ‹EOF›:
+W251128 21:06:44.088132 3400 kv/kvserver/raft_transport.go:919 ⋮ [T1,Vsystem,n2] 442  while processing outgoing Raft queue to node 3: ‹EOF›:
+E251128 21:06:44.181763 2463 2@rpc/peer.go:654 ⋮ [T1,Vsystem,n2,rnode=3,raddr=‹localhost:26258›,class=raft,rpc] 443  disconnected (was healthy for 39m49.725s): grpc: ‹node unavailable; try another peer› [code 2/Unknown]
+E251128 21:06:44.182441 2463 2@rpc/peer.go:675 ⋮ [T1,Vsystem,n2,rnode=3,raddr=‹localhost:26258›,class=raft,rpc] 444  failed connection attempt (last connected 1ms ago): grpc: ‹connection error: desc = "transport: error while dialing: dial tcp [::1]:26258: connect: connection refused"› [code 14/Unavailable]
+W251128 21:06:44.184578 695 kv/kvserver/storeliveness/support_manager.go:329 ⋮ [T1,Vsystem,n2,s2] 445  failed to send heartbeat to store {NodeID:1 StoreID:1}
+W251128 21:06:44.194633 2447 kv/kvserver/storeliveness/transport.go:327 ⋮ [T1,Vsystem,n2] 446  processing outgoing queue to node 3 failed: ‹EOF›
+W251128 21:06:44.194633 2447 kv/kvserver/storeliveness/transport.go:327 ⋮ [T1,Vsystem,n2] 446 +‹EOF›:
+E251128 21:06:44.426737 1491 2@rpc/peer.go:654 ⋮ [T1,Vsystem,n2,rnode=3,raddr=‹localhost:26258›,class=system,rpc] 447  disconnected (was healthy for 39m59.785s): grpc: ‹node unavailable; try another peer› [code 2/Unknown]
+E251128 21:06:44.427802 1491 2@rpc/peer.go:675 ⋮ [T1,Vsystem,n2,rnode=3,raddr=‹localhost:26258›,class=system,rpc] 448  failed connection attempt (last connected 1ms ago): grpc: ‹connection error: desc = "transport: error while dialing: dial tcp [::1]:26258: connect: connection refused"› [code 14/Unavailable]
+E251128 21:06:44.797906 86072 2@rpc/peer.go:654 ⋮ [T1,Vsystem,n2,rnode=?,raddr=‹localhost:26258›,class=system,rpc] 449  disconnected (was healthy for 2.001s): grpc: ‹node unavailable; try another peer› [code 2/Unknown]
+E251128 21:06:44.799080 86072 2@rpc/peer.go:675 ⋮ [T1,Vsystem,n2,rnode=?,raddr=‹localhost:26258›,class=system,rpc] 450  failed connection attempt (last connected 1ms ago): grpc: ‹connection error: desc = "transport: error while dialing: dial tcp [::1]:26258: connect: connection refused"› [code 14/Unavailable]
+E251128 21:06:45.062080 1281 2@rpc/peer.go:654 ⋮ [T1,Vsystem,n2,rnode=3,raddr=‹localhost:26258›,class=default,rpc] 451  disconnected (was healthy for 39m50.729s): grpc: ‹node unavailable; try another peer› [code 2/Unknown]
+E251128 21:06:45.062894 1281 2@rpc/peer.go:675 ⋮ [T1,Vsystem,n2,rnode=3,raddr=‹localhost:26258›,class=default,rpc] 452  failed connection attempt (last connected 1ms ago): grpc: ‹connection error: desc = "transport: error while dialing: dial tcp [::1]:26258: connect: connection refused"› [code 14/Unavailable]
+I251128 21:06:45.087942 86469 gossip/client.go:411 ⋮ [T1,Vsystem,n2] 453  unvalidated bootstrap gossip dial to ‹localhost:26258›
+E251128 21:06:45.183167 2463 2@rpc/peer.go:675 ⋮ [T1,Vsystem,n2,rnode=3,raddr=‹localhost:26258›,class=raft,rpc] 454  failed connection attempt (last connected 1.001s ago): grpc: ‹connection error: desc = "transport: error while dialing: dial tcp [::1]:26258: connect: connection refused"› [code 14/Unavailable]
+W251128 21:06:45.185550 695 kv/kvserver/storeliveness/support_manager.go:329 ⋮ [T1,Vsystem,n2,s2] 455  failed to send heartbeat to store {NodeID:3 StoreID:3}
+W251128 21:06:45.185568 695 kv/kvserver/storeliveness/support_manager.go:329 ⋮ [T1,Vsystem,n2,s2] 456  failed to send heartbeat to store {NodeID:1 StoreID:1}
+I251128 21:06:45.243531 1 1@cli/start.go:1001 ⋮ [T1,Vsystem,n2] 457  received signal 'terminated'
+I251128 21:06:45.251527 1 1@cli/start.go:1042 ⋮ [T1,Vsystem,n2] 458  initiating graceful shutdown of server
+E251128 21:06:45.427962 1491 2@rpc/peer.go:675 ⋮ [T1,Vsystem,n2,rnode=3,raddr=‹localhost:26258›,class=system,rpc] 459  failed connection attempt (last connected 1.001s ago): grpc: ‹connection error: desc = "transport: error while dialing: dial tcp [::1]:26258: connect: connection refused"› [code 14/Unavailable]
+E251128 21:06:45.800513 86072 2@rpc/peer.go:675 ⋮ [T1,Vsystem,n2,rnode=?,raddr=‹localhost:26258›,class=system,rpc] 460  failed connection attempt (last connected 1.002s ago): grpc: ‹connection error: desc = "transport: error while dialing: dial tcp [::1]:26258: connect: connection refused"› [code 14/Unavailable]
+E251128 21:06:46.063276 1281 2@rpc/peer.go:675 ⋮ [T1,Vsystem,n2,rnode=3,raddr=‹localhost:26258›,class=default,rpc] 461  failed connection attempt (last connected 1.001s ago): grpc: ‹connection error: desc = "transport: error while dialing: dial tcp [::1]:26258: connect: connection refused"› [code 14/Unavailable]
+I251128 21:06:46.088129 86583 gossip/client.go:411 ⋮ [T1,Vsystem,n2] 462  unvalidated bootstrap gossip dial to ‹localhost:26257›
+W251128 21:06:46.185623 695 kv/kvserver/storeliveness/support_manager.go:329 ⋮ [T1,Vsystem,n2,s2] 463  failed to send heartbeat to store {NodeID:1 StoreID:1}
+W251128 21:06:46.185784 695 kv/kvserver/storeliveness/support_manager.go:329 ⋮ [T1,Vsystem,n2,s2] 464  failed to send heartbeat to store {NodeID:3 StoreID:3}
+I251128 21:06:46.758537 695 kv/kvserver/storeliveness/supporter_state.go:321 ⋮ [T1,Vsystem,n2,s2] 465  withdrew support for store {NodeID:3 StoreID:3}; old = {Target:{NodeID:3 StoreID:3} Epoch:1 Expiration:1764364006.733539000,0}, new = {Target:{NodeID:3 StoreID:3} Epoch:2 Expiration:0,0}
+I251128 21:06:46.769206 695 kv/kvserver/storeliveness/support_manager.go:366 ⋮ [T1,Vsystem,n2,s2] 466  withdrew support from 1 stores
+I251128 21:06:46.769410 695 kv/kvserver/storeliveness/support_manager.go:376 ⋮ [T1,Vsystem,n2,s2] 467  invoked callback for 1 stores
+I251128 21:06:47.088302 86738 gossip/client.go:411 ⋮ [T1,Vsystem,n2] 468  unvalidated bootstrap gossip dial to ‹localhost:26258›
+W251128 21:06:47.088526 86738 gossip/client.go:120 ⋮ [T1,Vsystem,n2] 469  failed to start gossip client to ‹localhost:26258›: initial connection heartbeat failed: grpc: ‹connection error: desc = "transport: error while dialing: dial tcp [::1]:26258: connect: connection refused"› [code 14/Unavailable]
+W251128 21:06:47.184679 695 kv/kvserver/storeliveness/support_manager.go:329 ⋮ [T1,Vsystem,n2,s2] 470  failed to send heartbeat to store {NodeID:1 StoreID:1}
+W251128 21:06:47.184817 695 kv/kvserver/storeliveness/support_manager.go:329 ⋮ [T1,Vsystem,n2,s2] 471  failed to send heartbeat to store {NodeID:3 StoreID:3}
+I251128 21:06:48.088323 86841 gossip/client.go:411 ⋮ [T1,Vsystem,n2] 472  unvalidated bootstrap gossip dial to ‹localhost:26257›
+W251128 21:06:48.183388 695 kv/kvserver/storeliveness/support_manager.go:329 ⋮ [T1,Vsystem,n2,s2] 473  failed to send heartbeat to store {NodeID:1 StoreID:1}
+W251128 21:06:48.183419 695 kv/kvserver/storeliveness/support_manager.go:329 ⋮ [T1,Vsystem,n2,s2] 474  failed to send heartbeat to store {NodeID:3 StoreID:3}
+I251128 21:06:48.389964 824 kv/kvserver/replica_proposal_buf.go:652 ⋮ [T1,Vsystem,n2,s2,r32/3:/{Table/29-NamespaceTab…},raft] 475  campaigning because Raft leader (id=0) not live in node liveness map
+I251128 21:06:49.088482 86969 gossip/client.go:411 ⋮ [T1,Vsystem,n2] 476  unvalidated bootstrap gossip dial to ‹localhost:26258›
+W251128 21:06:49.184746 695 kv/kvserver/storeliveness/support_manager.go:329 ⋮ [T1,Vsystem,n2,s2] 477  failed to send heartbeat to store {NodeID:1 StoreID:1}
+W251128 21:06:49.184920 695 kv/kvserver/storeliveness/support_manager.go:329 ⋮ [T1,Vsystem,n2,s2] 478  failed to send heartbeat to store {NodeID:3 StoreID:3}
+W251128 21:06:49.374584 898 kv/kvserver/liveness/liveness.go:759 ⋮ [T1,Vsystem,n2,liveness-hb] 479  slow heartbeat took 3.001318959s; err=result is ambiguous: after 2.99s of attempting command: context deadline exceeded
+W251128 21:06:49.374857 898 kv/kvserver/liveness/liveness.go:673 ⋮ [T1,Vsystem,n2,liveness-hb] 480  failed node liveness heartbeat: operation "node liveness heartbeat" timed out after 3.002s (given timeout 3s): result is ambiguous: after 2.99s of attempting command: context deadline exceeded
+W251128 21:06:49.374857 898 kv/kvserver/liveness/liveness.go:673 ⋮ [T1,Vsystem,n2,liveness-hb] 480 +
+W251128 21:06:49.374857 898 kv/kvserver/liveness/liveness.go:673 ⋮ [T1,Vsystem,n2,liveness-hb] 480 +An inability to maintain liveness will prevent a node from participating in a
+W251128 21:06:49.374857 898 kv/kvserver/liveness/liveness.go:673 ⋮ [T1,Vsystem,n2,liveness-hb] 480 +cluster. If this problem persists, it may be a sign of resource starvation or
+W251128 21:06:49.374857 898 kv/kvserver/liveness/liveness.go:673 ⋮ [T1,Vsystem,n2,liveness-hb] 480 +of network connectivity problems. For help troubleshooting, visit:
+W251128 21:06:49.374857 898 kv/kvserver/liveness/liveness.go:673 ⋮ [T1,Vsystem,n2,liveness-hb] 480 +
+W251128 21:06:49.374857 898 kv/kvserver/liveness/liveness.go:673 ⋮ [T1,Vsystem,n2,liveness-hb] 480 +    https://www.cockroachlabs.com/docs/stable/cluster-setup-troubleshooting.html#node-liveness-issues
+I251128 21:06:50.088688 87125 gossip/client.go:411 ⋮ [T1,Vsystem,n2] 481  unvalidated bootstrap gossip dial to ‹localhost:26257›
+W251128 21:06:50.185373 695 kv/kvserver/storeliveness/support_manager.go:329 ⋮ [T1,Vsystem,n2,s2] 482  failed to send heartbeat to store {NodeID:1 StoreID:1}
+W251128 21:06:50.185519 695 kv/kvserver/storeliveness/support_manager.go:329 ⋮ [T1,Vsystem,n2,s2] 483  failed to send heartbeat to store {NodeID:3 StoreID:3}
+I251128 21:06:50.251592 86491 1@cli/start.go:1054 ⋮ [T1,Vsystem,n2] 484  382 running tasks
+I251128 21:06:51.088842 87223 gossip/client.go:411 ⋮ [T1,Vsystem,n2] 485  unvalidated bootstrap gossip dial to ‹localhost:26258›
+W251128 21:06:51.185860 695 kv/kvserver/storeliveness/support_manager.go:329 ⋮ [T1,Vsystem,n2,s2] 486  failed to send heartbeat to store {NodeID:3 StoreID:3}
+W251128 21:06:51.186009 695 kv/kvserver/storeliveness/support_manager.go:329 ⋮ [T1,Vsystem,n2,s2] 487  failed to send heartbeat to store {NodeID:1 StoreID:1}
+I251128 21:06:52.089006 87305 gossip/client.go:411 ⋮ [T1,Vsystem,n2] 488  unvalidated bootstrap gossip dial to ‹localhost:26257›
+W251128 21:06:52.089232 87305 gossip/client.go:120 ⋮ [T1,Vsystem,n2] 489  failed to start gossip client to ‹localhost:26257›: initial connection heartbeat failed: grpc: ‹connection error: desc = "transport: error while dialing: dial tcp [::1]:26257: connect: connection refused"› [code 14/Unavailable]
+W251128 21:06:52.185107 695 kv/kvserver/storeliveness/support_manager.go:329 ⋮ [T1,Vsystem,n2,s2] 490  failed to send heartbeat to store {NodeID:1 StoreID:1}
+W251128 21:06:52.185266 695 kv/kvserver/storeliveness/support_manager.go:329 ⋮ [T1,Vsystem,n2,s2] 491  failed to send heartbeat to store {NodeID:3 StoreID:3}
+W251128 21:06:52.375830 898 kv/kvserver/liveness/liveness.go:759 ⋮ [T1,Vsystem,n2,liveness-hb] 492  slow heartbeat took 3.000884375s; err=aborted in DistSender: result is ambiguous: context deadline exceeded
+W251128 21:06:52.376124 898 kv/kvserver/liveness/liveness.go:673 ⋮ [T1,Vsystem,n2,liveness-hb] 493  failed node liveness heartbeat: operation "node liveness heartbeat" timed out after 3.001s (given timeout 3s): aborted in DistSender: result is ambiguous: context deadline exceeded
+W251128 21:06:52.376124 898 kv/kvserver/liveness/liveness.go:673 ⋮ [T1,Vsystem,n2,liveness-hb] 493 +
+W251128 21:06:52.376124 898 kv/kvserver/liveness/liveness.go:673 ⋮ [T1,Vsystem,n2,liveness-hb] 493 +An inability to maintain liveness will prevent a node from participating in a
+W251128 21:06:52.376124 898 kv/kvserver/liveness/liveness.go:673 ⋮ [T1,Vsystem,n2,liveness-hb] 493 +cluster. If this problem persists, it may be a sign of resource starvation or
+W251128 21:06:52.376124 898 kv/kvserver/liveness/liveness.go:673 ⋮ [T1,Vsystem,n2,liveness-hb] 493 +of network connectivity problems. For help troubleshooting, visit:
+W251128 21:06:52.376124 898 kv/kvserver/liveness/liveness.go:673 ⋮ [T1,Vsystem,n2,liveness-hb] 493 +
+W251128 21:06:52.376124 898 kv/kvserver/liveness/liveness.go:673 ⋮ [T1,Vsystem,n2,liveness-hb] 493 +    https://www.cockroachlabs.com/docs/stable/cluster-setup-troubleshooting.html#node-liveness-issues
+I251128 21:06:53.089161 87488 gossip/client.go:411 ⋮ [T1,Vsystem,n2] 494  unvalidated bootstrap gossip dial to ‹localhost:26258›
+W251128 21:06:53.185321 695 kv/kvserver/storeliveness/support_manager.go:329 ⋮ [T1,Vsystem,n2,s2] 495  failed to send heartbeat to store {NodeID:1 StoreID:1}
+W251128 21:06:53.185435 695 kv/kvserver/storeliveness/support_manager.go:329 ⋮ [T1,Vsystem,n2,s2] 496  failed to send heartbeat to store {NodeID:3 StoreID:3}
+I251128 21:06:53.358535 698 kv/kvserver/store_gossip.go:156 ⋮ [T1,Vsystem,n2,s2,r1/3:/{Min-System/NodeL…}] 497  could not gossip first range descriptor: [NotLeaseHolderError] ‹lease acquisition canceled because context canceled›; r1: replica (n2,s2):3 not lease holder; lease holder unknown
+W251128 21:06:53.397304 713 server/node.go:1521 ⋮ [T1,Vsystem,n2,summaries] 498  health alerts detected: liveness.heartbeatfailures@s0=2
+I251128 21:06:54.089392 86263 gossip/client.go:411 ⋮ [T1,Vsystem,n2] 499  unvalidated bootstrap gossip dial to ‹localhost:26257›
+W251128 21:06:54.185344 695 kv/kvserver/storeliveness/support_manager.go:329 ⋮ [T1,Vsystem,n2,s2] 500  failed to send heartbeat to store {NodeID:1 StoreID:1}
+W251128 21:06:54.185541 695 kv/kvserver/storeliveness/support_manager.go:329 ⋮ [T1,Vsystem,n2,s2] 501  failed to send heartbeat to store {NodeID:3 StoreID:3}
+I251128 21:06:55.089478 87643 gossip/client.go:411 ⋮ [T1,Vsystem,n2] 502  unvalidated bootstrap gossip dial to ‹localhost:26258›
+W251128 21:06:55.185432 695 kv/kvserver/storeliveness/support_manager.go:329 ⋮ [T1,Vsystem,n2,s2] 503  failed to send heartbeat to store {NodeID:1 StoreID:1}
+W251128 21:06:55.185611 695 kv/kvserver/storeliveness/support_manager.go:329 ⋮ [T1,Vsystem,n2,s2] 504  failed to send heartbeat to store {NodeID:3 StoreID:3}

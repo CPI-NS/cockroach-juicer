@@ -44,6 +44,41 @@ class ClusterConfig:
 
 
 @dataclass
+class DataInitConfig:
+    """Configuration for benchmark data initialization."""
+    enabled: bool = True
+    num_keys: int = 10000
+    key_prefix: str = "key"
+    key_range: int = 10000
+    batch_size: int = 100
+    concurrent: int = 1
+    use_bulk: bool = False
+
+
+@dataclass
+class RemoteNodeConfig:
+    """Configuration for a single remote node."""
+    hostname: str
+    internal_ip: str
+    role: str  # 'cockroach' or 'benchmark'
+    node_id: int = 1
+
+
+@dataclass
+class RemoteConfig:
+    """Configuration for remote deployment (CloudLab/AWS)."""
+    deployment_mode: str = "local"  # 'local' or 'remote'
+    ssh_user: str = ""
+    ssh_key: str = "~/.ssh/id_rsa"
+    server_nodes: List[RemoteNodeConfig] = field(default_factory=list)
+    client_nodes: List[RemoteNodeConfig] = field(default_factory=list)
+    cockroach_bin_remote: str = ""
+    benchmark_bin_remote: str = ""
+    deploy_binaries: bool = True
+    local_build_dir: str = "../../"
+
+
+@dataclass
 class ExperimentConfig:
     name: str = "cool-experiment-name"
     output_dir: str = "./results"
@@ -54,6 +89,8 @@ class ExperimentConfig:
     juicer: JuicerConfig = field(default_factory=JuicerConfig)
     protocol: ProtocolConfig = field(default_factory=ProtocolConfig)
     cluster: ClusterConfig = field(default_factory=ClusterConfig)
+    data_init: DataInitConfig = field(default_factory=DataInitConfig)
+    remote: RemoteConfig = field(default_factory=RemoteConfig)
 
 
 def load_config(config_path: str) -> ExperimentConfig:
@@ -111,6 +148,57 @@ def load_config(config_path: str) -> ExperimentConfig:
         store_size=cluster_data.get('store_size', '10GB')
     )
 
+    data_init_data = data.get('data_init', {})
+    data_init = DataInitConfig(
+        enabled=data_init_data.get('enabled', True),
+        num_keys=data_init_data.get('num_keys', 10000),
+        key_prefix=data_init_data.get('key_prefix', 'key'),
+        key_range=data_init_data.get('key_range', 10000),
+        batch_size=data_init_data.get('batch_size', 100),
+        concurrent=data_init_data.get('concurrent', 1),
+        use_bulk=data_init_data.get('use_bulk', False)
+    )
+
+    # Parse remote deployment configuration
+    remote_data = data.get('remote', {})
+    deployment_mode = exp_data.get('deployment_mode', 'local')
+
+    server_nodes = []
+    client_nodes = []
+
+    if remote_data:
+        # Parse server nodes
+        nodes_data = remote_data.get('nodes', {})
+        for server_data in nodes_data.get('servers', []):
+            server_nodes.append(RemoteNodeConfig(
+                hostname=server_data['hostname'],
+                internal_ip=server_data['internal_ip'],
+                role=server_data.get('role', 'cockroach'),
+                node_id=server_data.get('node_id', 1)
+            ))
+
+        # Parse client nodes
+        for client_data in nodes_data.get('clients', []):
+            client_nodes.append(RemoteNodeConfig(
+                hostname=client_data['hostname'],
+                internal_ip=client_data['internal_ip'],
+                role=client_data.get('role', 'benchmark'),
+                node_id=client_data.get('node_id', 1)
+            ))
+
+    remote_paths = remote_data.get('remote_paths', {})
+    remote = RemoteConfig(
+        deployment_mode=deployment_mode,
+        ssh_user=remote_data.get('ssh_user', ''),
+        ssh_key=remote_data.get('ssh_key', '~/.ssh/id_rsa'),
+        server_nodes=server_nodes,
+        client_nodes=client_nodes,
+        cockroach_bin_remote=remote_paths.get('cockroach_bin', ''),
+        benchmark_bin_remote=remote_paths.get('benchmark_bin', ''),
+        deploy_binaries=remote_data.get('deploy_binaries', True),
+        local_build_dir=remote_data.get('local_build_dir', '../../')
+    )
+
     return ExperimentConfig(
         name=name,
         output_dir=output_dir,
@@ -120,7 +208,9 @@ def load_config(config_path: str) -> ExperimentConfig:
         concurrency=concurrency,
         juicer=juicer,
         protocol=protocol,
-        cluster=cluster
+        cluster=cluster,
+        data_init=data_init,
+        remote=remote
     )
 
 
