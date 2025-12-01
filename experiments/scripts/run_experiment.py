@@ -100,10 +100,6 @@ def check_and_setup_venv():
         sys.exit(1)
 
 
-from framework.config_parser import load_config
-from framework.benchmark_runner import BenchmarkRunner
-from framework.visualization import ResultsVisualizer
-from framework.metrics_collector import ExperimentResults
 import json
 
 
@@ -117,6 +113,10 @@ def setup_logging(verbose: bool = False):
 
 
 def run_from_config(config_path: str, dry_run: bool = False):
+    from framework.config_parser import load_config
+    from framework.benchmark_runner import BenchmarkRunner
+    from framework.visualization import ResultsVisualizer
+
     print(f"Loading configuration from: {config_path}")
     config = load_config(config_path)
 
@@ -167,6 +167,8 @@ def run_from_config(config_path: str, dry_run: bool = False):
 
 
 def generate_plots(results_json: str, output_dir: str = None):
+    from framework.visualization import ResultsVisualizer
+    from framework.metrics_collector import ExperimentResults, BenchmarkMetrics
 
     print(f"Loading results from: {results_json}")
 
@@ -179,7 +181,6 @@ def generate_plots(results_json: str, output_dir: str = None):
         params = config_data['params']
         agg = config_data['aggregated']
 
-        from framework.metrics_collector import BenchmarkMetrics
         metrics = BenchmarkMetrics(
             latency_p50=agg['mean_latency_p50'],
             latency_p99=agg['mean_latency_p99'],
