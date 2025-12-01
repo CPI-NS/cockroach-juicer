@@ -135,11 +135,11 @@ class ClusterManager:
         if not self.remote_mode:
             return True
 
-        server_nodes = [n for n in self.remote_nodes if n.role == 'cockroach']
+        server_nodes = [n for n in self.remote_nodes if n.get('role') == 'cockroach']
 
         for node in server_nodes:
-            hostname = node.hostname
-            port = node.ssh_port
+            hostname = node['hostname']
+            port = node.get('ssh_port', 22)
             self.logger.info(f"Deploying {local_path.name} to {hostname}:{port} -> {remote_path}")
 
             try:
@@ -239,12 +239,13 @@ class ClusterManager:
             hostname = node['hostname']
             internal_ip = node['internal_ip']
             node_id = node.get('node_id', i + 1)
+            port = node.get('ssh_port', 22)
 
             self.logger.info(f"Starting node {node_id} on {hostname} ({internal_ip})")
 
             # Create remote directories
-            self._run_remote_command(hostname, f"mkdir -p {self.data_dir}")
-            self._run_remote_command(hostname, f"mkdir -p {self.log_dir}")
+            self._run_remote_command(hostname, f"mkdir -p {self.data_dir}", port=port)
+            self._run_remote_command(hostname, f"mkdir -p {self.log_dir}", port=port)
 
             # Build start command (use remote binary path)
             cmd_parts = [
@@ -266,7 +267,7 @@ class ClusterManager:
             cmd = " ".join(cmd_parts)
 
             # Start node in background
-            rc, stdout, stderr = self._run_remote_command(hostname, cmd, background=True)
+            rc, stdout, stderr = self._run_remote_command(hostname, cmd, background=True, port=port)
 
             if rc != 0:
                 self.logger.error(f"Failed to start node {node_id}: {stderr}")
@@ -288,7 +289,7 @@ class ClusterManager:
             init_cmd_str = " ".join(init_cmd)
 
             rc, stdout, stderr = self._run_remote_command(
-                first_node['hostname'], init_cmd_str
+                first_node['hostname'], init_cmd_str, port=first_node.get('ssh_port', 22)
             )
 
             if rc != 0:
@@ -323,7 +324,7 @@ class ClusterManager:
                 check_cmd_str = " ".join(check_cmd)
 
                 rc, stdout, stderr = self._run_remote_command(
-                    first_node['hostname'], check_cmd_str
+                    first_node['hostname'], check_cmd_str, port=first_node.get('ssh_port', 22)
                 )
 
                 if rc == 0:
@@ -494,6 +495,7 @@ class ClusterManager:
 
         for i, node in enumerate(server_nodes):
             hostname = node['hostname']
+            port = node.get('ssh_port', 22)
             self.logger.info(f"Stopping node {i + 1} on {hostname}")
 
             try:
@@ -504,7 +506,7 @@ class ClusterManager:
                     # Force kill
                     stop_cmd = "pkill -KILL cockroach"
 
-                rc, _, _ = self._run_remote_command(hostname, stop_cmd)
+                rc, _, _ = self._run_remote_command(hostname, stop_cmd, port=port)
 
                 if rc == 0:
                     self.logger.info(f"Node {i + 1} stopped on {hostname}")
@@ -598,11 +600,12 @@ class ClusterManager:
 
         for node in server_nodes:
             hostname = node['hostname']
+            port = node.get('ssh_port', 22)
             self.logger.info(f"Cleaning up data on {hostname}")
 
             try:
                 cleanup_cmd = f"rm -rf {self.data_dir}"
-                self._run_remote_command(hostname, cleanup_cmd)
+                self._run_remote_command(hostname, cleanup_cmd, port=port)
             except Exception as e:
                 self.logger.warning(f"Cleanup failed on {hostname}: {e}")
 

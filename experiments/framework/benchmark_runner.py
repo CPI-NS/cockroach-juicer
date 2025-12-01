@@ -51,14 +51,16 @@ class BenchmarkRunner:
                     'hostname': node.hostname,
                     'internal_ip': node.internal_ip,
                     'role': node.role,
-                    'node_id': node.node_id
+                    'node_id': node.node_id,
+                    'ssh_port': node.ssh_port
                 })
             for node in self.config.remote.client_nodes:
                 remote_nodes.append({
                     'hostname': node.hostname,
                     'internal_ip': node.internal_ip,
                     'role': node.role,
-                    'node_id': node.node_id
+                    'node_id': node.node_id,
+                    'ssh_port': node.ssh_port
                 })
 
         self.cluster_mgr = ClusterManager(
