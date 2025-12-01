@@ -146,7 +146,8 @@ def run_from_config(config_path: str, dry_run: bool = False):
     experiments_dir = Path(__file__).parent.parent.resolve()
     cockroach_juicer_root = experiments_dir.parent
 
-    cockroach_bin = str(cockroach_juicer_root / "cockroach")
+    # Both binaries are in bin/ directory
+    cockroach_bin = str(cockroach_juicer_root / "bin" / "cockroach")
     benchmark_bin = str(cockroach_juicer_root / "bin" / "benchmark")
 
     runner = BenchmarkRunner(
