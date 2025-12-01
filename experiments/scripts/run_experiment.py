@@ -71,9 +71,16 @@ def check_and_setup_venv():
                     capture_output=False
                 )
                 print("\n" + "=" * 80)
-                print("Setup complete! Please rerun the script using:")
-                print(f"  source {venv_dir}/bin/activate")
-                print(f"  python3 {Path(__file__).name} <your-arguments>")
+                print("Setup complete!")
+                print()
+                if venv_dir.exists():
+                    print("Virtual environment created. Rerun with:")
+                    print(f"  source {venv_dir}/bin/activate")
+                    print(f"  python3 scripts/{Path(__file__).name} <your-arguments>")
+                else:
+                    print("Dependencies installed to user directory.")
+                    print("Simply rerun the script:")
+                    print(f"  python3 scripts/{Path(__file__).name} <your-arguments>")
                 print("=" * 80)
                 sys.exit(0)
             except subprocess.CalledProcessError as e:
