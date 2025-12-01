@@ -62,6 +62,7 @@ class RemoteNodeConfig:
     internal_ip: str
     role: str  # 'cockroach' or 'benchmark'
     node_id: int = 1
+    ssh_port: int = 22  # SSH port (default 22)
 
 
 @dataclass
@@ -174,7 +175,8 @@ def load_config(config_path: str) -> ExperimentConfig:
                 hostname=server_data['hostname'],
                 internal_ip=server_data['internal_ip'],
                 role=server_data.get('role', 'cockroach'),
-                node_id=server_data.get('node_id', 1)
+                node_id=server_data.get('node_id', 1),
+                ssh_port=server_data.get('ssh_port', 22)
             ))
 
         # Parse client nodes
@@ -183,7 +185,8 @@ def load_config(config_path: str) -> ExperimentConfig:
                 hostname=client_data['hostname'],
                 internal_ip=client_data['internal_ip'],
                 role=client_data.get('role', 'benchmark'),
-                node_id=client_data.get('node_id', 1)
+                node_id=client_data.get('node_id', 1),
+                ssh_port=client_data.get('ssh_port', 22)
             ))
 
     remote_paths = remote_data.get('remote_paths', {})

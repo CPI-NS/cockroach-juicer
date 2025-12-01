@@ -8,7 +8,7 @@ experiment:
 
 remote:
   ssh_user: "harrisah"
-  ssh_key: "~/.ssh/id_rsa"
+  ssh_key: ""  # Leave empty to use SSH agent or default keys
   ssh_host_base: "pc474.emulab.net"
 
   nodes:

@@ -74,10 +74,11 @@ class ClusterManager:
     # SSH Helper Methods (Remote Deployment)
     # ========================================================================
 
-    def _get_ssh_client(self, hostname: str):
+    def _get_ssh_client(self, hostname: str, port: int = 22):
         """Get or create SSH client for a remote host."""
-        if hostname in self.ssh_clients:
-            return self.ssh_clients[hostname]
+        client_key = f"{hostname}:{port}"
+        if client_key in self.ssh_clients:
+            return self.ssh_clients[client_key]
 
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -86,30 +87,31 @@ class ClusterManager:
             if self.ssh_key:
                 client.connect(
                     hostname,
+                    port=port,
                     username=self.ssh_user,
                     key_filename=str(self.ssh_key),
                     timeout=10
                 )
             else:
-                client.connect(hostname, username=self.ssh_user, timeout=10)
+                client.connect(hostname, port=port, username=self.ssh_user, timeout=10)
 
-            self.ssh_clients[hostname] = client
-            self.logger.info(f"SSH connection established to {hostname}")
+            self.ssh_clients[client_key] = client
+            self.logger.info(f"SSH connection established to {hostname}:{port}")
             return client
 
         except Exception as e:
-            self.logger.error(f"Failed to connect to {hostname}: {e}")
+            self.logger.error(f"Failed to connect to {hostname}:{port}: {e}")
             raise
 
     def _run_remote_command(
-        self, hostname: str, command: str, background: bool = False
+        self, hostname: str, command: str, background: bool = False, port: int = 22
     ) -> tuple[int, str, str]:
         """
         Execute command on remote host via SSH.
 
         Returns: (return_code, stdout, stderr)
         """
-        client = self._get_ssh_client(hostname)
+        client = self._get_ssh_client(hostname, port)
 
         try:
             if background:
@@ -133,14 +135,15 @@ class ClusterManager:
         if not self.remote_mode:
             return True
 
-        server_nodes = [n for n in self.remote_nodes if n.get('role') == 'cockroach']
+        server_nodes = [n for n in self.remote_nodes if n.role == 'cockroach']
 
         for node in server_nodes:
-            hostname = node['hostname']
-            self.logger.info(f"Deploying {local_path.name} to {hostname}:{remote_path}")
+            hostname = node.hostname
+            port = node.ssh_port
+            self.logger.info(f"Deploying {local_path.name} to {hostname}:{port} -> {remote_path}")
 
             try:
-                client = self._get_ssh_client(hostname)
+                client = self._get_ssh_client(hostname, port)
                 sftp = client.open_sftp()
 
                 # Create remote directory if needed
