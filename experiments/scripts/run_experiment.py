@@ -11,9 +11,87 @@ Usage:
 import sys
 import argparse
 import logging
+import subprocess
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+
+def check_and_setup_venv():
+    """Check if required dependencies are available, offer to set up venv if not."""
+    experiments_dir = Path(__file__).parent.parent.resolve()
+    venv_dir = experiments_dir / "venv"
+    setup_script = experiments_dir / "setup_venv.sh"
+
+    # Try importing required packages
+    missing_packages = []
+    try:
+        import yaml
+    except ImportError:
+        missing_packages.append("pyyaml")
+
+    try:
+        import numpy
+    except ImportError:
+        missing_packages.append("numpy")
+
+    try:
+        import matplotlib
+    except ImportError:
+        missing_packages.append("matplotlib")
+
+    try:
+        import paramiko
+    except ImportError:
+        missing_packages.append("paramiko")
+
+    if not missing_packages:
+        return True  # All dependencies available
+
+    print("=" * 80)
+    print("MISSING DEPENDENCIES")
+    print("=" * 80)
+    print(f"The following packages are required but not installed:")
+    for pkg in missing_packages:
+        print(f"  - {pkg}")
+    print()
+
+    if setup_script.exists():
+        print(f"Setup script found at: {setup_script}")
+        print()
+        response = input("Would you like to set up the virtual environment now? (y/n): ").strip().lower()
+
+        if response == 'y':
+            print("\nRunning setup script...")
+            try:
+                result = subprocess.run(
+                    ["bash", str(setup_script)],
+                    cwd=str(experiments_dir),
+                    check=True,
+                    capture_output=False
+                )
+                print("\n" + "=" * 80)
+                print("Setup complete! Please rerun the script using:")
+                print(f"  source {venv_dir}/bin/activate")
+                print(f"  python3 {Path(__file__).name} <your-arguments>")
+                print("=" * 80)
+                sys.exit(0)
+            except subprocess.CalledProcessError as e:
+                print(f"\nError running setup script: {e}")
+                sys.exit(1)
+        else:
+            print("\nPlease install dependencies manually:")
+            print(f"  cd {experiments_dir}")
+            print("  python3 -m venv venv")
+            print("  source venv/bin/activate")
+            print("  pip install -r requirements.txt")
+            sys.exit(1)
+    else:
+        print("Please install dependencies:")
+        print(f"  cd {experiments_dir}")
+        print("  pip install -r requirements.txt")
+        sys.exit(1)
+
 
 from framework.config_parser import load_config
 from framework.benchmark_runner import BenchmarkRunner
@@ -136,6 +214,9 @@ def main():
     if not args.command:
         parser.print_help()
         sys.exit(1)
+
+    # Check and setup virtual environment if needed
+    check_and_setup_venv()
 
     setup_logging(args.verbose if hasattr(args, 'verbose') else False)
 
