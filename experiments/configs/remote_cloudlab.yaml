@@ -15,25 +15,25 @@ remote:
     servers:
       - hostname: "pc474.emulab.net"
         ssh_port: 25477
-        internal_hostname: "server-0"
+        internal_ip: "server-0"  # Nodes communicate via internal hostnames
         role: "cockroach"
         node_id: 1
 
       - hostname: "pc474.emulab.net"
         ssh_port: 25478
-        internal_hostname: "server-1"
+        internal_ip: "server-1"  # Nodes communicate via internal hostnames
         role: "cockroach"
         node_id: 2
 
     clients:
       - hostname: "pc474.emulab.net"
         ssh_port: 25475
-        internal_hostname: "client-0"
+        internal_ip: "client-0"  # Nodes communicate via internal hostnames
         role: "benchmark"
 
       - hostname: "pc474.emulab.net"
         ssh_port: 25476
-        internal_hostname: "client-1"
+        internal_ip: "client-1"  # Nodes communicate via internal hostnames
         role: "benchmark"
 
   remote_paths:
