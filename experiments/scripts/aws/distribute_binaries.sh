@@ -59,15 +59,22 @@ copy_to_host() {
     local HOST=$1
     local ROLE=$2
 
+    echo "========================================"
     echo "Copying binaries to $ROLE: $HOST"
+    echo "========================================"
 
-    # Copy cockroach binary
-    scp -i "$KEY_PATH" -o StrictHostKeyChecking=no "$COCKROACH_BIN" "${REMOTE_USER}@${HOST}:~/cockroach"
+    # Copy cockroach binary (with progress)
+    echo "  → Copying cockroach binary..."
+    scp -v -i "$KEY_PATH" -o StrictHostKeyChecking=no "$COCKROACH_BIN" "${REMOTE_USER}@${HOST}:~/cockroach"
+    echo "  ✓ cockroach binary copied"
 
-    # Copy benchmark binary
-    scp -i "$KEY_PATH" -o StrictHostKeyChecking=no "$BENCHMARK_BIN" "${REMOTE_USER}@${HOST}:~/benchmark"
+    # Copy benchmark binary (with progress)
+    echo "  → Copying benchmark binary..."
+    scp -v -i "$KEY_PATH" -o StrictHostKeyChecking=no "$BENCHMARK_BIN" "${REMOTE_USER}@${HOST}:~/benchmark"
+    echo "  ✓ benchmark binary copied"
 
-    echo "  ✓ Copied to $HOST"
+    echo "  ✓✓ All binaries copied to $HOST"
+    echo ""
 }
 
 # Distribute to all servers
