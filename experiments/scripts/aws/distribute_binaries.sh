@@ -6,7 +6,7 @@ set -e
 
 # Paths on remote instances
 REMOTE_USER="ubuntu"
-KEY_PATH="$HOME/.ssh/id_ed25519"  # Your GitHub SSH key that you copied earlier
+KEY_PATH="$HOME/.ssh/aws-juicer-key.pem"  # AWS SSH key
 COCKROACH_BIN="$HOME/cockroach-juicer/bin/cockroach"
 BENCHMARK_BIN="$HOME/cockroach-juicer/bin/benchmark"
 
