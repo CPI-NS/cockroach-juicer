@@ -6,9 +6,9 @@ set -e
 
 # Paths on remote instances
 REMOTE_USER="ubuntu"
-KEY_PATH="~/.ssh/id_ed25519"  # Your GitHub SSH key that you copied earlier
-COCKROACH_BIN="~/cockroach-juicer/bin/cockroach"
-BENCHMARK_BIN="~/cockroach-juicer/bin/benchmark"
+KEY_PATH="$HOME/.ssh/id_ed25519"  # Your GitHub SSH key that you copied earlier
+COCKROACH_BIN="$HOME/cockroach-juicer/bin/cockroach"
+BENCHMARK_BIN="$HOME/cockroach-juicer/bin/benchmark"
 
 # All server IPs (excluding 54.208.110.229 which is this server)
 SERVERS=(
