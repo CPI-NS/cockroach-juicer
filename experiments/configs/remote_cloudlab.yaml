@@ -13,27 +13,27 @@ remote:
 
   nodes:
     servers:
-      - hostname: "server-0"  # When running from control node, use internal hostnames
+      - hostname: "server-0"  
         ssh_port: 22
-        internal_ip: "server-0"  # Nodes communicate via internal hostnames
+        internal_ip: "server-0"  
         role: "cockroach"
         node_id: 1
 
-      - hostname: "server-1"  # When running from control node, use internal hostnames
+      - hostname: "server-1"  
         ssh_port: 22
-        internal_ip: "server-1"  # Nodes communicate via internal hostnames
+        internal_ip: "server-1"  
         role: "cockroach"
         node_id: 2
 
     clients:
-      - hostname: "client-0"  # When running from control node, use internal hostnames
+      - hostname: "client-0"  
         ssh_port: 22
-        internal_ip: "client-0"  # Nodes communicate via internal hostnames
+        internal_ip: "client-0"  
         role: "benchmark"
 
-      - hostname: "client-1"  # When running from control node, use internal hostnames
+      - hostname: "client-1"  
         ssh_port: 22
-        internal_ip: "client-1"  # Nodes communicate via internal hostnames
+        internal_ip: "client-1"  
         role: "benchmark"
 
   remote_paths:
@@ -64,7 +64,7 @@ juicer:
   flush_time_us: [100]
 
 protocol:
-  type: ["2PL-WW"]
+  type: ["MVCC"]  # CockroachDB uses native MVCC, not 2PL-WW
 
 cluster:
   num_nodes: 2

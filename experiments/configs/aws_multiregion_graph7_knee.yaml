@@ -1,0 +1,194 @@
+# AWS Multi-Region Evaluation - Graph 7: Finding the Knee
+# Auto-generated configuration file
+#
+# Architecture:
+#   - 9 servers across 3 regions (us-east-1, us-east-2, us-west-1)
+#   - 9 clients across 3 regions
+#   - Multi-region CockroachDB cluster
+
+experiment:
+  name: "aws-multiregion-eval-graph7-knee"
+  output_dir: "../results/aws_multiregion/graph7_knee"
+  repeat_count: 5
+  timeout_seconds: 3600
+
+  deployment_mode: "remote"
+
+remote:
+  ssh_user: "ubuntu"
+  ssh_key: "/Users/harris/.ssh/aws-juicer-key.pem"
+  ssh_host_base: ""
+
+  nodes:
+    servers:
+      - hostname: "34.204.67.217"
+        ssh_port: 22
+        internal_ip: "172.31.82.214"
+        role: "cockroach"
+        node_id: 1
+        availability_zone: "us-east-1a"
+        region: "us-east-1"
+
+      - hostname: "54.208.110.229"
+        ssh_port: 22
+        internal_ip: "172.31.84.105"
+        role: "cockroach"
+        node_id: 2
+        availability_zone: "us-east-1a"
+        region: "us-east-1"
+
+      - hostname: "54.91.203.85"
+        ssh_port: 22
+        internal_ip: "172.31.82.197"
+        role: "cockroach"
+        node_id: 3
+        availability_zone: "us-east-1a"
+        region: "us-east-1"
+
+      - hostname: "18.222.126.3"
+        ssh_port: 22
+        internal_ip: "172.31.44.215"
+        role: "cockroach"
+        node_id: 4
+        availability_zone: "us-east-2a"
+        region: "us-east-2"
+
+      - hostname: "3.17.66.206"
+        ssh_port: 22
+        internal_ip: "172.31.191.198"
+        role: "cockroach"
+        node_id: 5
+        availability_zone: "us-east-2a"
+        region: "us-east-2"
+
+      - hostname: "18.118.106.162"
+        ssh_port: 22
+        internal_ip: "172.31.116.208"
+        role: "cockroach"
+        node_id: 6
+        availability_zone: "us-east-2a"
+        region: "us-east-2"
+
+      - hostname: "3.101.151.1"
+        ssh_port: 22
+        internal_ip: "172.31.8.171"
+        role: "cockroach"
+        node_id: 7
+        availability_zone: "us-west-1a"
+        region: "us-west-1"
+
+      - hostname: "54.219.238.16"
+        ssh_port: 22
+        internal_ip: "172.31.1.25"
+        role: "cockroach"
+        node_id: 8
+        availability_zone: "us-west-1a"
+        region: "us-west-1"
+
+      - hostname: "18.144.81.88"
+        ssh_port: 22
+        internal_ip: "172.31.0.82"
+        role: "cockroach"
+        node_id: 9
+        availability_zone: "us-west-1a"
+        region: "us-west-1"
+
+    clients:
+      - hostname: "44.211.216.86"
+        ssh_port: 22
+        internal_ip: "172.31.83.166"
+        role: "benchmark"
+        region: "us-east-1"
+
+      - hostname: "34.207.68.148"
+        ssh_port: 22
+        internal_ip: "172.31.84.5"
+        role: "benchmark"
+        region: "us-east-1"
+
+      - hostname: "44.201.75.196"
+        ssh_port: 22
+        internal_ip: "172.31.81.68"
+        role: "benchmark"
+        region: "us-east-1"
+
+      - hostname: "3.17.189.229"
+        ssh_port: 22
+        internal_ip: "172.31.42.1"
+        role: "benchmark"
+        region: "us-east-2"
+
+      - hostname: "18.222.218.34"
+        ssh_port: 22
+        internal_ip: "172.31.225.149"
+        role: "benchmark"
+        region: "us-east-2"
+
+      - hostname: "3.17.133.122"
+        ssh_port: 22
+        internal_ip: "172.31.194.149"
+        role: "benchmark"
+        region: "us-east-2"
+
+      - hostname: "13.57.41.216"
+        ssh_port: 22
+        internal_ip: "172.31.4.241"
+        role: "benchmark"
+        region: "us-west-1"
+
+      - hostname: "54.215.105.27"
+        ssh_port: 22
+        internal_ip: "172.31.7.155"
+        role: "benchmark"
+        region: "us-west-1"
+
+      - hostname: "54.219.155.93"
+        ssh_port: 22
+        internal_ip: "172.31.11.33"
+        role: "benchmark"
+        region: "us-west-1"
+
+  remote_paths:
+    cockroach_bin: "/home/ubuntu/cockroach"
+    benchmark_bin: "/home/ubuntu/benchmark"
+    data_dir: "/mnt/data/cockroach-data"
+    log_dir: "/mnt/data/logs"
+
+  deploy_binaries: true
+  local_build_dir: "../../cockroach-juicer/"
+
+workload:
+  tx_count: [50000]
+  ops_per_tx: [1]
+  key_range: [1000000]
+  distribution: ["zipfian"]
+  zipfian_s: [0.99]
+  zipfian_v: [1.0]
+  read_write_ratio: [0.0]
+
+concurrency:
+  num_clients: [9]
+  workers_per_client: [1, 2, 4, 8, 12, 16, 24, 32]
+
+juicer:
+  enabled: [false, true]
+  flush_time_us: [100]
+
+protocol:
+  type: ["MVCC"]
+
+cluster:
+  num_nodes: 9
+  base_port: 26257
+  base_http_port: 8080
+  store_size: "100GB"
+
+data_init:
+  enabled: true
+  num_keys: 1000000
+  key_prefix: "key"
+  key_range: 1000000
+  batch_size: 10000
+  concurrent: 16
+  use_bulk: true
+  use_hash_keys: true
