@@ -9,6 +9,8 @@
 #
 # https://github.com/github/gitignore/tree/master/Global
 
+experiments/venv
+
 artifacts
 /bin
 /bin.*
@@ -65,3 +67,5 @@ pkg/testutils/serverutils/*_generated.go
 
 .DS_Store
 .idea/
+
+results/
