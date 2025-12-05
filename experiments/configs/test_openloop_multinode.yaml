@@ -1,0 +1,49 @@
+experiment:
+  name: "test-openloop-multinode"
+  output_dir: "../results/test_openloop_multinode"
+  repeat_count: 3  # Multiple runs for smooth averaging
+  timeout_seconds: 1200
+
+workload:
+  # Open-loop mode settings
+  open_loop: true
+  target_rate: [100, 200, 500, 1000, 2000, 3000, 4000, 5000]  # Higher rates to find knee
+  duration_seconds: 30       # 30 second runs
+  warmup_percent: 0.25       # 7.5s warmup
+  cooldown_percent: 0.25     # 7.5s cooldown
+
+  # Workload characteristics
+  ops_per_tx: [1]
+  key_range: [100]           # Small keyspace for high contention
+  distribution: ["zipfian"]
+  zipfian_s: [0.99]          # Highly skewed - most txns hit same keys
+  zipfian_v: [1.0]
+  read_write_ratio: [0.0]    # 100% writes = maximum contention
+
+concurrency:
+  num_clients: [3]           # 3 clients (simulated)
+  workers_per_client: [1]    # Not used in open-loop, but required
+
+juicer:
+  enabled: [false, true]     # Test both baseline and Juicer
+  flush_time_us: [100]
+
+protocol:
+  type: ["MVCC"]
+
+cluster:
+  num_nodes: 3               # 3-node cluster for realism
+  base_port: 26257
+  base_http_port: 8080
+  data_dir: "./cockroach-data"
+  log_dir: "./logs"
+  store_size: "10GB"
+
+data_init:
+  enabled: true
+  num_keys: 1000             # Pre-populate keys
+  key_prefix: "key"
+  key_range: 1000
+  batch_size: 100
+  concurrent: 1
+  use_bulk: false

@@ -2,6 +2,7 @@ import subprocess
 import time
 import os
 import signal
+import socket
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 import logging
@@ -19,6 +20,7 @@ class ClusterManager:
     def __init__(
         self,
         cockroach_bin: str = "../../cockroach",
+        benchmark_bin: Optional[str] = None,
         data_dir: str = "./cockroach-data",
         log_dir: str = "./logs",
         num_nodes: int = 1,
@@ -31,6 +33,7 @@ class ClusterManager:
         ssh_key: Optional[str] = None,
         remote_cockroach_bin: Optional[str] = None,
         remote_benchmark_bin: Optional[str] = None,
+        skip_deploy: bool = False,
     ):
         """
         Initialize cluster manager (local or remote).
@@ -50,6 +53,7 @@ class ClusterManager:
             remote_benchmark_bin: Path to benchmark binary on remote machines
         """
         self.cockroach_bin = Path(cockroach_bin)
+        self.benchmark_bin = Path(benchmark_bin) if benchmark_bin else None
         self.data_dir = Path(data_dir)
         self.log_dir = Path(log_dir)
         self.num_nodes = num_nodes
@@ -60,6 +64,7 @@ class ClusterManager:
 
         # Remote deployment settings
         self.remote_mode = remote_mode
+        self.skip_deploy = skip_deploy
         self.remote_nodes = remote_nodes or []
         self.ssh_user = ssh_user
         self.ssh_key = Path(ssh_key).expanduser() if ssh_key else None
@@ -104,7 +109,7 @@ class ClusterManager:
             raise
 
     def _run_remote_command(
-        self, hostname: str, command: str, background: bool = False, port: int = 22
+        self, hostname: str, command: str, background: bool = False, port: int = 22, timeout: int = 30
     ) -> tuple[int, str, str]:
         """
         Execute command on remote host via SSH.
@@ -120,11 +125,21 @@ class ClusterManager:
                 stdin, stdout, stderr = client.exec_command(bg_command)
                 return (0, "", "")
             else:
-                stdin, stdout, stderr = client.exec_command(command)
-                stdout_str = stdout.read().decode()
-                stderr_str = stderr.read().decode()
-                return_code = stdout.channel.recv_exit_status()
-                return (return_code, stdout_str, stderr_str)
+                stdin, stdout, stderr = client.exec_command(command, timeout=timeout)
+                # Set timeout on the channel itself to prevent indefinite blocking on read
+                stdout.channel.settimeout(timeout)
+                stderr.channel.settimeout(timeout)
+                
+                try:
+                    stdout_str = stdout.read().decode()
+                    stderr_str = stderr.read().decode()
+                    return_code = stdout.channel.recv_exit_status()
+                    return (return_code, stdout_str, stderr_str)
+                except socket.timeout:
+                    self.logger.error(f"Command timed out after {timeout}s on {hostname}")
+                    # Force close the channel
+                    stdout.channel.close()
+                    return (-1, "", f"Command execution timed out after {timeout} seconds")
 
         except Exception as e:
             self.logger.error(f"Command failed on {hostname}: {e}")
@@ -152,7 +167,15 @@ class ClusterManager:
                     sftp.stat(remote_dir)
                 except FileNotFoundError:
                     self.logger.info(f"Creating remote directory: {remote_dir}")
-                    sftp.mkdir(remote_dir)
+                    self._run_remote_command(hostname, f"mkdir -p {remote_dir}", port=port)
+
+                # Remove existing file if present (to avoid permission issues)
+                try:
+                    sftp.stat(remote_path)
+                    self.logger.info(f"Removing existing binary at {remote_path}")
+                    sftp.remove(remote_path)
+                except FileNotFoundError:
+                    pass  # File doesn't exist, that's fine
 
                 # Upload binary
                 sftp.put(str(local_path), remote_path)
@@ -162,7 +185,58 @@ class ClusterManager:
                 self.logger.info(f"Successfully deployed to {hostname}")
 
             except Exception as e:
-                self.logger.error(f"Failed to deploy to {hostname}: {e}")
+                import traceback
+                self.logger.error(f"Failed to deploy to {hostname}: {type(e).__name__}: {e}")
+                self.logger.error(f"Traceback: {traceback.format_exc()}")
+                return False
+
+        return True
+
+    def _deploy_benchmark_binary(self, local_path: Path, remote_path: str) -> bool:
+        """Deploy benchmark binary to all remote client nodes."""
+        if not self.remote_mode:
+            return True
+
+        client_nodes = [n for n in self.remote_nodes if n.get('role') == 'benchmark']
+
+        self.logger.info(f"Deploying benchmark binary to {len(client_nodes)} client nodes...")
+
+        for node in client_nodes:
+            hostname = node['hostname']
+            port = node.get('ssh_port', 22)
+            self.logger.info(f"  Deploying {local_path.name} to client {hostname}:{port} -> {remote_path}")
+
+            try:
+                client = self._get_ssh_client(hostname, port)
+                sftp = client.open_sftp()
+
+                # Create remote directory if needed
+                remote_dir = str(Path(remote_path).parent)
+                try:
+                    sftp.stat(remote_dir)
+                except FileNotFoundError:
+                    self.logger.info(f"    Creating remote directory: {remote_dir}")
+                    self._run_remote_command(hostname, f"mkdir -p {remote_dir}", port=port)
+
+                # Remove existing file if present (to avoid permission issues)
+                try:
+                    sftp.stat(remote_path)
+                    self.logger.info(f"    Removing existing binary at {remote_path}")
+                    sftp.remove(remote_path)
+                except FileNotFoundError:
+                    pass  # File doesn't exist, that's fine
+
+                # Upload binary
+                sftp.put(str(local_path), remote_path)
+                sftp.chmod(remote_path, 0o755)  # Make executable
+                sftp.close()
+
+                self.logger.info(f"    ✓ Deployed to {hostname}")
+
+            except Exception as e:
+                import traceback
+                self.logger.error(f"    Failed to deploy to {hostname}: {type(e).__name__}: {e}")
+                self.logger.error(f"    Traceback: {traceback.format_exc()}")
                 return False
 
         return True
@@ -220,11 +294,26 @@ class ClusterManager:
 
         self.logger.info(f"Starting remote {len(server_nodes)}-node cluster")
 
-        # Deploy binary to all nodes (local path -> remote path)
-        remote_bin_path = self.remote_cockroach_bin or str(self.cockroach_bin)
-        if not self._deploy_binary(self.cockroach_bin, remote_bin_path):
-            self.logger.error("Failed to deploy CockroachDB binary")
-            return False
+        # Determine remote binary paths
+        remote_bin_path = self.remote_cockroach_bin or "/home/ubuntu/cockroach"
+        remote_benchmark_path = self.remote_benchmark_bin or "/home/ubuntu/benchmark"
+
+        # Deploy binaries (unless skipped)
+        if self.skip_deploy:
+            self.logger.info("Skipping binary deployment (--skip-deploy flag set)")
+        else:
+            # Deploy cockroach binary to all server nodes (local path -> remote path)
+            if not self._deploy_binary(self.cockroach_bin, remote_bin_path):
+                self.logger.error("Failed to deploy CockroachDB binary")
+                return False
+
+            # Deploy benchmark binary to all client nodes
+            if self.benchmark_bin and self.benchmark_bin.exists():
+                if not self._deploy_benchmark_binary(self.benchmark_bin, remote_benchmark_path):
+                    self.logger.error("Failed to deploy benchmark binary")
+                    return False
+            else:
+                self.logger.warning(f"Benchmark binary not found at {self.benchmark_bin}, skipping client deployment")
 
         # Build join addresses using internal IPs
         join_addrs = [
@@ -252,8 +341,9 @@ class ClusterManager:
                 remote_bin_path,
                 "start" if len(server_nodes) > 1 else "start-single-node",
                 f"--store=path={self.data_dir}/node{node_id},size={store_size}",
-                f"--listen-addr={internal_ip}:{self.base_port}",
-                f"--http-addr={internal_ip}:{self.base_http_port}",
+                f"--listen-addr=0.0.0.0:{self.base_port}",  # Listen on all interfaces for cross-region
+                f"--advertise-addr={internal_ip}:{self.base_port}",  # Advertise internal IP for intra-cluster
+                f"--http-addr=0.0.0.0:{self.base_http_port}",  # HTTP on all interfaces
                 f"--log-dir={self.log_dir}",
                 "--cluster-name=default",
             ]
@@ -284,21 +374,24 @@ class ClusterManager:
                 remote_bin_path,
                 "init",
                 "--insecure" if insecure else "",
+                "--cluster-name=default",
                 f"--host={first_node['internal_ip']}:{self.base_port}",
             ]
             init_cmd_str = " ".join(init_cmd)
 
             rc, stdout, stderr = self._run_remote_command(
-                first_node['hostname'], init_cmd_str, port=first_node.get('ssh_port', 22)
+                first_node['hostname'], init_cmd_str, port=first_node.get('ssh_port', 22), timeout=120
             )
 
             if rc != 0:
                 self.logger.warning(
                     f"Cluster init returned {rc}: {stderr} (may already be initialized)"
                 )
+            else:
+                self.logger.info(f"Cluster initialized successfully: {stdout}")
 
-        # Wait for cluster to be ready
-        return self._wait_until_ready_remote(timeout=30)
+        # Wait for cluster to be ready (longer timeout for multi-region)
+        return self._wait_until_ready_remote(timeout=60)
 
     def _wait_until_ready_remote(self, timeout: int = 30) -> bool:
         """Wait for remote cluster to be ready."""
@@ -311,25 +404,28 @@ class ClusterManager:
 
         self.logger.info("Waiting for remote cluster to be ready...")
 
+        remote_bin_path = self.remote_cockroach_bin or "/home/ubuntu/cockroach"
+
         while time.time() - start_time < timeout:
             try:
-                remote_bin_path = self.remote_cockroach_bin or str(self.cockroach_bin)
                 check_cmd = [
                     remote_bin_path,
                     "sql",
                     "--insecure",
                     f"--host={first_node['internal_ip']}:{self.base_port}",
-                    "--execute=SELECT 1",
+                    "--execute='SELECT 1'",
                 ]
                 check_cmd_str = " ".join(check_cmd)
 
                 rc, stdout, stderr = self._run_remote_command(
-                    first_node['hostname'], check_cmd_str, port=first_node.get('ssh_port', 22)
+                    first_node['hostname'], check_cmd_str, port=first_node.get('ssh_port', 22), timeout=10
                 )
 
                 if rc == 0:
                     self.logger.info("Remote cluster is ready")
                     return True
+                else:
+                    self.logger.debug(f"Cluster not ready yet (rc={rc}): {stderr[:100]}")
 
             except Exception as e:
                 self.logger.debug(f"Waiting for remote cluster: {e}")
@@ -562,20 +658,41 @@ class ClusterManager:
 
     def reset_database(self, db_name: str = "defaultdb") -> bool:
         try:
-            
-            result = subprocess.run(
-                [
-                    str(self.cockroach_bin),
-                    "sql",
-                    "--insecure",
-                    f"--host=localhost:{self.base_port}",
-                    "--execute=DROP DATABASE IF EXISTS benchmark CASCADE; CREATE DATABASE benchmark;",
-                ],
-                capture_output=True,
-                timeout=10,
-            )
+            if self.remote_mode:
+                # Remote mode: run SQL command via SSH
+                server_nodes = [n for n in self.remote_nodes if n.get('role') == 'cockroach']
+                if not server_nodes:
+                    return False
 
-            return result.returncode == 0
+                first_node = server_nodes[0]
+                hostname = first_node['hostname']
+                internal_ip = first_node['internal_ip']
+                port = first_node.get('ssh_port', 22)
+
+                remote_bin_path = self.remote_cockroach_bin or "/home/ubuntu/cockroach"
+
+                cmd_str = f"{remote_bin_path} sql --insecure --host={internal_ip}:{self.base_port} --execute=\"DROP DATABASE IF EXISTS benchmark CASCADE; CREATE DATABASE benchmark;\""
+
+                rc, stdout, stderr = self._run_remote_command(
+                    hostname, cmd_str, background=False, port=port, timeout=30
+                )
+
+                return rc == 0
+            else:
+                # Local mode
+                result = subprocess.run(
+                    [
+                        str(self.cockroach_bin),
+                        "sql",
+                        "--insecure",
+                        f"--host=localhost:{self.base_port}",
+                        "--execute=DROP DATABASE IF EXISTS benchmark CASCADE; CREATE DATABASE benchmark;",
+                    ],
+                    capture_output=True,
+                    timeout=10,
+                )
+
+                return result.returncode == 0
 
         except Exception as e:
             self.logger.error(f"Failed to reset database: {e}")
@@ -627,11 +744,22 @@ class ClusterManager:
         # Local mode
         return f"postgresql://root@localhost:{self.base_port}/{db_name}?sslmode={ssl_mode}"
 
-    def get_server_addresses(self) -> List[str]:
-        """Get list of server addresses for benchmark clients."""
+    def get_server_addresses(self, use_public_ips: bool = False) -> List[str]:
+        """Get list of server addresses for benchmark clients.
+
+        Args:
+            use_public_ips: If True, use public hostnames instead of internal IPs.
+                           Useful for multi-region deployments where clients need
+                           to connect across VPCs.
+        """
         if self.remote_mode:
             server_nodes = [n for n in self.remote_nodes if n.get('role') == 'cockroach']
-            return [f"{node['internal_ip']}:{self.base_port}" for node in server_nodes]
+            if use_public_ips:
+                # Use public hostnames for cross-region connectivity
+                return [f"{node['hostname']}:{self.base_port}" for node in server_nodes]
+            else:
+                # Use internal IPs for same-VPC connectivity
+                return [f"{node['internal_ip']}:{self.base_port}" for node in server_nodes]
         else:
             # Local mode
             return [f"localhost:{self.base_port + i}" for i in range(self.num_nodes)]

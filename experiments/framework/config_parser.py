@@ -13,6 +13,12 @@ class WorkloadConfig:
     zipfian_s: List[float] = field(default_factory=lambda: [1.1])
     zipfian_v: List[float] = field(default_factory=lambda: [1.0])
     read_write_ratio: List[float] = field(default_factory=lambda: [0.5])
+    # Open-loop mode settings
+    open_loop: bool = False
+    target_rate: List[int] = field(default_factory=lambda: [100])
+    duration_seconds: int = 60
+    warmup_percent: float = 0.25
+    cooldown_percent: float = 0.25
 
 
 @dataclass
@@ -119,7 +125,13 @@ def load_config(config_path: str) -> ExperimentConfig:
         distribution=_ensure_list(workload_data.get('distribution', ['uniform'])),
         zipfian_s=_ensure_list(workload_data.get('zipfian_s', [1.1])),
         zipfian_v=_ensure_list(workload_data.get('zipfian_v', [1.0])),
-        read_write_ratio=_ensure_list(workload_data.get('read_write_ratio', [0.5]))
+        read_write_ratio=_ensure_list(workload_data.get('read_write_ratio', [0.5])),
+        # Open-loop mode settings
+        open_loop=workload_data.get('open_loop', False),
+        target_rate=_ensure_list(workload_data.get('target_rate', [100])),
+        duration_seconds=workload_data.get('duration_seconds', 60),
+        warmup_percent=workload_data.get('warmup_percent', 0.25),
+        cooldown_percent=workload_data.get('cooldown_percent', 0.25)
     )
 
     conc_data = data.get('concurrency', {})
@@ -234,17 +246,32 @@ def generate_experiment_matrix(config: ExperimentConfig) -> List[Dict[str, Any]]
     param_values = []
 
     
-    param_names.extend(['tx_count', 'ops_per_tx', 'key_range', 'distribution',
-                        'zipfian_s', 'zipfian_v', 'read_write_ratio'])
-    param_values.extend([
-        config.workload.tx_count,
-        config.workload.ops_per_tx,
-        config.workload.key_range,
-        config.workload.distribution,
-        config.workload.zipfian_s,
-        config.workload.zipfian_v,
-        config.workload.read_write_ratio
-    ])
+    # Check if open-loop mode is enabled
+    if config.workload.open_loop:
+        # For open-loop, use target_rate instead of tx_count/workers_per_client
+        param_names.extend(['target_rate', 'ops_per_tx', 'key_range', 'distribution',
+                            'zipfian_s', 'zipfian_v', 'read_write_ratio'])
+        param_values.extend([
+            config.workload.target_rate,
+            config.workload.ops_per_tx,
+            config.workload.key_range,
+            config.workload.distribution,
+            config.workload.zipfian_s,
+            config.workload.zipfian_v,
+            config.workload.read_write_ratio
+        ])
+    else:
+        param_names.extend(['tx_count', 'ops_per_tx', 'key_range', 'distribution',
+                            'zipfian_s', 'zipfian_v', 'read_write_ratio'])
+        param_values.extend([
+            config.workload.tx_count,
+            config.workload.ops_per_tx,
+            config.workload.key_range,
+            config.workload.distribution,
+            config.workload.zipfian_s,
+            config.workload.zipfian_v,
+            config.workload.read_write_ratio
+        ])
 
     param_names.extend(['num_clients', 'workers_per_client'])
     param_values.extend([
@@ -263,7 +290,7 @@ def generate_experiment_matrix(config: ExperimentConfig) -> List[Dict[str, Any]]
     param_names.append('protocol')
     param_values.append(config.protocol.type)
 
-    
+
     experiments = []
     for values in itertools.product(*param_values):
         exp_params = dict(zip(param_names, values))
@@ -271,6 +298,14 @@ def generate_experiment_matrix(config: ExperimentConfig) -> List[Dict[str, Any]]
         if exp_params['distribution'] == 'uniform':
             exp_params['zipfian_s'] = None
             exp_params['zipfian_v'] = None
+
+        # Add open-loop mode settings if enabled
+        if config.workload.open_loop:
+            exp_params['open_loop'] = True
+            exp_params['duration_seconds'] = config.workload.duration_seconds
+            exp_params['warmup_percent'] = config.workload.warmup_percent
+            exp_params['cooldown_percent'] = config.workload.cooldown_percent
+
         experiments.append(exp_params)
 
     return experiments

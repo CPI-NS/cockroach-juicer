@@ -209,53 +209,96 @@ class ResultsVisualizer:
 
     def plot_eval_graph7_knee(self, save_path: Optional[str] = None):
         """
-        Graph 7: Median Latencwhyy vs. Throughput (Line Graph)
+        Graph 7: Median Latency vs. Throughput (Line Graph)
         X-axis: Throughput (ops/sec)
         Y-axis: Median latency (ms)
-        Lines: Different client counts (to find the "knee")
+        Lines: Baseline vs Juicer
+
+        For open-loop experiments: plots each target rate as a separate point
+        For closed-loop experiments: groups by worker count
         """
-        worker_data = {}  # worker_count -> {juicer: [(throughput, latency)], baseline: [...]}
-
+        # Check if this is an open-loop experiment
+        is_open_loop = False
         for config_id, data in self.results.results.items():
-            params = data['params']
-            total_workers = params['num_clients'] * params['workers_per_client']
-            agg = data['aggregated']
+            if data['params'].get('open_loop', False):
+                is_open_loop = True
+                break
 
-            if total_workers not in worker_data:
-                worker_data[total_workers] = {'juicer': [], 'baseline': []}
+        if is_open_loop:
+            # Open-loop mode: collect all (throughput, latency) points directly
+            baseline_points = []
+            juicer_points = []
 
-            point = (agg.mean_throughput, agg.mean_latency_p50)
-            if params.get('juicer_enabled'):
-                worker_data[total_workers]['juicer'].append(point)
-            else:
-                worker_data[total_workers]['baseline'].append(point)
+            for config_id, data in self.results.results.items():
+                params = data['params']
+                agg = data['aggregated']
 
-        fig, ax = plt.subplots(figsize=(10, 7))
+                point = (agg.mean_throughput, agg.mean_latency_p50)
+                if params.get('juicer_enabled'):
+                    juicer_points.append(point)
+                else:
+                    baseline_points.append(point)
 
-        # Plot baseline
-        sorted_workers = sorted(worker_data.keys())
-        baseline_throughputs = []
-        baseline_latencies = []
-        for w in sorted_workers:
-            if worker_data[w]['baseline']:
-                tput, lat = np.mean(worker_data[w]['baseline'], axis=0)
-                baseline_throughputs.append(tput)
-                baseline_latencies.append(lat)
+            # Sort by throughput for proper line plotting
+            baseline_points = sorted(baseline_points, key=lambda x: x[0])
+            juicer_points = sorted(juicer_points, key=lambda x: x[0])
 
-        ax.plot(baseline_throughputs, baseline_latencies, marker='o', linewidth=2.5,
-                markersize=8, label='Baseline', color='#A23B72')
+            fig, ax = plt.subplots(figsize=(10, 7))
 
-        # Plot juicer
-        juicer_throughputs = []
-        juicer_latencies = []
-        for w in sorted_workers:
-            if worker_data[w]['juicer']:
-                tput, lat = np.mean(worker_data[w]['juicer'], axis=0)
-                juicer_throughputs.append(tput)
-                juicer_latencies.append(lat)
+            if baseline_points:
+                baseline_throughputs, baseline_latencies = zip(*baseline_points)
+                ax.plot(baseline_throughputs, baseline_latencies, marker='o', linewidth=2.5,
+                        markersize=8, label='Baseline', color='#A23B72')
 
-        ax.plot(juicer_throughputs, juicer_latencies, marker='s', linewidth=2.5,
-                markersize=8, label='Juicer', color='#2E86AB')
+            if juicer_points:
+                juicer_throughputs, juicer_latencies = zip(*juicer_points)
+                ax.plot(juicer_throughputs, juicer_latencies, marker='s', linewidth=2.5,
+                        markersize=8, label='Juicer', color='#2E86AB')
+
+        else:
+            # Closed-loop mode: group by worker count (original behavior)
+            worker_data = {}  # worker_count -> {juicer: [(throughput, latency)], baseline: [...]}
+
+            for config_id, data in self.results.results.items():
+                params = data['params']
+                total_workers = params['num_clients'] * params['workers_per_client']
+                agg = data['aggregated']
+
+                if total_workers not in worker_data:
+                    worker_data[total_workers] = {'juicer': [], 'baseline': []}
+
+                point = (agg.mean_throughput, agg.mean_latency_p50)
+                if params.get('juicer_enabled'):
+                    worker_data[total_workers]['juicer'].append(point)
+                else:
+                    worker_data[total_workers]['baseline'].append(point)
+
+            fig, ax = plt.subplots(figsize=(10, 7))
+
+            # Plot baseline
+            sorted_workers = sorted(worker_data.keys())
+            baseline_throughputs = []
+            baseline_latencies = []
+            for w in sorted_workers:
+                if worker_data[w]['baseline']:
+                    tput, lat = np.mean(worker_data[w]['baseline'], axis=0)
+                    baseline_throughputs.append(tput)
+                    baseline_latencies.append(lat)
+
+            ax.plot(baseline_throughputs, baseline_latencies, marker='o', linewidth=2.5,
+                    markersize=8, label='Baseline', color='#A23B72')
+
+            # Plot juicer
+            juicer_throughputs = []
+            juicer_latencies = []
+            for w in sorted_workers:
+                if worker_data[w]['juicer']:
+                    tput, lat = np.mean(worker_data[w]['juicer'], axis=0)
+                    juicer_throughputs.append(tput)
+                    juicer_latencies.append(lat)
+
+            ax.plot(juicer_throughputs, juicer_latencies, marker='s', linewidth=2.5,
+                    markersize=8, label='Juicer', color='#2E86AB')
 
         ax.set_xlabel('Throughput (ops/sec)', fontsize=13)
         ax.set_ylabel('Median Latency (ms)', fontsize=13)

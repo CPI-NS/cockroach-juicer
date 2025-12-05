@@ -1,4 +1,4 @@
-#!/bin/bash
+'#!/bin/bash
 # Distribute binaries from build server to all other instances
 # Run this ON the build server (54.208.110.229)
 

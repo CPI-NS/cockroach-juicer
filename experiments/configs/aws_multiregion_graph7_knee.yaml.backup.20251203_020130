@@ -1,18 +1,16 @@
-# AWS Multi-Region Evaluation - Graph 7: Finding the Knee (Open-Loop)
-#
-# This configuration runs an open-loop benchmark to find the system's saturation point.
-# Open-loop mode sends requests at a fixed arrival rate, independent of system response time.
+# AWS Multi-Region Evaluation - Graph 7: Finding the Knee
+# Auto-generated configuration file
 #
 # Architecture:
 #   - 9 servers across 3 regions (us-east-1, us-east-2, us-west-1)
 #   - 9 clients across 3 regions
-#   - Multi-region CockroachDB cluster with replication factor 3
+#   - Multi-region CockroachDB cluster
 
 experiment:
-  name: "aws-multiregion-eval-graph7-knee-openloop"
-  output_dir: "../results/aws_multiregion/graph7_knee_openloop"
-  repeat_count: 3            # Run each configuration 3 times for statistical smoothness
-  timeout_seconds: 7200      # 2 hours timeout (9 rates × 2 configs × 3 repeats × 60s = ~54min)
+  name: "aws-multiregion-eval-graph7-knee"
+  output_dir: "../results/aws_multiregion/graph7_knee"
+  repeat_count: 1
+  timeout_seconds: 3600
 
   deployment_mode: "remote"
 
@@ -23,7 +21,7 @@ remote:
 
   nodes:
     servers:
-      - hostname: "18.212.182.48"
+      - hostname: "34.204.67.217"
         ssh_port: 22
         internal_ip: "172.31.82.214"
         role: "cockroach"
@@ -31,7 +29,7 @@ remote:
         availability_zone: "us-east-1a"
         region: "us-east-1"
 
-      - hostname: "44.206.251.9"
+      - hostname: "54.208.110.229"
         ssh_port: 22
         internal_ip: "172.31.84.105"
         role: "cockroach"
@@ -39,7 +37,7 @@ remote:
         availability_zone: "us-east-1a"
         region: "us-east-1"
 
-      - hostname: "44.212.39.135"
+      - hostname: "54.91.203.85"
         ssh_port: 22
         internal_ip: "172.31.82.197"
         role: "cockroach"
@@ -47,7 +45,7 @@ remote:
         availability_zone: "us-east-1a"
         region: "us-east-1"
 
-      - hostname: "13.58.181.109"
+      - hostname: "18.222.126.3"
         ssh_port: 22
         internal_ip: "172.31.44.215"
         role: "cockroach"
@@ -55,7 +53,7 @@ remote:
         availability_zone: "us-east-2a"
         region: "us-east-2"
 
-      - hostname: "3.138.173.119"
+      - hostname: "3.17.66.206"
         ssh_port: 22
         internal_ip: "172.31.191.198"
         role: "cockroach"
@@ -63,7 +61,7 @@ remote:
         availability_zone: "us-east-2a"
         region: "us-east-2"
 
-      - hostname: "18.223.155.64"
+      - hostname: "18.118.106.162"
         ssh_port: 22
         internal_ip: "172.31.116.208"
         role: "cockroach"
@@ -71,7 +69,7 @@ remote:
         availability_zone: "us-east-2a"
         region: "us-east-2"
 
-      - hostname: "54.193.130.0"
+      - hostname: "3.101.151.1"
         ssh_port: 22
         internal_ip: "172.31.8.171"
         role: "cockroach"
@@ -79,7 +77,7 @@ remote:
         availability_zone: "us-west-1a"
         region: "us-west-1"
 
-      - hostname: "54.176.111.30"
+      - hostname: "54.219.238.16"
         ssh_port: 22
         internal_ip: "172.31.1.25"
         role: "cockroach"
@@ -87,7 +85,7 @@ remote:
         availability_zone: "us-west-1a"
         region: "us-west-1"
 
-      - hostname: "54.193.2.46"
+      - hostname: "18.144.81.88"
         ssh_port: 22
         internal_ip: "172.31.0.82"
         role: "cockroach"
@@ -96,55 +94,55 @@ remote:
         region: "us-west-1"
 
     clients:
-      - hostname: "3.83.104.223"
+      - hostname: "44.211.216.86"
         ssh_port: 22
         internal_ip: "172.31.83.166"
         role: "benchmark"
         region: "us-east-1"
 
-      - hostname: "44.202.110.27"
+      - hostname: "34.207.68.148"
         ssh_port: 22
         internal_ip: "172.31.84.5"
         role: "benchmark"
         region: "us-east-1"
 
-      - hostname: "54.165.144.8"
+      - hostname: "44.201.75.196"
         ssh_port: 22
         internal_ip: "172.31.81.68"
         role: "benchmark"
         region: "us-east-1"
 
-      - hostname: "18.191.232.94"
+      - hostname: "3.17.189.229"
         ssh_port: 22
         internal_ip: "172.31.42.1"
         role: "benchmark"
         region: "us-east-2"
 
-      - hostname: "3.145.192.240"
+      - hostname: "18.222.218.34"
         ssh_port: 22
         internal_ip: "172.31.225.149"
         role: "benchmark"
         region: "us-east-2"
 
-      - hostname: "3.142.79.108"
+      - hostname: "3.17.133.122"
         ssh_port: 22
         internal_ip: "172.31.194.149"
         role: "benchmark"
         region: "us-east-2"
 
-      - hostname: "18.144.86.33"
+      - hostname: "13.57.41.216"
         ssh_port: 22
         internal_ip: "172.31.4.241"
         role: "benchmark"
         region: "us-west-1"
 
-      - hostname: "54.193.201.135"
+      - hostname: "54.215.105.27"
         ssh_port: 22
         internal_ip: "172.31.7.155"
         role: "benchmark"
         region: "us-west-1"
 
-      - hostname: "54.183.206.33"
+      - hostname: "54.219.155.93"
         ssh_port: 22
         internal_ip: "172.31.11.33"
         role: "benchmark"
@@ -160,24 +158,17 @@ remote:
   local_build_dir: "../../cockroach-juicer/"
 
 workload:
-  # Open-loop mode settings
-  open_loop: true
-  target_rate: [500, 1000, 2000, 3000, 4000, 5000, 6000, 8000, 10000]  # Sweep arrival rate to find knee
-  duration_seconds: 60       # 60 second runs for stable measurements
-  warmup_percent: 0.25       # 15s warmup
-  cooldown_percent: 0.25     # 15s cooldown
-
-  # Workload characteristics
+  tx_count: [50000]
   ops_per_tx: [1]
   key_range: [1000000]
   distribution: ["zipfian"]
   zipfian_s: [0.99]
   zipfian_v: [1.0]
-  read_write_ratio: [0.0]    # 100% writes for maximum contention
+  read_write_ratio: [0.0]
 
 concurrency:
-  num_clients: [9]           # 9 clients across 3 regions
-  workers_per_client: [1]    # Not used in open-loop, but required
+  num_clients: [9]
+  workers_per_client: [1, 2, 4, 8, 12, 16, 24, 32]
 
 juicer:
   enabled: [false, true]

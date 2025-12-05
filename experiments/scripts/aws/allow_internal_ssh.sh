@@ -1,13 +1,20 @@
 #!/bin/bash
-# Allow SSH between instances in the cluster
+# Allow SSH and CockroachDB ports between all instances across regions
 
 set -e
 
 SG_NAME="juicer-cluster-sg"
 REGIONS=("us-east-1" "us-east-2" "us-west-1")
 
+# VPC CIDR blocks for each region (AWS default VPC uses 172.31.0.0/16)
+# We'll allow all private IPs to communicate
+PRIVATE_CIDRS=(
+    "172.31.0.0/16"   # Default VPC CIDR
+    "10.0.0.0/8"      # Private network range
+)
+
 echo "========================================="
-echo "Allowing internal SSH between instances"
+echo "Allowing cross-region communication"
 echo "========================================="
 
 for REGION in "${REGIONS[@]}"; do
@@ -28,32 +35,34 @@ for REGION in "${REGIONS[@]}"; do
 
     echo "  Security group ID: $SG_ID"
 
-    # Add rule to allow SSH from the security group itself (instances can SSH to each other)
-    echo "  Adding internal SSH rule..."
-    aws ec2 authorize-security-group-ingress \
-        --group-id "$SG_ID" \
-        --protocol tcp \
-        --port 22 \
-        --source-group "$SG_ID" \
-        --region "$REGION" 2>/dev/null && echo "  ✓ Rule added" || echo "  ℹ Rule already exists"
+    for CIDR in "${PRIVATE_CIDRS[@]}"; do
+        # Allow SSH from private networks
+        echo "  Adding SSH rule for $CIDR..."
+        aws ec2 authorize-security-group-ingress \
+            --group-id "$SG_ID" \
+            --protocol tcp \
+            --port 22 \
+            --cidr "$CIDR" \
+            --region "$REGION" 2>/dev/null && echo "    ✓ SSH rule added" || echo "    ℹ SSH rule already exists"
 
-    # Also allow CockroachDB port (26257) between instances
-    echo "  Adding internal CockroachDB port rule..."
-    aws ec2 authorize-security-group-ingress \
-        --group-id "$SG_ID" \
-        --protocol tcp \
-        --port 26257 \
-        --source-group "$SG_ID" \
-        --region "$REGION" 2>/dev/null && echo "  ✓ Rule added" || echo "  ℹ Rule already exists"
+        # Allow CockroachDB port (26257)
+        echo "  Adding CockroachDB port rule for $CIDR..."
+        aws ec2 authorize-security-group-ingress \
+            --group-id "$SG_ID" \
+            --protocol tcp \
+            --port 26257 \
+            --cidr "$CIDR" \
+            --region "$REGION" 2>/dev/null && echo "    ✓ CockroachDB rule added" || echo "    ℹ CockroachDB rule already exists"
 
-    # Allow CockroachDB admin UI (8080) between instances
-    echo "  Adding internal admin UI port rule..."
-    aws ec2 authorize-security-group-ingress \
-        --group-id "$SG_ID" \
-        --protocol tcp \
-        --port 8080 \
-        --source-group "$SG_ID" \
-        --region "$REGION" 2>/dev/null && echo "  ✓ Rule added" || echo "  ℹ Rule already exists"
+        # Allow CockroachDB admin UI (8080)
+        echo "  Adding admin UI port rule for $CIDR..."
+        aws ec2 authorize-security-group-ingress \
+            --group-id "$SG_ID" \
+            --protocol tcp \
+            --port 8080 \
+            --cidr "$CIDR" \
+            --region "$REGION" 2>/dev/null && echo "    ✓ Admin UI rule added" || echo "    ℹ Admin UI rule already exists"
+    done
 done
 
 echo ""
@@ -61,8 +70,5 @@ echo "========================================="
 echo "✓ Security groups updated!"
 echo "========================================="
 echo ""
-echo "Note: Instances can now SSH to each other, but you still need"
-echo "to copy the AWS SSH key to the build server:"
-echo ""
-echo "  scp -i ~/.ssh/aws-juicer-key.pem ~/.ssh/aws-juicer-key.pem ubuntu@54.208.110.229:~/.ssh/"
+echo "Instances can now communicate across all regions."
 echo ""

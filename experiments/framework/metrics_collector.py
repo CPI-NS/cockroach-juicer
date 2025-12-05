@@ -84,10 +84,10 @@ class MetricsCollector:
                 metrics.abort_rate = float(match.group(1))
 
             latency_patterns = {
-                'p50': r'P50.*?:\s*([\d.]+)\s*(ms|μs|us)',
-                'p90': r'P90.*?:\s*([\d.]+)\s*(ms|μs|us)',
-                'p95': r'P95.*?:\s*([\d.]+)\s*(ms|μs|us)',
-                'p99': r'P99[^.].*?:\s*([\d.]+)\s*(ms|μs|us)',
+                'p50': r'P50[^.]*?:\s*([\d.]+)\s*(ms|μs|us)',
+                'p90': r'P90[^.]*?:\s*([\d.]+)\s*(ms|μs|us)',
+                'p95': r'P95[^.]*?:\s*([\d.]+)\s*(ms|μs|us)',
+                'p99': r'P99(?![.])[^:]*?:\s*([\d.]+)\s*(ms|μs|us)',
                 'p999': r'P99\.9.*?:\s*([\d.]+)\s*(ms|μs|us)'
             }
 

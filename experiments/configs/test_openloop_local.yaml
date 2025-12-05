@@ -1,0 +1,57 @@
+# Test config for open-loop mode - local testing
+# This will run a quick test to verify open-loop implementation
+
+experiment:
+  name: "test-openloop-local"
+  output_dir: "../results/test_openloop"
+  repeat_count: 1
+  timeout_seconds: 120
+
+workload:
+  # Open-loop specific settings
+  open_loop: true
+  target_rate: [10, 20]      # Test with 10 and 20 ops/sec
+  duration_seconds: 20       # Run for 20 seconds total
+  warmup_percent: 0.25       # 25% warmup (5 seconds)
+  cooldown_percent: 0.25     # 25% cooldown (5 seconds)
+
+  # Standard workload settings
+  ops_per_tx: [1]
+  key_range: [100]
+  distribution: ["zipfian"]
+  zipfian_s: [0.99]
+  zipfian_v: [1.0]
+  read_write_ratio: [0.0]    # 100% writes for contention
+
+concurrency:
+  num_clients: [1]
+  workers_per_client: [1]    # Not used in open-loop, but required
+
+juicer:
+  enabled: [false, true]
+  flush_time_us: [100]
+
+protocol:
+  type: ["MVCC"]
+
+cluster:
+  num_nodes: 1
+  base_port: 26257
+  base_http_port: 8080
+  data_dir: "./cockroach-data"
+  log_dir: "./logs"
+  store_size: "10GB"
+
+# Binary paths (relative to experiments/ directory)
+binary_paths:
+  cockroach_bin: "../cockroach"  # Use the cockroach binary at root
+  benchmark_bin: "../bin/benchmark"  # Use the benchmark binary
+
+data_init:
+  enabled: true
+  num_keys: 1000
+  key_prefix: "key"
+  key_range: 1000
+  batch_size: 100
+  concurrent: 1
+  use_bulk: false

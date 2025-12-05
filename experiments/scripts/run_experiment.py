@@ -112,7 +112,7 @@ def setup_logging(verbose: bool = False):
     )
 
 
-def run_from_config(config_path: str, dry_run: bool = False):
+def run_from_config(config_path: str, dry_run: bool = False, skip_deploy: bool = False):
     from framework.config_parser import load_config
     from framework.benchmark_runner import BenchmarkRunner
     from framework.visualization import ResultsVisualizer
@@ -146,14 +146,15 @@ def run_from_config(config_path: str, dry_run: bool = False):
     experiments_dir = Path(__file__).parent.parent.resolve()
     cockroach_juicer_root = experiments_dir.parent
 
-    # Both binaries are in bin/ directory
-    cockroach_bin = str(cockroach_juicer_root / "bin" / "cockroach")
+    # Cockroach binary is at root, benchmark is in bin/
+    cockroach_bin = str(cockroach_juicer_root / "cockroach")
     benchmark_bin = str(cockroach_juicer_root / "bin" / "benchmark")
 
     runner = BenchmarkRunner(
         config,
         benchmark_bin=benchmark_bin,
-        cockroach_bin=cockroach_bin
+        cockroach_bin=cockroach_bin,
+        skip_deploy=skip_deploy
     )
     results = runner.run_all()
 
@@ -211,6 +212,7 @@ def main():
     config_parser = subparsers.add_parser('config', help='Run from YAML config')
     config_parser.add_argument('config_file', help='Path to YAML configuration file')
     config_parser.add_argument('--dry-run', action='store_true', help='Show experiment matrix without running')
+    config_parser.add_argument('--skip-deploy', action='store_true', help='Skip binary deployment (use existing binaries on remote instances)')
     config_parser.add_argument('-v', '--verbose', action='store_true', help='Verbose logging')
 
     plot_parser = subparsers.add_parser('plot', help='Generate plots from results JSON')
@@ -231,7 +233,8 @@ def main():
 
     try:
         if args.command == 'config':
-            run_from_config(args.config_file, args.dry_run)
+            skip_deploy = args.skip_deploy if hasattr(args, 'skip_deploy') else False
+            run_from_config(args.config_file, args.dry_run, skip_deploy)
         elif args.command == 'plot':
             generate_plots(args.results_json, args.output_dir if hasattr(args, 'output_dir') else None)
 
