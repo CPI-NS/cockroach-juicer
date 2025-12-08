@@ -1,3 +1,4 @@
+import queue
 import subprocess
 import time
 import logging
@@ -358,7 +359,7 @@ class BenchmarkRunner:
 
     def _aggregate_client_results(
         self,
-        results_queue: 'queue.Queue',
+        results_queue: queue.Queue,
         num_clients: int
     ) -> BenchmarkMetrics:
         """Aggregate metrics from multiple client instances."""

@@ -27,21 +27,25 @@ def check_and_setup_venv():
     missing_packages = []
     try:
         import yaml
+        print(f"YAML package version: {yaml.__version__}")
     except ImportError:
         missing_packages.append("pyyaml")
 
     try:
         import numpy
+        print(f"NumPy package version: {numpy.__version__}")
     except ImportError:
         missing_packages.append("numpy")
 
     try:
         import matplotlib
+        print(f"Matplotlib package version: {matplotlib.__version__}")
     except ImportError:
         missing_packages.append("matplotlib")
 
     try:
         import paramiko
+        print(f"Paramiko package version: {paramiko.__version__}")
     except ImportError:
         missing_packages.append("paramiko")
 
