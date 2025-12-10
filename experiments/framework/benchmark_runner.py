@@ -273,9 +273,15 @@ class BenchmarkRunner:
         self.logger.info(f"    Synchronized start time: {sync_start_time_ms}ms (+{sync_start_delay_seconds}s from now)")
 
         # Calculate workload per client
-        total_tx = bench_params['workload']['tx_count']
-        tx_per_client = total_tx // num_clients
-        remainder = total_tx % num_clients
+        # In open-loop mode, we don't divide transactions - each client runs for the same duration
+        is_open_loop = bench_params['workload'].get('open_loop', False)
+        if is_open_loop:
+            tx_per_client = 0  # Not used in open-loop mode
+            remainder = 0
+        else:
+            total_tx = bench_params['workload']['tx_count']
+            tx_per_client = total_tx // num_clients
+            remainder = total_tx % num_clients
 
         # Prepare to collect results from all clients
         results_queue = queue.Queue()
@@ -290,7 +296,10 @@ class BenchmarkRunner:
                 # Build command for this client
                 client_bench_params = bench_params.copy()
                 client_bench_params['workload'] = bench_params['workload'].copy()
-                client_bench_params['workload']['tx_count'] = tx_count
+
+                # Only set tx_count in closed-loop mode
+                if not bench_params['workload'].get('open_loop', False):
+                    client_bench_params['workload']['tx_count'] = tx_count
 
                 # Use remote benchmark binary path (same binary for both modes)
                 remote_benchmark_bin = self.config.remote.benchmark_bin_remote or "/home/ubuntu/benchmark"
@@ -298,12 +307,13 @@ class BenchmarkRunner:
                 # Check if open-loop mode is enabled
                 if bench_params['workload'].get('open_loop', False):
                     cmd = self._build_remote_openloop_command(client_bench_params, remote_benchmark_bin, start_time_ms)
+                    duration = bench_params['workload'].get('duration_seconds', 60)
+                    self.logger.info(f"      Client {client_idx} ({hostname}): Running for {duration}s")
                 else:
                     cmd = self._build_remote_command(client_bench_params, remote_benchmark_bin)
+                    self.logger.info(f"      Client {client_idx} ({hostname}): Running {tx_count} transactions")
 
                 cmd_str = " ".join(cmd)
-
-                self.logger.info(f"      Client {client_idx} ({hostname}): Running {tx_count} transactions")
                 self.logger.debug(f"      Command: {cmd_str}")
 
                 # Execute on remote client

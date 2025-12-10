@@ -23,7 +23,7 @@ echo ""
 echo "Extracting public key..."
 PUBLIC_KEY=$(ssh-keygen -y -f "$KEY_FILE")
 
-REGIONS=("us-east-2" "us-west-1")
+REGIONS=("us-east-1" "us-east-2" "us-west-1")
 
 for REGION in "${REGIONS[@]}"; do
     echo "Updating key in $REGION..."
@@ -34,12 +34,12 @@ for REGION in "${REGIONS[@]}"; do
         --key-name "$KEY_NAME" \
         --region "$REGION" 2>/dev/null || echo "  (No existing key to delete)"
 
-    # Import the correct key
+    # Import the correct key (base64 encode it)
     echo "  Importing new key pair..."
     aws ec2 import-key-pair \
         --key-name "$KEY_NAME" \
         --region "$REGION" \
-        --public-key-material "$PUBLIC_KEY" \
+        --public-key-material "$(echo "$PUBLIC_KEY" | base64)" \
         --output text > /dev/null
 
     echo "  ✓ Key imported to $REGION"

@@ -131,7 +131,7 @@ remote:
     data_dir: "/mnt/data/cockroach-data"
     log_dir: "/mnt/data/logs"
 
-  deploy_binaries: true
+  deploy_binaries: false  # Binaries already deployed on all nodes
   local_build_dir: "../../cockroach-juicer/"
 
 workload:
@@ -180,6 +180,8 @@ data_init:
 """
 
     # Generate server YAML
+    # Use public IPs for hostname (SSH) since cross-region private IPs don't work without VPC peering
+    # Use private IPs for internal_ip (CockroachDB communication within VPC)
     servers_yaml = ""
     for i, server in enumerate(servers[:9]):
         az_map = {
@@ -198,6 +200,8 @@ data_init:
 """
 
     # Generate client YAML
+    # Use public IPs for hostname (SSH) since cross-region private IPs don't work without VPC peering
+    # Use private IPs for internal_ip (benchmark targets within VPC)
     clients_yaml = ""
     for i, client in enumerate(clients[:9]):
         clients_yaml += f"""      - hostname: "{client['public_ip']}"

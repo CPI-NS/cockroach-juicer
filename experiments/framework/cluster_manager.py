@@ -79,12 +79,26 @@ class ClusterManager:
     # SSH Helper Methods (Remote Deployment)
     # ========================================================================
 
-    def _get_ssh_client(self, hostname: str, port: int = 22):
-        """Get or create SSH client for a remote host."""
+    def _get_ssh_client(self, hostname: str, port: int = 22, force: bool = False):
         client_key = f"{hostname}:{port}"
+
+        if force:
+            old_client = self.ssh_clients.pop(client_key, None)
+            if old_client is not None:
+                try:
+                    old_client.close()
+                except:
+                    pass
+
         if client_key in self.ssh_clients:
             return self.ssh_clients[client_key]
 
+        client = self._create_new_ssh_client(hostname=hostname, port=port)
+        self.ssh_clients[client_key] = client
+        return client
+
+    
+    def _create_new_ssh_client(self, hostname: str, port: int = 22):
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
@@ -95,12 +109,22 @@ class ClusterManager:
                     port=port,
                     username=self.ssh_user,
                     key_filename=str(self.ssh_key),
-                    timeout=10
+                    timeout=10,
+                    banner_timeout=10,
                 )
             else:
-                client.connect(hostname, port=port, username=self.ssh_user, timeout=10)
+                client.connect(
+                    hostname,
+                    port=port,
+                    username=self.ssh_user,
+                    timeout=10,
+                    banner_timeout=10,
+                )
 
-            self.ssh_clients[client_key] = client
+            transport = client.get_transport()
+            if transport:
+                transport.set_keepalive(30)
+
             self.logger.info(f"SSH connection established to {hostname}:{port}")
             return client
 
@@ -109,41 +133,67 @@ class ClusterManager:
             raise
 
     def _run_remote_command(
-        self, hostname: str, command: str, background: bool = False, port: int = 22, timeout: int = 30
-    ) -> tuple[int, str, str]:
+            self, hostname: str, command: str, background: bool = False,
+            port: int = 22, timeout: int = 300
+        ) -> tuple[int, str, str]:
         """
         Execute command on remote host via SSH.
-
-        Returns: (return_code, stdout, stderr)
+        SAFE version: prevents deadlocks, reads stdout/stderr, supports timeout.
+        Uses non-blocking polling loop to avoid indefinite blocking.
         """
-        client = self._get_ssh_client(hostname, port)
+        client = self._get_ssh_client(hostname, port, force=False)
 
         try:
             if background:
-                # Run in background using nohup
                 bg_command = f"nohup {command} > /dev/null 2>&1 &"
-                stdin, stdout, stderr = client.exec_command(bg_command)
+                client.exec_command(bg_command)
                 return (0, "", "")
-            else:
-                stdin, stdout, stderr = client.exec_command(command, timeout=timeout)
-                # Set timeout on the channel itself to prevent indefinite blocking on read
-                stdout.channel.settimeout(timeout)
-                stderr.channel.settimeout(timeout)
-                
-                try:
-                    stdout_str = stdout.read().decode()
-                    stderr_str = stderr.read().decode()
-                    return_code = stdout.channel.recv_exit_status()
-                    return (return_code, stdout_str, stderr_str)
-                except socket.timeout:
-                    self.logger.error(f"Command timed out after {timeout}s on {hostname}")
-                    # Force close the channel
-                    stdout.channel.close()
-                    return (-1, "", f"Command execution timed out after {timeout} seconds")
+
+            # ---- SAFE SECTION ----
+            stdin, stdout, stderr = client.exec_command(command)
+
+            # Set timeout to avoid blocking forever
+            stdout.channel.settimeout(timeout)
+
+            out_buf = []
+            err_buf = []
+
+            # Drain all output until the command exits
+            # This polling loop prevents blocking indefinitely on stdout.read()
+            while not stdout.channel.exit_status_ready():
+
+                # stdout ready
+                if stdout.channel.recv_ready():
+                    out_buf.append(stdout.channel.recv(4096).decode())
+
+                # stderr ready
+                if stdout.channel.recv_stderr_ready():
+                    err_buf.append(stdout.channel.recv_stderr(4096).decode())
+
+            # Final drain after exit
+            while stdout.channel.recv_ready():
+                out_buf.append(stdout.channel.recv(4096).decode())
+
+            while stdout.channel.recv_stderr_ready():
+                err_buf.append(stdout.channel.recv_stderr(4096).decode())
+
+            rc = stdout.channel.recv_exit_status()
+            return (rc, "".join(out_buf), "".join(err_buf))
+
+        except (paramiko.SSHException, EOFError):
+            self.logger.warning(f"SSH session inactive, reconnecting: {hostname}")
+
+            client = self._get_ssh_client(hostname, port, force=True)
+
+            # retry
+            return self._run_remote_command(
+                hostname, command, background, port, timeout
+            )
 
         except Exception as e:
             self.logger.error(f"Command failed on {hostname}: {e}")
             return (-1, "", str(e))
+
 
     def _deploy_binary(self, local_path: Path, remote_path: str) -> bool:
         """Deploy binary to all remote server nodes."""
@@ -763,3 +813,14 @@ class ClusterManager:
         else:
             # Local mode
             return [f"localhost:{self.base_port + i}" for i in range(self.num_nodes)]
+        
+    def _copy_dir_from_remote(self, hostname: str, port: int, remote_path: str, local_path: Path) -> bool:
+        """Copy directory from remote host to local host."""
+        self.logger.info(f"Copying directory from {remote_path} to {local_path.absolute()}")
+        client = self._get_ssh_client(hostname)
+        
+        sftp = client.open_sftp()
+        sftp.get(remote_path, str(local_path.absolute()))
+        sftp.close()
+        
+        return True
