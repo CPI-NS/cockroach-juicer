@@ -205,8 +205,9 @@ data_init:
         clients_yaml=clients_yaml.rstrip()
     )
 
-    # Write config file
-    config_dir = Path(__file__).parent / "configs"
+    # Write config file (configs are in experiments/configs, not scripts/aws/configs)
+    config_dir = Path(__file__).parent.parent / "configs"
+    config_dir.mkdir(parents=True, exist_ok=True)  # Ensure directory exists
     config_file = config_dir / "aws_multiregion_graph7_knee.yaml"
 
     with open(config_file, 'w') as f:

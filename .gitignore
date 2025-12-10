@@ -11,6 +11,9 @@
 
 experiments/venv
 
+experiments/cockroach-data/
+experiments/logs/
+
 artifacts
 /bin
 /bin.*

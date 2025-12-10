@@ -373,7 +373,3 @@ bash scripts/aws/aws_stop_instances.sh
 ls results/aws_multiregion/graph7_knee_openloop/
 open results/aws_multiregion/graph7_knee_openloop/plots/eval_graph7_knee.png
 ```
-
----
-
-Last Updated: December 2025

@@ -1,7 +1,7 @@
 experiment:
   name: "test-openloop-multinode"
   output_dir: "../results/test_openloop_multinode"
-  repeat_count: 3  # Multiple runs for smooth averaging
+  repeat_count: 1  # Multiple runs for smooth averaging
   timeout_seconds: 1200
 
 workload:
@@ -11,6 +11,7 @@ workload:
   duration_seconds: 30       # 30 second runs
   warmup_percent: 0.25       # 7.5s warmup
   cooldown_percent: 0.25     # 7.5s cooldown
+  openloop_inflight: 100     # Max 100 concurrent in-flight transactions per client
 
   # Workload characteristics
   ops_per_tx: [1]

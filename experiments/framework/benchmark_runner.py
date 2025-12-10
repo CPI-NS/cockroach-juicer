@@ -99,19 +99,20 @@ class BenchmarkRunner:
             if not self._configure_replication(replicas=3):
                 self.logger.warning("Failed to configure replication (continuing anyway)")
 
-        # Initialize data if enabled
-        if self.config.data_init.enabled:
-            # Give cluster time to fully stabilize after initialization
-            # Multi-region clusters need more time for Raft and DistSender to be ready
-            self.logger.info("Waiting for cluster to stabilize before data initialization...")
-            time.sleep(30)
+        # Give cluster time to fully stabilize
+        # Multi-region clusters need more time for Raft and DistSender to be ready
+        self.logger.info("Waiting for cluster to stabilize...")
+        time.sleep(30)
 
-            self.logger.info("Initializing benchmark data...")
+        # Initialize data ONCE at the start (same data used for all configs)
+        if self.config.data_init.enabled:
+            self.logger.info("Initializing benchmark data (one-time setup)...")
             if not self._initialize_data():
                 self.logger.error("Failed to initialize data")
                 self.cluster_mgr.stop()
                 return results
             self.logger.info("Data initialization completed")
+            time.sleep(2)
 
         try:
             for exp_idx, exp_params in enumerate(experiments):
@@ -123,7 +124,10 @@ class BenchmarkRunner:
                 for trial in range(self.config.repeat_count):
                     self.logger.info(f"  Trial {trial+1}/{self.config.repeat_count}")
 
+                    # Reset database between trials to clear any residual state
+                    # This wipes transaction history but keeps the initialized data
                     self.cluster_mgr.reset_database()
+                    time.sleep(2)
 
                     metrics = self._run_single_benchmark(exp_params, config_id, trial)
 
@@ -155,6 +159,7 @@ class BenchmarkRunner:
                     'duration_seconds': exp_params['duration_seconds'],
                     'warmup_percent': exp_params['warmup_percent'],
                     'cooldown_percent': exp_params['cooldown_percent'],
+                    'openloop_inflight': exp_params.get('openloop_inflight', 100),
                     'ops_per_tx': exp_params['ops_per_tx'],
                     'key_range': exp_params['key_range'],
                     'distribution': exp_params['distribution'],
@@ -602,6 +607,7 @@ class BenchmarkRunner:
                 f"--duration={workload['duration_seconds']}",
                 f"--warmup-percent={workload['warmup_percent']}",
                 f"--cooldown-percent={workload['cooldown_percent']}",
+                f"--openloop-inflight={workload.get('openloop_inflight', 100)}",
                 f"--ops-per-tx={workload['ops_per_tx']}",
                 f"--key-range={workload['key_range']}",
                 f"--key-prefix=key",
@@ -680,6 +686,7 @@ class BenchmarkRunner:
         duration_seconds = workload.get('duration_seconds', 60)
         warmup_percent = workload.get('warmup_percent', 0.25)
         cooldown_percent = workload.get('cooldown_percent', 0.25)
+        openloop_inflight = workload.get('openloop_inflight', 100)
 
         cmd = [
             remote_bin_path,
@@ -691,6 +698,7 @@ class BenchmarkRunner:
             f"--start-time={start_time_ms}",
             f"--warmup-percent={warmup_percent}",
             f"--cooldown-percent={cooldown_percent}",
+            f"--openloop-inflight={openloop_inflight}",
             f"--ops-per-tx={workload['ops_per_tx']}",
             f"--key-range={workload['key_range']}",
             f"--key-prefix=key",

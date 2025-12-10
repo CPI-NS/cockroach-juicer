@@ -166,6 +166,7 @@ workload:
   duration_seconds: 60       # 60 second runs for stable measurements
   warmup_percent: 0.25       # 15s warmup
   cooldown_percent: 0.25     # 15s cooldown
+  openloop_inflight: 200     # Max 200 concurrent in-flight transactions per client (advisor's parameter)
 
   # Workload characteristics
   ops_per_tx: [1]

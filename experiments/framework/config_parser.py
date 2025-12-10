@@ -19,6 +19,7 @@ class WorkloadConfig:
     duration_seconds: int = 60
     warmup_percent: float = 0.25
     cooldown_percent: float = 0.25
+    openloop_inflight: int = 100  # Max concurrent in-flight transactions (advisor's parameter)
 
 
 @dataclass
@@ -131,7 +132,8 @@ def load_config(config_path: str) -> ExperimentConfig:
         target_rate=_ensure_list(workload_data.get('target_rate', [100])),
         duration_seconds=workload_data.get('duration_seconds', 60),
         warmup_percent=workload_data.get('warmup_percent', 0.25),
-        cooldown_percent=workload_data.get('cooldown_percent', 0.25)
+        cooldown_percent=workload_data.get('cooldown_percent', 0.25),
+        openloop_inflight=workload_data.get('openloop_inflight', 100)
     )
 
     conc_data = data.get('concurrency', {})
@@ -305,6 +307,7 @@ def generate_experiment_matrix(config: ExperimentConfig) -> List[Dict[str, Any]]
             exp_params['duration_seconds'] = config.workload.duration_seconds
             exp_params['warmup_percent'] = config.workload.warmup_percent
             exp_params['cooldown_percent'] = config.workload.cooldown_percent
+            exp_params['openloop_inflight'] = config.workload.openloop_inflight
 
         experiments.append(exp_params)
 

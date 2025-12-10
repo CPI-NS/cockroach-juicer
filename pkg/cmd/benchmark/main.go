@@ -10,6 +10,7 @@ import (
 	"flag"
 	"fmt"
 	"math/rand"
+	randv2 "math/rand/v2"
 	"os"
 	"sort"
 	"sync"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/workload/workloadimpl"
 	"github.com/cockroachdb/errors"
 )
 
@@ -55,12 +57,20 @@ var (
 	useHashKeys    = flag.Bool("use-hash-keys", true, "use hash-based keys for even distribution across shards")
 
 	// Open-loop mode flags
-	openLoop        = flag.Bool("open-loop", false, "use open-loop workload generation (time-based instead of transaction count)")
-	targetRate      = flag.Int("target-rate", 100, "target operations per second (open-loop mode only)")
-	duration        = flag.Int("duration", 60, "duration to run benchmark in seconds (open-loop mode only)")
-	startTime       = flag.Int64("start-time", 0, "unix timestamp (ms) when all clients should start (0 = start immediately)")
-	warmupPercent   = flag.Float64("warmup-percent", 0.25, "percentage of duration for warmup phase (open-loop mode only)")
-	cooldownPercent = flag.Float64("cooldown-percent", 0.25, "percentage of duration for cooldown phase (open-loop mode only)")
+	openLoop         = flag.Bool("open-loop", false, "use open-loop workload generation (time-based instead of transaction count)")
+	targetRate       = flag.Int("target-rate", 100, "target operations per second (open-loop mode only)")
+	duration         = flag.Int("duration", 60, "duration to run benchmark in seconds (open-loop mode only)")
+	startTime        = flag.Int64("start-time", 0, "unix timestamp (ms) when all clients should start (0 = start immediately)")
+	warmupPercent    = flag.Float64("warmup-percent", 0.25, "percentage of duration for warmup phase (open-loop mode only)")
+	cooldownPercent  = flag.Float64("cooldown-percent", 0.25, "percentage of duration for cooldown phase (open-loop mode only)")
+	openLoopInflight = flag.Int("openloop-inflight", 100, "max concurrent in-flight transactions per worker (open-loop mode only)")
+)
+
+var (
+	// Global zipfian generator for key selection (initialized once, thread-safe)
+	zipfGen     *workloadimpl.ZipfGenerator
+	zipfGenOnce sync.Once
+	zipfGenMu   sync.Mutex
 )
 
 func main() {
@@ -206,6 +216,7 @@ type TransactionResult struct {
 	EndTime      time.Time
 	Success      bool
 	Aborted      bool
+	RetryCount   int    // Number of times transaction was retried (for abort rate calculation)
 	ErrorMessage string
 }
 
@@ -213,9 +224,10 @@ type TransactionResult struct {
 type OpenLoopStats struct {
 	sync.Mutex
 	results        []TransactionResult
-	totalAttempted int64
-	totalCommitted int64
-	totalAborted   int64
+	totalAttempted int64  // Total logical transactions initiated
+	totalCommitted int64  // Successfully committed transactions
+	totalAborted   int64  // Transactions that failed after all retries
+	totalRetries   int64  // Total retry attempts across all transactions
 	totalErrors    int64
 }
 
@@ -224,6 +236,10 @@ func (s *OpenLoopStats) recordResult(result TransactionResult) {
 	defer s.Unlock()
 	s.results = append(s.results, result)
 	atomic.AddInt64(&s.totalAttempted, 1)
+
+	// Track retry attempts for abort rate calculation
+	atomic.AddInt64(&s.totalRetries, int64(result.RetryCount))
+
 	if result.Success {
 		atomic.AddInt64(&s.totalCommitted, 1)
 	} else if result.Aborted {
@@ -279,45 +295,44 @@ func runOpenLoopWorkload(ctx context.Context, db *kv.DB) error {
 	fmt.Printf("Benchmark started at %s\n", startTimeActual.Format("15:04:05.000"))
 	fmt.Printf("Will run until %s\n\n", endTime.Format("15:04:05.000"))
 
-	// Worker pool for executing transactions
+	// Use ticket-based concurrency control (advisor's approach)
+	// Semaphore controls max in-flight transactions
 	var wg sync.WaitGroup
-	txChan := make(chan time.Time, *targetRate)
-
-	// Start worker goroutines
-	numWorkers := *targetRate / 10 // Heuristic: 1 worker per 10 ops/sec
-	if numWorkers < 1 {
-		numWorkers = 1
-	}
-	if numWorkers > 100 {
-		numWorkers = 100
+	tickets := make(chan int, *openLoopInflight)
+	for i := 0; i < *openLoopInflight; i++ {
+		tickets <- i
 	}
 
-	fmt.Printf("Starting %d worker goroutines...\n", numWorkers)
+	fmt.Printf("Open-loop configuration:\n")
+	fmt.Printf("  Target rate: %d ops/sec\n", *targetRate)
+	fmt.Printf("  Max in-flight: %d concurrent transactions\n", *openLoopInflight)
+	fmt.Printf("  Inter-arrival time: %.2fms\n\n", float64(interArrivalNanos)/float64(time.Millisecond))
 
-	for i := 0; i < numWorkers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for scheduledTime := range txChan {
-				executeOpenLoopTransaction(ctx, db, scheduledTime, stats)
-			}
-		}()
-	}
-
-	// Open-loop rate generator
+	// Open-loop rate generator with ticker
 	ticker := time.NewTicker(time.Duration(interArrivalNanos))
 	defer ticker.Stop()
 
 	operationsScheduled := 0
+	operationsDropped := 0
+
 	for now := range ticker.C {
 		if now.After(endTime) {
 			break
 		}
 
-		// Schedule a transaction
+		// Try to acquire a ticket (non-blocking)
 		select {
-		case txChan <- now:
+		case ticket := <-tickets:
+			// Got a ticket, schedule transaction
 			operationsScheduled++
+			wg.Add(1)
+
+			go func(scheduledTime time.Time, ticket int) {
+				defer wg.Done()
+				defer func() { tickets <- ticket }() // Release ticket when done
+
+				executeOpenLoopTransaction(ctx, db, scheduledTime, stats)
+			}(now, ticket)
 
 			// Progress reporting every second
 			if operationsScheduled%*targetRate == 0 {
@@ -328,18 +343,23 @@ func runOpenLoopWorkload(ctx context.Context, db *kv.DB) error {
 				} else if now.After(measurementEnd) {
 					phase = "cooldown"
 				}
-				fmt.Printf("[%s] %.1fs elapsed, %d ops scheduled, %d completed, %d aborted\n",
-					phase, elapsed.Seconds(), operationsScheduled,
+				fmt.Printf("[%s] %.1fs elapsed, %d ops scheduled, %d dropped, %d completed, %d aborted\n",
+					phase, elapsed.Seconds(), operationsScheduled, operationsDropped,
 					atomic.LoadInt64(&stats.totalCommitted),
 					atomic.LoadInt64(&stats.totalAborted))
 			}
+
 		default:
-			// Worker pool is saturated, drop this operation
-			// This indicates the system can't keep up with target rate
+			// No ticket available - system saturated, drop this operation
+			operationsDropped++
+			if operationsDropped%100 == 0 {
+				fmt.Printf("WARNING: System saturated, %d operations dropped (in-flight limit: %d)\n",
+					operationsDropped, *openLoopInflight)
+			}
 		}
 	}
 
-	close(txChan)
+	// Wait for all in-flight transactions to complete
 	wg.Wait()
 
 	fmt.Printf("\nBenchmark completed at %s\n", time.Now().Format("15:04:05.000"))
@@ -358,17 +378,22 @@ func executeOpenLoopTransaction(
 	stats *OpenLoopStats,
 ) {
 	result := TransactionResult{
-		StartTime: time.Now(),
+		StartTime:  time.Now(),
+		RetryCount: 0,
 	}
 
 	// Generate keys for this transaction
 	keys := generateTransactionKeys(*opsPerTx)
 
+	closureInvocations := 0
 	var finalTxn *kv.Txn
 
-	// Execute transaction with auto-retry
+	// Execute transaction with automatic retry tracking
+	// db.Txn() automatically retries, we count how many times the closure is invoked
 	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		finalTxn = txn  // Capture the transaction to check its epoch
+		closureInvocations++
+		finalTxn = txn
+
 		for _, key := range keys {
 			// Determine if this operation is a read or write
 			if rand.Float64() < *readWriteRatio {
@@ -391,28 +416,28 @@ func executeOpenLoopTransaction(
 
 	result.EndTime = time.Now()
 
+	// Calculate retry count based on closure invocations and epoch
+	// closureInvocations - 1 = number of retries (first invocation is not a retry)
+	// Also check epoch as a fallback
+	if closureInvocations > 1 {
+		result.RetryCount = closureInvocations - 1
+	} else if finalTxn != nil {
+		epoch := finalTxn.TestingCloneTxn().Epoch
+		if epoch > 0 {
+			result.RetryCount = int(epoch)
+		}
+	}
+
 	if err != nil {
+		// Transaction failed after all retries
 		result.Success = false
 		result.ErrorMessage = err.Error()
-		// Check if it's an abort (simplified check)
-		if isOpenLoopAbortError(err) {
-			result.Aborted = true
-		}
+		result.Aborted = true
 	} else {
+		// Transaction succeeded (possibly after retries)
 		result.Success = true
-		// Check if the transaction had to retry (epoch > 0 means it was restarted)
-		if finalTxn != nil {
-			txnProto := finalTxn.TestingCloneTxn()
-			epoch := txnProto.Epoch
-			// Debug: Print first few epochs to see if this is working
-			if atomic.LoadInt64(&stats.totalCommitted) < 5 {
-				fmt.Printf("DEBUG: Transaction epoch=%d\n", epoch)
-			}
-			if epoch > 0 {
-				// Transaction succeeded but required retries due to conflicts
-				result.Aborted = true  // Mark as aborted to indicate contention
-			}
-		}
+		// Not setting Aborted=true for successful transactions,
+		// but RetryCount captures the retry attempts
 	}
 
 	stats.recordResult(result)
@@ -438,9 +463,27 @@ func generateTransactionKeys(numKeys int) []string {
 }
 
 func zipfianKeySelection(n int, s float64) int {
-	// Simplified zipfian - in production use proper implementation
-	// This is just a placeholder that generates skewed distribution
-	return rand.Intn(n) + 1
+	// Use CockroachDB's optimized Zipfian generator
+	// Initialize once using sync.Once for thread safety
+	zipfGenOnce.Do(func() {
+		// Use rand/v2 for the zipf generator
+		source := randv2.NewPCG(uint64(time.Now().UnixNano()), uint64(time.Now().UnixNano()))
+		rng := randv2.New(source)
+		var err error
+		zipfGen, err = workloadimpl.NewZipfGenerator(rng, 1, uint64(n), s, false)
+		if err != nil {
+			// Fallback will happen below
+			fmt.Fprintf(os.Stderr, "Warning: Failed to create Zipf generator: %v\n", err)
+		}
+	})
+
+	// Fallback to uniform if initialization failed
+	if zipfGen == nil {
+		return rand.Intn(n) + 1
+	}
+
+	// ZipfGenerator.Uint64() is already thread-safe (has internal mutex)
+	return int(zipfGen.Uint64())
 }
 
 func hashKeyValue(key int) uint32 {
@@ -505,11 +548,18 @@ func printOpenLoopResults(
 	committed := 0
 	aborted := 0
 	errors := 0
+	totalRetries := 0
+	totalAttempts := 0
 
 	for _, result := range measurementResults {
 		latency := result.EndTime.Sub(result.StartTime)
 		latencies = append(latencies, latency)
 		totalLatency += latency
+
+		// Count retry attempts
+		totalRetries += result.RetryCount
+		// Total attempts = initial attempt + retries
+		totalAttempts += (1 + result.RetryCount)
 
 		if result.Success {
 			committed++
@@ -527,7 +577,15 @@ func printOpenLoopResults(
 
 	measurementDuration := totalDuration - warmupDuration - cooldownDuration
 	throughput := float64(committed) / measurementDuration.Seconds()
-	abortRate := float64(aborted) / float64(len(measurementResults)) * 100.0
+
+	// Abort rate calculation per advisor's definition:
+	// abort_rate = (# of aborts) / (# of total issued txs)
+	// Where total issued = initial attempts + all retries
+	// If a tx is retried 7 times and succeeds on 8th: abort_rate = 7/8
+	abortRate := 0.0
+	if totalAttempts > 0 {
+		abortRate = float64(totalRetries) / float64(totalAttempts) * 100.0
+	}
 
 	// Calculate percentiles
 	p50 := latencies[len(latencies)*50/100]
@@ -537,10 +595,14 @@ func printOpenLoopResults(
 
 	fmt.Printf("\n=== Benchmark Results (Measurement Window Only) ===\n")
 	fmt.Printf("Duration: %.2fs\n", measurementDuration.Seconds())
-	fmt.Printf("Total operations: %d\n", len(measurementResults))
+	fmt.Printf("Total logical transactions: %d\n", len(measurementResults))
 	fmt.Printf("  Committed: %d\n", committed)
-	fmt.Printf("  Aborted: %d (%.2f%%)\n", aborted, abortRate)
+	fmt.Printf("  Failed: %d\n", aborted)
 	fmt.Printf("  Errors: %d\n", errors)
+	fmt.Printf("\nRetry Statistics:\n")
+	fmt.Printf("  Total retry attempts: %d\n", totalRetries)
+	fmt.Printf("  Total transaction attempts: %d (including retries)\n", totalAttempts)
+	fmt.Printf("  Abort rate: %.2f%% (retries/total_attempts)\n", abortRate)
 	fmt.Printf("\nThroughput: %.2f ops/sec\n", throughput)
 	fmt.Printf("\nLatency:\n")
 	fmt.Printf("  Average: %s\n", avgLatency)
