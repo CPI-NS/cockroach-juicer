@@ -29,6 +29,7 @@ go_library(
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
         "//pkg/security/username",
+        "//pkg/workload/workloadimpl",
         "//pkg/settings/cluster",
         "//pkg/util",
         "//pkg/util/hlc",

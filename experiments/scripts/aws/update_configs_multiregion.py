@@ -94,19 +94,22 @@ def main():
     print("Creating multi-region configuration file")
     print("=" * 60)
 
-    config_template = """# AWS Multi-Region Evaluation - Graph 7: Finding the Knee
+    config_template = """# AWS Multi-Region Evaluation - Graph 7: Finding the Knee (Open-Loop)
 # Auto-generated configuration file
+#
+# This configuration runs an open-loop benchmark to find the system's saturation point.
+# Open-loop mode sends requests at a fixed arrival rate, independent of system response time.
 #
 # Architecture:
 #   - 9 servers across 3 regions (us-east-1, us-east-2, us-west-1)
 #   - 9 clients across 3 regions
-#   - Multi-region CockroachDB cluster
+#   - Multi-region CockroachDB cluster with replication factor 3
 
 experiment:
-  name: "aws-multiregion-eval-graph7-knee"
-  output_dir: "../results/aws_multiregion/graph7_knee"
-  repeat_count: 5
-  timeout_seconds: 3600
+  name: "aws-multiregion-eval-graph7-knee-openloop"
+  output_dir: "../results/aws_multiregion/graph7_knee_openloop"
+  repeat_count: 3            # Run each configuration 3 times for statistical smoothness
+  timeout_seconds: 7200      # 2 hours timeout (9 rates × 2 configs × 3 repeats × 60s = ~54min)
 
   deployment_mode: "remote"
 
@@ -132,17 +135,25 @@ remote:
   local_build_dir: "../../cockroach-juicer/"
 
 workload:
-  tx_count: [50000]
+  # Open-loop mode settings
+  open_loop: true
+  target_rate: [500, 1000, 2000, 3000, 4000, 5000, 6000, 8000, 10000]  # Sweep arrival rate to find knee
+  duration_seconds: 60       # 60 second runs for stable measurements
+  warmup_percent: 0.25       # 15s warmup
+  cooldown_percent: 0.25     # 15s cooldown
+  openloop_inflight: 200     # Max 200 concurrent in-flight transactions per client (advisor's parameter)
+
+  # Workload characteristics
   ops_per_tx: [1]
   key_range: [1000000]
   distribution: ["zipfian"]
   zipfian_s: [0.99]
   zipfian_v: [1.0]
-  read_write_ratio: [0.0]
+  read_write_ratio: [0.0]    # 100% writes for maximum contention
 
 concurrency:
-  num_clients: [9]
-  workers_per_client: [1, 2, 4, 8, 12, 16, 24, 32]
+  num_clients: [9]           # 9 clients across 3 regions
+  workers_per_client: [1]    # Not used in open-loop, but required
 
 juicer:
   enabled: [false, true]
@@ -164,7 +175,7 @@ data_init:
   key_range: 1000000
   batch_size: 10000
   concurrent: 16
-  use_bulk: true
+  use_bulk: false  # Disabled: BulkAdder requires DistSender which may not be ready in multi-region
   use_hash_keys: true
 """
 
@@ -206,7 +217,9 @@ data_init:
     )
 
     # Write config file (configs are in experiments/configs, not scripts/aws/configs)
-    config_dir = Path(__file__).parent.parent / "configs"
+    # __file__ is experiments/scripts/aws/update_configs_multiregion.py
+    # parent.parent.parent gives us experiments directory
+    config_dir = Path(__file__).parent.parent.parent / "configs"
     config_dir.mkdir(parents=True, exist_ok=True)  # Ensure directory exists
     config_file = config_dir / "aws_multiregion_graph7_knee.yaml"
 

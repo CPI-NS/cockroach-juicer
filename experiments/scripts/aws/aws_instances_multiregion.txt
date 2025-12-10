@@ -1,33 +1,23 @@
-# Juicer Multi-Region Instances
-# Generated: Tue Dec  2 16:51:41 EST 2025
+# Auto-generated AWS instances file
+# Format: name: public=<IP>  private=<IP>  region=<region>
 
+juicer-server-east1: public=18.212.182.48  private=172.31.82.214  region=us-east-1
+juicer-server-east1: public=44.206.251.9  private=172.31.84.105  region=us-east-1
+juicer-server-east1: public=44.212.39.135  private=172.31.82.197  region=us-east-1
+juicer-client-east1: public=3.83.104.223  private=172.31.83.166  region=us-east-1
+juicer-client-east1: public=44.202.110.27  private=172.31.84.5  region=us-east-1
+juicer-client-east1: public=54.165.144.8  private=172.31.81.68  region=us-east-1
 
-# SERVERS - us-east-1
-juicer-server-east1: public=34.204.67.217  private=172.31.82.214  region=us-east-1
-juicer-server-east1: public=54.208.110.229  private=172.31.84.105  region=us-east-1
-juicer-server-east1: public=54.91.203.85  private=172.31.82.197  region=us-east-1
+juicer-server-east2: public=13.58.181.109  private=172.31.44.215  region=us-east-2
+juicer-server-east2: public=3.138.173.119  private=172.31.191.198  region=us-east-2
+juicer-server-east2: public=18.223.155.64  private=172.31.116.208  region=us-east-2
+juicer-client-east2: public=18.191.232.94  private=172.31.42.1  region=us-east-2
+juicer-client-east2: public=3.145.192.240  private=172.31.225.149  region=us-east-2
+juicer-client-east2: public=3.142.79.108  private=172.31.194.149  region=us-east-2
 
-# CLIENTS - us-east-1
-juicer-client-east1: public=34.207.68.148  private=172.31.84.5  region=us-east-1
-juicer-client-east1: public=44.201.75.196  private=172.31.81.68  region=us-east-1
-juicer-client-east1: public=44.211.216.86  private=172.31.83.166  region=us-east-1
-
-# SERVERS - us-east-2
-juicer-server-east2: public=18.118.106.162  private=172.31.116.208  region=us-east-2
-juicer-server-east2: public=18.222.126.3  private=172.31.44.215  region=us-east-2
-juicer-server-east2: public=3.17.66.206  private=172.31.191.198  region=us-east-2
-
-# CLIENTS - us-east-2
-juicer-client-east2: public=18.222.218.34  private=172.31.225.149  region=us-east-2
-juicer-client-east2: public=3.17.133.122  private=172.31.194.149  region=us-east-2
-juicer-client-east2: public=3.17.189.229  private=172.31.42.1  region=us-east-2
-
-# SERVERS - us-west-1
-juicer-server-west1: public=18.144.81.88  private=172.31.0.82  region=us-west-1
-juicer-server-west1: public=3.101.151.1  private=172.31.8.171  region=us-west-1
-juicer-server-west1: public=54.219.238.16  private=172.31.1.25  region=us-west-1
-
-# CLIENTS - us-west-1
-juicer-client-west1: public=13.57.41.216  private=172.31.4.241  region=us-west-1
-juicer-client-west1: public=54.215.105.27  private=172.31.7.155  region=us-west-1
-juicer-client-west1: public=54.219.155.93  private=172.31.11.33  region=us-west-1
+juicer-server-west1: public=54.193.130.0  private=172.31.8.171  region=us-west-1
+juicer-server-west1: public=54.176.111.30  private=172.31.1.25  region=us-west-1
+juicer-server-west1: public=54.193.2.46  private=172.31.0.82  region=us-west-1
+juicer-client-west1: public=18.144.86.33  private=172.31.4.241  region=us-west-1
+juicer-client-west1: public=54.193.201.135  private=172.31.7.155  region=us-west-1
+juicer-client-west1: public=54.183.206.33  private=172.31.11.33  region=us-west-1
