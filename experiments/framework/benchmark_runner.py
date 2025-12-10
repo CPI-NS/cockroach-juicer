@@ -3,7 +3,7 @@ import subprocess
 import time
 import logging
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 
 
@@ -11,6 +11,16 @@ from .config_parser import ExperimentConfig, generate_experiment_matrix
 from .workload_generator import WorkloadGenerator
 from .cluster_manager import ClusterManager
 from .metrics_collector import MetricsCollector, ExperimentResults, BenchmarkMetrics
+
+def format_ns(ns: int) -> str:
+    if ns < 1_000:
+        return f"{ns} ns"
+    elif ns < 1_000_000:
+        return f"{ns / 1_000:.3f} µs"
+    elif ns < 1_000_000_000:
+        return f"{ns / 1_000_000:.3f} ms"
+    else:
+        return f"{ns / 1_000_000_000:.3f} s"
 
 
 class BenchmarkRunner:
@@ -304,7 +314,7 @@ class BenchmarkRunner:
                 # Use remote benchmark binary path (same binary for both modes)
                 remote_benchmark_bin = self.config.remote.benchmark_bin_remote or "/home/ubuntu/benchmark"
 
-                # Check if open-loop mode is enabled
+                # Check if open-loop mode is enabledh
                 if bench_params['workload'].get('open_loop', False):
                     cmd = self._build_remote_openloop_command(client_bench_params, remote_benchmark_bin, start_time_ms)
                     duration = bench_params['workload'].get('duration_seconds', 60)
@@ -374,7 +384,7 @@ class BenchmarkRunner:
 
     def _aggregate_client_results(
         self,
-        results_queue: queue.Queue,
+        results_queue: queue.Queue[Tuple[str, int, BenchmarkMetrics, int]],
         num_clients: int
     ) -> BenchmarkMetrics:
         """Aggregate metrics from multiple client instances."""
@@ -387,14 +397,15 @@ class BenchmarkRunner:
             result = results_queue.get()
             if result[0] == 'success':
                 _, client_idx, metrics, tx_count = result
-                successful_results.append((metrics, tx_count))
+                successful_results.append((metrics, metrics.tx_count))
                 total_tx += tx_count
             else:
                 _, client_idx, error_msg, _ = result
                 errors.append(f"Client {client_idx}: {error_msg}")
 
         if not successful_results:
-            self.logger.error("    All clients failed!")
+            self.logger.error("  *********************************  All clients failed! *********************************")
+            time.sleep(240)
             metrics = BenchmarkMetrics()
             metrics.errors = errors
             return metrics
@@ -404,32 +415,39 @@ class BenchmarkRunner:
 
         # Weighted average for latencies (by transaction count)
         total_weight = sum(tx_count for _, tx_count in successful_results)
+        total_attempts_count = sum(m.attempts_count for m, tx_count in successful_results)
 
         weighted_p50 = sum(m.latency_p50 * tx_count for m, tx_count in successful_results) / total_weight
         weighted_p99 = sum(m.latency_p99 * tx_count for m, tx_count in successful_results) / total_weight
+        weighted_p999 = sum(m.latency_p999 * tx_count for m, tx_count in successful_results) / total_weight
 
         # Sum throughput (ops/sec from all clients combined)
         total_throughput = sum(m.throughput for m, _ in successful_results)
 
         # Weighted average for abort rate
-        weighted_abort_rate = sum(m.abort_rate * tx_count for m, tx_count in successful_results) / total_weight
-
+        weighted_abort_rate = sum(m.abort_rate * m.attempts_count for m, tx_count in successful_results) / total_attempts_count
+        
+        
+        
         # Create aggregated metrics
         aggregated = BenchmarkMetrics(
-            latency_p50=weighted_p50,
-            latency_p99=weighted_p99,
+            latency_p50=weighted_p50 / 1000000,
+            latency_p99=weighted_p99 / 1000000,
+            latency_p999=weighted_p999 / 1000000,
             throughput=total_throughput,
             abort_rate=weighted_abort_rate
         )
         aggregated.errors = errors
 
-        self.logger.info(f"    Aggregated Result: Latency P50={aggregated.latency_p50:.2f}ms, "
-                       f"P99={aggregated.latency_p99:.2f}ms, "
-                       f"Throughput={aggregated.throughput:.2f} ops/sec, "
-                       f"Abort Rate={aggregated.abort_rate:.2f}%")
+        self.logger.info(f"    Aggregated Result: Latency P50={format_ns(weighted_p50)}, "
+                    f"P99={format_ns(weighted_p99)}, "
+                    f"P999={format_ns(weighted_p999)}, "
+                    f"Throughput={aggregated.throughput:.2f} ops/sec, "
+                    f"Abort Rate={aggregated.abort_rate:.2f}%")
 
         return aggregated
 
+    
     def _initialize_data(self) -> bool:
         """Initialize benchmark data using the benchmark binary's --init flag."""
         cfg = self.config.data_init

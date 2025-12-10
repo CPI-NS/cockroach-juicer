@@ -365,9 +365,10 @@ class ClusterManager:
             else:
                 self.logger.warning(f"Benchmark binary not found at {self.benchmark_bin}, skipping client deployment")
 
-        # Build join addresses using internal IPs
+        # Build join addresses using hostnames (public IPs) for multi-region
+        # This allows nodes across regions to find each other
         join_addrs = [
-            f"{node['internal_ip']}:{self.base_port}" for node in server_nodes
+            f"{node['hostname']}:{self.base_port}" for node in server_nodes
         ]
         join_str = ",".join(join_addrs)
 
@@ -387,12 +388,16 @@ class ClusterManager:
             self._run_remote_command(hostname, f"mkdir -p {self.log_dir}", port=port)
 
             # Build start command (use remote binary path)
+            # For multi-region deployments, advertise public hostname so cross-region clients can connect
+            # Use hostname (public IP) for advertise-addr in multi-region setups
+            advertise_addr = hostname if len(server_nodes) > 1 else internal_ip
+
             cmd_parts = [
                 remote_bin_path,
                 "start" if len(server_nodes) > 1 else "start-single-node",
                 f"--store=path={self.data_dir}/node{node_id},size={store_size}",
                 f"--listen-addr=0.0.0.0:{self.base_port}",  # Listen on all interfaces for cross-region
-                f"--advertise-addr={internal_ip}:{self.base_port}",  # Advertise internal IP for intra-cluster
+                f"--advertise-addr={advertise_addr}:{self.base_port}",  # Use public hostname for multi-region
                 f"--http-addr=0.0.0.0:{self.base_http_port}",  # HTTP on all interfaces
                 f"--log-dir={self.log_dir}",
                 "--cluster-name=default",
