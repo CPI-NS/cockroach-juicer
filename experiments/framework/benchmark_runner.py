@@ -495,6 +495,18 @@ class BenchmarkRunner:
             self.logger.info(f"  Init timeout: {init_timeout}s ({init_timeout/60:.1f} minutes)")
 
             try:
+                self.logger.info(f"  Connecting to {hostname}:{port}...")
+
+                # Force fresh SSH connection for init (avoid stale connection issues)
+                client_key = f"{hostname}:{port}"
+                if client_key in self.cluster_mgr.ssh_clients:
+                    self.logger.info(f"  Closing existing SSH connection to {hostname}:{port}")
+                    old_client = self.cluster_mgr.ssh_clients.pop(client_key)
+                    try:
+                        old_client.close()
+                    except:
+                        pass
+
                 rc, stdout, stderr = self.cluster_mgr._run_remote_command(
                     hostname,
                     cmd_str,
