@@ -8,6 +8,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -71,6 +72,7 @@ func InitData(ctx context.Context, db *kv.DB, cfg InitDataConfig) error {
 
 	fmt.Printf("Initializing %d keys with prefix '%s' (range: 1-%d)...\n",
 		cfg.NumKeys, cfg.KeyPrefix, cfg.KeyRange)
+	os.Stdout.Sync() // Force flush
 
 	start := time.Now()
 
@@ -133,6 +135,8 @@ func initDataSimple(ctx context.Context, db *kv.DB, cfg InitDataConfig) error {
 // initDataConcurrent implements method 3: concurrent batch writes.
 func initDataConcurrent(ctx context.Context, db *kv.DB, cfg InitDataConfig) error {
 	fmt.Printf("Using concurrent batch writes (%d goroutines)...\n", cfg.Concurrency)
+	fmt.Println("Starting workers...")
+	os.Stdout.Sync() // Force flush
 
 	type workItem struct {
 		startIdx int
@@ -196,6 +200,7 @@ func initDataConcurrent(ctx context.Context, db *kv.DB, cfg InitDataConfig) erro
 						if keysProcessed%10000 == 0 || keysProcessed >= cfg.NumKeys {
 							fmt.Printf("  Progress: %d/%d keys (%.1f%%)\n",
 								keysProcessed, cfg.NumKeys, float64(keysProcessed)/float64(cfg.NumKeys)*100)
+							os.Stdout.Sync() // Force flush immediately
 						}
 					}()
 				}
