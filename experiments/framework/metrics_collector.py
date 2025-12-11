@@ -9,8 +9,11 @@ import statistics
 @dataclass
 class BenchmarkMetrics:
     tx_count: int = 0
+    attempts_count: int = 0
     commit_count: int = 0
     abort_count: int = 0
+    final_commit_count: int = 0
+    final_abort_count: int = 0
     abort_rate: float = 0.0
     latency_p50: float = 0.0
     latency_p90: float = 0.0
@@ -48,11 +51,17 @@ class MetricsCollector:
             if match := re.search(r'latency_p50_ms=([\d.]+)', output):
                 metrics.latency_p50 = float(match.group(1))
 
+            if match := re.search(r'latency_p90_ms=([\d.]+)', output):
+                metrics.latency_p90 = float(match.group(1))
+
             if match := re.search(r'latency_p95_ms=([\d.]+)', output):
                 metrics.latency_p95 = float(match.group(1))
 
             if match := re.search(r'latency_p99_ms=([\d.]+)', output):
                 metrics.latency_p99 = float(match.group(1))
+
+            if match := re.search(r'latency_p999_ms=([\d.]+)', output):
+                metrics.latency_p999 = float(match.group(1))
 
             if match := re.search(r'throughput_ops_per_sec=([\d.]+)', output):
                 metrics.throughput = float(match.group(1))
@@ -63,11 +72,20 @@ class MetricsCollector:
             if match := re.search(r'total_txs=(\d+)', output):
                 metrics.tx_count = int(match.group(1))
 
+            if match := re.search(r'attempts=(\d+)', output):
+                metrics.attempts_count = int(match.group(1))
+
             if match := re.search(r'committed_txs=(\d+)', output):
                 metrics.commit_count = int(match.group(1))
 
             if match := re.search(r'aborted_txs=(\d+)', output):
                 metrics.abort_count = int(match.group(1))
+
+            if match := re.search(r'final_commit=(\d+)', output):
+                metrics.final_commit_count = int(match.group(1))
+
+            if match := re.search(r'final_abort=(\d+)', output):
+                metrics.final_abort_count = int(match.group(1))
 
         else:
             # Fallback: parse old human-readable format
@@ -105,6 +123,17 @@ class MetricsCollector:
 
             if match := re.search(r'Duration.*?:\s*([\d.]+)\s*s', output, re.IGNORECASE):
                 metrics.duration_seconds = float(match.group(1))
+
+        # Set defaults for missing fields
+        # If attempts_count not found, default to tx_count
+        if metrics.attempts_count == 0 and metrics.tx_count > 0:
+            metrics.attempts_count = metrics.tx_count
+
+        # If final counts not found, use regular counts
+        if metrics.final_commit_count == 0:
+            metrics.final_commit_count = metrics.commit_count
+        if metrics.final_abort_count == 0:
+            metrics.final_abort_count = metrics.abort_count
 
         # Check for errors (works for both formats)
         error_patterns = [
