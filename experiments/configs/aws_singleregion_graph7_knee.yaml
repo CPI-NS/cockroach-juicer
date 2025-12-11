@@ -1,0 +1,121 @@
+# AWS Single-Region Evaluation - Graph 7: Finding the Knee (Open-Loop)
+# Configuration for single-region (us-east-1) deployment
+#
+# This configuration runs an open-loop benchmark to find the system's saturation point.
+# Open-loop mode sends requests at a fixed arrival rate, independent of system response time.
+#
+# Architecture:
+#   - 3 servers in us-east-1
+#   - 3 clients in us-east-1
+#   - Single-region CockroachDB cluster with replication factor 3
+
+experiment:
+  name: "aws-singleregion-eval-graph7-knee-openloop"
+  output_dir: "../results/aws_singleregion/graph7_knee_openloop"
+  repeat_count: 3            # Run each configuration 3 times for statistical smoothness
+  timeout_seconds: 7200      # 2 hours timeout
+
+  deployment_mode: "remote"
+
+remote:
+  ssh_user: "ubuntu"
+  ssh_key: "/home/ubuntu/.ssh/aws-juicer-key.pem"
+  ssh_host_base: ""
+
+  nodes:
+    servers:
+      - hostname: "18.212.182.48"
+        ssh_port: 22
+        internal_ip: "172.31.82.214"
+        role: "cockroach"
+        node_id: 1
+        availability_zone: "us-east-1a"
+        region: "us-east-1"
+
+      - hostname: "44.206.251.9"
+        ssh_port: 22
+        internal_ip: "172.31.84.105"
+        role: "cockroach"
+        node_id: 2
+        availability_zone: "us-east-1a"
+        region: "us-east-1"
+
+      - hostname: "44.212.39.135"
+        ssh_port: 22
+        internal_ip: "172.31.82.197"
+        role: "cockroach"
+        node_id: 3
+        availability_zone: "us-east-1a"
+        region: "us-east-1"
+
+    clients:
+      - hostname: "3.83.104.223"
+        ssh_port: 22
+        internal_ip: "172.31.83.166"
+        role: "benchmark"
+        region: "us-east-1"
+
+      - hostname: "44.202.110.27"
+        ssh_port: 22
+        internal_ip: "172.31.84.5"
+        role: "benchmark"
+        region: "us-east-1"
+
+      - hostname: "54.165.144.8"
+        ssh_port: 22
+        internal_ip: "172.31.81.68"
+        role: "benchmark"
+        region: "us-east-1"
+
+  remote_paths:
+    cockroach_bin: "/home/ubuntu/cockroach"
+    benchmark_bin: "/home/ubuntu/benchmark"
+    data_dir: "/mnt/data/cockroach-data"
+    log_dir: "/mnt/data/logs"
+
+  deploy_binaries: true
+  local_build_dir: "../../cockroach-juicer/"
+
+workload:
+  # Open-loop mode settings
+  open_loop: true
+  target_rate: [500, 1000, 2000, 3000, 4000, 5000, 6000, 8000, 10000]  # Sweep arrival rate to find knee
+  duration_seconds: 60       # 60 second runs for stable measurements
+  warmup_percent: 0.25       # 15s warmup
+  cooldown_percent: 0.25     # 15s cooldown
+  openloop_inflight: 200     # Max 200 concurrent in-flight transactions per client
+
+  # Workload characteristics
+  ops_per_tx: [1]
+  key_range: [1000000]
+  distribution: ["zipfian"]
+  zipfian_s: [0.99]          # Zipfian theta parameter (skew)
+  read_write_ratio: [0.0]    # 100% writes for maximum contention
+
+concurrency:
+  num_clients: [3]           # 3 clients in single region
+  workers_per_client: [1]    # Not used in open-loop, but required
+
+juicer:
+  enabled: [false, true]
+  flush_time_us: [100]
+
+protocol:
+  type: ["MVCC"]
+
+cluster:
+  num_nodes: 3
+  base_port: 26257
+  base_http_port: 8080
+  store_size: "100GB"
+
+data_init:
+  enabled: true
+  num_keys: 1000000          # 1M keys
+  key_prefix: "key"
+  key_range: 1000000
+  batch_size: 10000
+  concurrent: 4              # 4 concurrent workers for faster init
+  use_bulk: false
+  use_hash_keys: true
+  init_timeout_seconds: 1800  # 30 minutes for 1M keys
