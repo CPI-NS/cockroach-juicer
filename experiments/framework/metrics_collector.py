@@ -45,7 +45,37 @@ class MetricsCollector:
 
         metrics = BenchmarkMetrics()
 
-        # Try parsing new METRICS: format first (from new benchmark binary)
+        # Try parsing JSON format first (most accurate - includes full latency array)
+        if "JSON_METRICS:" in output:
+            try:
+                json_start = output.find("JSON_METRICS:") + len("JSON_METRICS:")
+                json_str = output[json_start:].strip()
+                # Find the JSON object (starts with { and ends with })
+                json_end = json_str.find('\n')
+                if json_end == -1:
+                    json_end = len(json_str)
+                json_str = json_str[:json_end].strip()
+
+                metrics_json = json.loads(json_str)
+                metrics.tx_count = len(metrics_json['latencyList'])
+                metrics.attempts_count = metrics_json['attempts']
+                metrics.commit_count = metrics_json['commit']
+                metrics.abort_count = metrics_json['abort']
+                metrics.final_commit_count = metrics_json.get('finalCommit', metrics.commit_count)
+                metrics.final_abort_count = metrics_json.get('finalAbort', metrics.abort_count)
+                metrics.abort_rate = metrics_json.get('abortRate', 0.0)
+                metrics.latency_p50 = metrics_json['latencyP50']
+                metrics.latency_p90 = metrics_json.get('latencyP90', 0.0)
+                metrics.latency_p95 = metrics_json.get('latencyP95', 0.0)
+                metrics.latency_p99 = metrics_json['latencyP99']
+                metrics.latency_p999 = metrics_json.get('latencyP999', 0.0)
+                metrics.throughput = metrics_json['tps']
+                return metrics
+            except (json.JSONDecodeError, KeyError, IndexError) as e:
+                # Fall through to text parsing if JSON fails
+                pass
+
+        # Try parsing new METRICS: format (from new benchmark binary)
         if "METRICS:" in output:
             # Parse key=value format
             if match := re.search(r'latency_p50_ms=([\d.]+)', output):

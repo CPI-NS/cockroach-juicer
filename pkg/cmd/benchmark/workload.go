@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"math"
@@ -329,11 +330,16 @@ func PrintResults(results *WorkloadResults) {
 	fmt.Printf("  P99: %.2f ms\n", p99)
 	fmt.Printf("\n")
 
+	// Calculate additional percentiles for JSON output
+	p90, p999 := calculateAdditionalPercentiles(results.Latencies)
+
 	// Print in parseable format for framework
 	fmt.Printf("METRICS:\n")
 	fmt.Printf("latency_p50_ms=%.2f\n", p50)
+	fmt.Printf("latency_p90_ms=%.2f\n", p90)
 	fmt.Printf("latency_p95_ms=%.2f\n", p95)
 	fmt.Printf("latency_p99_ms=%.2f\n", p99)
+	fmt.Printf("latency_p999_ms=%.2f\n", p999)
 	fmt.Printf("latency_avg_ms=%.2f\n", avgLatency)
 	fmt.Printf("throughput_ops_per_sec=%.2f\n", throughput)
 	fmt.Printf("abort_rate_percent=%.2f\n", abortRate)
@@ -341,6 +347,10 @@ func PrintResults(results *WorkloadResults) {
 	fmt.Printf("total_attempts=%d\n", results.TotalAttempts)
 	fmt.Printf("committed_txs=%d\n", results.CommittedTxs)
 	fmt.Printf("aborted_txs=%d\n", results.AbortedTxs)
+
+	// Print JSON format with full latency array for better analysis
+	fmt.Printf("\nJSON_METRICS:\n")
+	printJSONMetrics(results, p50, p90, p95, p99, p999, avgLatency, throughput, abortRate)
 }
 
 func calculatePercentiles(latencies []time.Duration) (p50, p95, p99 float64) {
@@ -391,6 +401,74 @@ func calculateAverage(latencies []time.Duration) float64 {
 	}
 
 	return float64(total) / float64(len(latencies)) / float64(time.Millisecond)
+}
+
+func calculateAdditionalPercentiles(latencies []time.Duration) (p90, p999 float64) {
+	if len(latencies) == 0 {
+		return 0, 0
+	}
+
+	// Sort latencies
+	sorted := make([]time.Duration, len(latencies))
+	copy(sorted, latencies)
+
+	// Simple bubble sort
+	for i := 0; i < len(sorted); i++ {
+		for j := i + 1; j < len(sorted); j++ {
+			if sorted[i] > sorted[j] {
+				sorted[i], sorted[j] = sorted[j], sorted[i]
+			}
+		}
+	}
+
+	p90Idx := int(float64(len(sorted)) * 0.90)
+	p999Idx := int(float64(len(sorted)) * 0.999)
+
+	if p90Idx >= len(sorted) {
+		p90Idx = len(sorted) - 1
+	}
+	if p999Idx >= len(sorted) {
+		p999Idx = len(sorted) - 1
+	}
+
+	return sorted[p90Idx].Seconds() * 1000,
+		sorted[p999Idx].Seconds() * 1000
+}
+
+func printJSONMetrics(results *WorkloadResults, p50, p90, p95, p99, p999, avgLatency, throughput, abortRate float64) {
+	// Convert latencies to milliseconds for JSON
+	latencyListMs := make([]float64, len(results.Latencies))
+	for i, lat := range results.Latencies {
+		latencyListMs[i] = lat.Seconds() * 1000
+	}
+
+	// Build JSON object matching advisor's format
+	jsonData := map[string]interface{}{
+		"latencyList":   latencyListMs,
+		"commit":        results.CommittedTxs,
+		"abort":         results.AbortedTxs,
+		"attempts":      results.TotalAttempts,
+		"finalCommit":   results.CommittedTxs,
+		"finalAbort":    results.TotalAttempts - results.CommittedTxs,
+		"latencyP50":    p50,
+		"latencyP90":    p90,
+		"latencyP95":    p95,
+		"latencyP99":    p99,
+		"latencyP999":   p999,
+		"latencyAvg":    avgLatency,
+		"tps":           throughput,
+		"abortRate":     abortRate,
+		"totalTxs":      results.TotalTxs,
+		"totalAttempts": results.TotalAttempts,
+	}
+
+	jsonBytes, err := json.Marshal(jsonData)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error marshaling JSON: %v\n", err)
+		return
+	}
+
+	fmt.Println(string(jsonBytes))
 }
 
 // ZipfGenerator generates keys according to Zipfian distribution.
