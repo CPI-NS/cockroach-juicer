@@ -71,27 +71,32 @@ def build_manager(args: argparse.Namespace) -> ClusterManager:
 
 def cmd_start(mgr: ClusterManager, args: argparse.Namespace):
     ok = mgr.start(insecure=not args.secure, store_size=args.store_size)
+    print("Started cluster" if ok else "Failed to start cluster")
     sys.exit(0 if ok else 1)
 
 
 def cmd_stop(mgr: ClusterManager, args: argparse.Namespace):
     ok = mgr.stop(graceful=not args.force)
+    print("Stopped cluster" if ok else "Failed to stop cluster")
     sys.exit(0 if ok else 1)
 
 
 def cmd_restart(mgr: ClusterManager, args: argparse.Namespace):
     mgr.stop(graceful=not args.force)
     ok = mgr.start(insecure=not args.secure, store_size=args.store_size)
+    print("Restarted cluster" if ok else "Failed to restart cluster")
     sys.exit(0 if ok else 1)
 
 
 def cmd_cleanup(mgr: ClusterManager, args: argparse.Namespace):
     mgr.cleanup()
+    print("Cleaned up cluster data directories")
     sys.exit(0)
 
 
 def cmd_reset_db(mgr: ClusterManager, args: argparse.Namespace):
     ok = mgr.reset_database(db_name=args.db)
+    print(f"Reset database '{args.db}'" if ok else f"Failed to reset database '{args.db}'")
     sys.exit(0 if ok else 1)
 
 
