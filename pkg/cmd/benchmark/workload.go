@@ -32,8 +32,7 @@ type WorkloadConfig struct {
 	KeyRange       int
 	KeyPrefix      string
 	Distribution   string  // "uniform" or "zipfian"
-	ZipfianS       float64
-	ZipfianV       float64
+	ZipfianS       float64 // Zipfian theta parameter (used by workloadimpl.ZipfGenerator)
 	ReadWriteRatio float64 // 0.0 = all writes, 1.0 = all reads
 	Workers        int
 	Protocol       string // "2PL" or "2PL-WW"
@@ -69,7 +68,7 @@ func RunWorkload(ctx context.Context, db *kv.DB, cfg WorkloadConfig) (*WorkloadR
 	fmt.Printf("  Key range: 1-%d (prefix: %s)\n", cfg.KeyRange, cfg.KeyPrefix)
 	fmt.Printf("  Distribution: %s", cfg.Distribution)
 	if cfg.Distribution == "zipfian" {
-		fmt.Printf(" (s=%.2f, v=%.2f)", cfg.ZipfianS, cfg.ZipfianV)
+		fmt.Printf(" (theta=%.2f)", cfg.ZipfianS)
 	}
 	fmt.Printf("\n")
 	fmt.Printf("  Read/Write ratio: %.2f\n", cfg.ReadWriteRatio)

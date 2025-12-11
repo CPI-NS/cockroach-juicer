@@ -10,8 +10,7 @@ class WorkloadConfig:
     ops_per_tx: List[int] = field(default_factory=lambda: [10])
     key_range: List[int] = field(default_factory=lambda: [100])
     distribution: List[str] = field(default_factory=lambda: ["uniform"])
-    zipfian_s: List[float] = field(default_factory=lambda: [1.1])
-    zipfian_v: List[float] = field(default_factory=lambda: [1.0])
+    zipfian_s: List[float] = field(default_factory=lambda: [1.1])  # Zipfian theta parameter (skew)
     read_write_ratio: List[float] = field(default_factory=lambda: [0.5])
     # Open-loop mode settings
     open_loop: bool = False
@@ -125,7 +124,6 @@ def load_config(config_path: str) -> ExperimentConfig:
         key_range=_ensure_list(workload_data.get('key_range', [100])),
         distribution=_ensure_list(workload_data.get('distribution', ['uniform'])),
         zipfian_s=_ensure_list(workload_data.get('zipfian_s', [1.1])),
-        zipfian_v=_ensure_list(workload_data.get('zipfian_v', [1.0])),
         read_write_ratio=_ensure_list(workload_data.get('read_write_ratio', [0.5])),
         # Open-loop mode settings
         open_loop=workload_data.get('open_loop', False),
@@ -252,26 +250,24 @@ def generate_experiment_matrix(config: ExperimentConfig) -> List[Dict[str, Any]]
     if config.workload.open_loop:
         # For open-loop, use target_rate instead of tx_count/workers_per_client
         param_names.extend(['target_rate', 'ops_per_tx', 'key_range', 'distribution',
-                            'zipfian_s', 'zipfian_v', 'read_write_ratio'])
+                            'zipfian_s', 'read_write_ratio'])
         param_values.extend([
             config.workload.target_rate,
             config.workload.ops_per_tx,
             config.workload.key_range,
             config.workload.distribution,
             config.workload.zipfian_s,
-            config.workload.zipfian_v,
             config.workload.read_write_ratio
         ])
     else:
         param_names.extend(['tx_count', 'ops_per_tx', 'key_range', 'distribution',
-                            'zipfian_s', 'zipfian_v', 'read_write_ratio'])
+                            'zipfian_s', 'read_write_ratio'])
         param_values.extend([
             config.workload.tx_count,
             config.workload.ops_per_tx,
             config.workload.key_range,
             config.workload.distribution,
             config.workload.zipfian_s,
-            config.workload.zipfian_v,
             config.workload.read_write_ratio
         ])
 
@@ -299,7 +295,6 @@ def generate_experiment_matrix(config: ExperimentConfig) -> List[Dict[str, Any]]
 
         if exp_params['distribution'] == 'uniform':
             exp_params['zipfian_s'] = None
-            exp_params['zipfian_v'] = None
 
         # Add open-loop mode settings if enabled
         if config.workload.open_loop:

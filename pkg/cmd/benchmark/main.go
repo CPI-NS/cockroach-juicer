@@ -47,8 +47,7 @@ var (
 	keyRange       = flag.Int("key-range", 1000, "key range for workload (1 to key-range)")
 	keyPrefix      = flag.String("key-prefix", "key", "prefix for keys in workload")
 	distribution   = flag.String("distribution", "uniform", "distribution type: uniform or zipfian")
-	zipfianS       = flag.Float64("zipfian-s", 1.1, "zipfian skew parameter")
-	zipfianV       = flag.Float64("zipfian-v", 1.0, "zipfian velocity parameter")
+	zipfianS       = flag.Float64("zipfian-s", 1.1, "zipfian theta parameter (skew)")
 	readWriteRatio = flag.Float64("read-write-ratio", 0.5, "ratio of reads to total operations")
 	workers        = flag.Int("workers", 10, "number of worker goroutines (closed-loop mode)")
 	protocol       = flag.String("protocol", "2PL-WW", "concurrency control protocol: 2PL or 2PL-WW")
@@ -148,7 +147,6 @@ func main() {
 			KeyPrefix:      *keyPrefix,
 			Distribution:   *distribution,
 			ZipfianS:       *zipfianS,
-			ZipfianV:       *zipfianV,
 			ReadWriteRatio: *readWriteRatio,
 			Workers:        *workers,
 			Protocol:       *protocol,

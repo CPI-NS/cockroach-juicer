@@ -147,8 +147,7 @@ workload:
   ops_per_tx: [1]
   key_range: [1000000]
   distribution: ["zipfian"]
-  zipfian_s: [0.99]
-  zipfian_v: [1.0]
+  zipfian_s: [0.99]          # Zipfian theta parameter (skew)
   read_write_ratio: [0.0]    # 100% writes for maximum contention
 
 concurrency:

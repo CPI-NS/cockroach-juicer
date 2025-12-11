@@ -19,7 +19,6 @@ class WorkloadGenerator:
         key_range: int,
         distribution: str = "uniform",
         zipfian_s: Optional[float] = None,
-        zipfian_v: Optional[float] = None,
         read_write_ratio: float = 0.5,
         output_file: Optional[str] = None
     ) -> Dict[str, Any]:
@@ -33,10 +32,9 @@ class WorkloadGenerator:
         }
 
         if distribution == "zipfian":
-            if zipfian_s is None or zipfian_v is None:
-                raise ValueError("zipfian_s and zipfian_v required for zipfian distribution")
+            if zipfian_s is None:
+                raise ValueError("zipfian_s required for zipfian distribution")
             workload_spec['zipfian_s'] = zipfian_s
-            workload_spec['zipfian_v'] = zipfian_v
 
         if output_file:
             output_path = Path(output_file)

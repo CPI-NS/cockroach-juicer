@@ -175,7 +175,6 @@ class BenchmarkRunner:
                     'key_range': exp_params['key_range'],
                     'distribution': exp_params['distribution'],
                     'zipfian_s': exp_params.get('zipfian_s'),
-                    'zipfian_v': exp_params.get('zipfian_v'),
                     'read_write_ratio': exp_params['read_write_ratio']
                 },
                 'num_clients': exp_params['num_clients'],
@@ -193,7 +192,6 @@ class BenchmarkRunner:
                 key_range=exp_params['key_range'],
                 distribution=exp_params['distribution'],
                 zipfian_s=exp_params.get('zipfian_s'),
-                zipfian_v=exp_params.get('zipfian_v'),
                 read_write_ratio=exp_params['read_write_ratio']
             )
 
@@ -698,7 +696,6 @@ class BenchmarkRunner:
 
         if workload['distribution'] == 'zipfian':
             cmd.append(f"--zipfian-s={workload['zipfian_s']}")
-            cmd.append(f"--zipfian-v={workload['zipfian_v']}")
 
         return cmd
 
@@ -726,7 +723,6 @@ class BenchmarkRunner:
 
         if bench_params['workload']['distribution'] == 'zipfian':
             cmd.append(f"--zipfian-s={bench_params['workload']['zipfian_s']}")
-            cmd.append(f"--zipfian-v={bench_params['workload']['zipfian_v']}")
 
         return cmd
 
@@ -773,7 +769,6 @@ class BenchmarkRunner:
 
         if workload['distribution'] == 'zipfian':
             cmd.append(f"--zipfian-s={workload['zipfian_s']}")
-            cmd.append(f"--zipfian-v={workload['zipfian_v']}")
 
         return cmd
 
