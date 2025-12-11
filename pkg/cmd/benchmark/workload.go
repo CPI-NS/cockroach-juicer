@@ -10,8 +10,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
-	"math"
 	"math/rand"
+	randv2 "math/rand/v2"
 	"os"
 	"strconv"
 	"sync"
@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/workload/workloadimpl"
 	"github.com/cockroachdb/errors"
 )
 
@@ -103,9 +104,19 @@ func RunWorkload(ctx context.Context, db *kv.DB, cfg WorkloadConfig) (*WorkloadR
 		go func(workerID int) {
 			defer wg.Done()
 
-			// Create per-worker random source
-			rng := rand.New(rand.NewSource(time.Now().UnixNano() + int64(workerID)))
-			zipfGen := NewZipfGenerator(rng, cfg.KeyRange, cfg.ZipfianS, cfg.ZipfianV)
+			// Create per-worker random source (using randv2 for workloadimpl.ZipfGenerator)
+			source := randv2.NewPCG(uint64(time.Now().UnixNano()+int64(workerID)), uint64(workerID))
+			rng := randv2.New(source)
+
+			// Use workloadimpl.ZipfGenerator (the proper CockroachDB implementation)
+			zipfGen, err := workloadimpl.NewZipfGenerator(rng, 1, uint64(cfg.KeyRange), cfg.ZipfianS, false)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Worker %d: Failed to create Zipf generator: %v\n", workerID, err)
+				return
+			}
+
+			// Create old-style rand.Rand for other random operations (read/write ratio, etc.)
+			oldRng := rand.New(rand.NewSource(time.Now().UnixNano() + int64(workerID)))
 
 			for item := range workChan {
 				start := time.Now()
@@ -115,7 +126,7 @@ func RunWorkload(ctx context.Context, db *kv.DB, cfg WorkloadConfig) (*WorkloadR
 				txCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 				for retries := 0; retries < 10; retries++ {
 					atomic.AddInt64(&totalAttempts, 1) // Count every attempt
-					err := executeTransaction(txCtx, db, cfg, rng, zipfGen, item.txID)
+					err := executeTransaction(txCtx, db, cfg, oldRng, zipfGen, item.txID)
 					if err == nil {
 						committed = true
 						break
@@ -213,7 +224,7 @@ func executeTransaction(
 	db *kv.DB,
 	cfg WorkloadConfig,
 	rng *rand.Rand,
-	zipfGen *ZipfGenerator,
+	zipfGen *workloadimpl.ZipfGenerator,
 	txID int,
 ) error {
 	// Create transaction
@@ -229,7 +240,7 @@ func executeTransaction(
 		// Single read-modify-write operation per transaction
 		var keyID int
 		if cfg.Distribution == "zipfian" {
-			keyID = zipfGen.Next()
+			keyID = int(zipfGen.Uint64())
 		} else {
 			keyID = rng.Intn(cfg.KeyRange) + 1
 		}
@@ -252,7 +263,7 @@ func executeTransaction(
 		// Determine key
 		var keyID int
 		if cfg.Distribution == "zipfian" {
-			keyID = zipfGen.Next()
+			keyID = int(zipfGen.Uint64())
 		} else {
 			keyID = rng.Intn(cfg.KeyRange) + 1
 		}
@@ -471,57 +482,5 @@ func printJSONMetrics(results *WorkloadResults, p50, p90, p95, p99, p999, avgLat
 	fmt.Println(string(jsonBytes))
 }
 
-// ZipfGenerator generates keys according to Zipfian distribution.
-type ZipfGenerator struct {
-	rng      *rand.Rand
-	keyRange int
-	s        float64
-	v        float64
-	alpha    float64
-	eta      float64
-	theta    float64
-	zeta2    float64
-	zetaN    float64
-}
-
-// NewZipfGenerator creates a new Zipfian distribution generator.
-func NewZipfGenerator(rng *rand.Rand, keyRange int, s, v float64) *ZipfGenerator {
-	gen := &ZipfGenerator{
-		rng:      rng,
-		keyRange: keyRange,
-		s:        s,
-		v:        v,
-	}
-
-	gen.theta = s
-	gen.zeta2 = gen.zeta(2)
-	gen.alpha = 1.0 / (1.0 - gen.theta)
-	gen.zetaN = gen.zeta(keyRange)
-	gen.eta = (1 - math.Pow(2.0/float64(keyRange), 1-gen.theta)) / (1 - gen.zeta2/gen.zetaN)
-
-	return gen
-}
-
-// Next returns the next key ID according to Zipfian distribution.
-func (z *ZipfGenerator) Next() int {
-	u := z.rng.Float64()
-	uz := u * z.zetaN
-
-	if uz < 1.0 {
-		return 1
-	}
-
-	if uz < 1.0+math.Pow(0.5, z.theta) {
-		return 2
-	}
-
-	return 1 + int(float64(z.keyRange)*math.Pow(z.eta*u-z.eta+1, z.alpha))
-}
-
-func (z *ZipfGenerator) zeta(n int) float64 {
-	sum := 0.0
-	for i := 1; i <= n; i++ {
-		sum += 1.0 / math.Pow(float64(i), z.theta)
-	}
-	return sum
-}
+// Old custom ZipfGenerator removed - now using workloadimpl.ZipfGenerator
+// which is the proper CockroachDB implementation from the YCSB paper
