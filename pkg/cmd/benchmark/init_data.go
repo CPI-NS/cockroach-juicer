@@ -189,13 +189,15 @@ func initDataConcurrent(ctx context.Context, db *kv.DB, cfg InitDataConfig) erro
 					}
 
 					// Update progress
-					progressMu.Lock()
-					keysProcessed += item.count
-					if keysProcessed%10000 == 0 || keysProcessed >= cfg.NumKeys {
-						fmt.Printf("  Progress: %d/%d keys (%.1f%%)\n",
-							keysProcessed, cfg.NumKeys, float64(keysProcessed)/float64(cfg.NumKeys)*100)
-					}
-					progressMu.Unlock()
+					func() {
+						progressMu.Lock()
+						defer progressMu.Unlock()
+						keysProcessed += item.count
+						if keysProcessed%10000 == 0 || keysProcessed >= cfg.NumKeys {
+							fmt.Printf("  Progress: %d/%d keys (%.1f%%)\n",
+								keysProcessed, cfg.NumKeys, float64(keysProcessed)/float64(cfg.NumKeys)*100)
+						}
+					}()
 				}
 			}
 		}(i)
