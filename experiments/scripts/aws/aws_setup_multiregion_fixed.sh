@@ -12,7 +12,7 @@ echo ""
 # Configuration
 INSTANCE_TYPE_SERVER="t3.2xlarge"
 INSTANCE_TYPE_CLIENT="t3.2xlarge"
-KEY_NAME="aws-juicer-key"
+KEY_NAME="aws-rf-juicer-key"
 SECURITY_GROUP_NAME="juicer-cluster-sg"
 
 # AMI IDs for Ubuntu 22.04 LTS
@@ -72,7 +72,7 @@ echo "Importing key to us-east-2 and us-west-1..."
 TEMP_PUB_KEY="/tmp/aws-juicer-pubkey.tmp"
 echo "$PUBLIC_KEY" > "$TEMP_PUB_KEY"
 
-for REGION in us-east-2 us-west-1; do
+for REGION in us-east-1 us-east-2 us-west-1; do
     echo "  $REGION..."
 
     # Delete existing key
@@ -148,8 +148,8 @@ setup_region() {
         MY_IP=$(curl -s https://checkip.amazonaws.com)
 
         # Add rules
-        aws ec2 authorize-security-group-ingress --group-id "$SG_ID" --protocol tcp --port 22 --cidr "${MY_IP}/32" --region "$REGION" 2>/dev/null || true
-        aws ec2 authorize-security-group-ingress --group-id "$SG_ID" --protocol tcp --port 8080 --cidr "${MY_IP}/32" --region "$REGION" 2>/dev/null || true
+        aws ec2 authorize-security-group-ingress --group-id "$SG_ID" --protocol tcp --port 22 --cidr "0.0.0.0/0" --region "$REGION" 2>/dev/null || true
+        aws ec2 authorize-security-group-ingress --group-id "$SG_ID" --protocol tcp --port 8080 --cidr "0.0.0.0/0" --region "$REGION" 2>/dev/null || true
         aws ec2 authorize-security-group-ingress --group-id "$SG_ID" --protocol tcp --port 26257 --cidr "0.0.0.0/0" --region "$REGION" 2>/dev/null || true
         aws ec2 authorize-security-group-ingress --group-id "$SG_ID" --protocol tcp --port 26258-26266 --cidr "0.0.0.0/0" --region "$REGION" 2>/dev/null || true
         aws ec2 authorize-security-group-ingress --group-id "$SG_ID" --protocol icmp --port -1 --cidr "0.0.0.0/0" --region "$REGION" 2>/dev/null || true
@@ -180,7 +180,7 @@ launch_instances() {
     echo ""
     echo "Launching $COUNT x $TYPE in $REGION ($ROLE)..."
 
-    if [ "$ROLE" == "server" ]; then
+    if [ "$ROLE" == "han-crdb-server" ]; then
         BLOCK_DEVICES='[{"DeviceName":"/dev/sda1","Ebs":{"VolumeSize":30,"VolumeType":"gp3"}},{"DeviceName":"/dev/sdf","Ebs":{"VolumeSize":100,"VolumeType":"gp3","Iops":3000,"Throughput":125}}]'
     else
         BLOCK_DEVICES='[{"DeviceName":"/dev/sda1","Ebs":{"VolumeSize":30,"VolumeType":"gp3"}}]'
@@ -194,7 +194,7 @@ launch_instances() {
         --security-group-ids "$SG" \
         --subnet-id "$SUBNET" \
         --block-device-mappings "$BLOCK_DEVICES" \
-        --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${NAME}},{Key=Role,Value=${ROLE}},{Key=Project,Value=juicer-eval},{Key=Region,Value=${REGION}}]" \
+        --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${NAME}},{Key=Role,Value=${ROLE}},{Key=Project,Value=han-crdb-juicer-eval},{Key=Region,Value=${REGION}}]" \
         --region "$REGION" \
         --query 'Instances[*].InstanceId' \
         --output text)
@@ -216,14 +216,14 @@ echo "=========================================="
 echo "Launching Instances"
 echo "=========================================="
 
-launch_instances "juicer-server-east1" 3 "$INSTANCE_TYPE_SERVER" "us-east-1" "$AMI_US_EAST_1" "$SUBNET_us_east_1" "$SG_us_east_1" "server"
-launch_instances "juicer-client-east1" 3 "$INSTANCE_TYPE_CLIENT" "us-east-1" "$AMI_US_EAST_1" "$SUBNET_us_east_1" "$SG_us_east_1" "client"
+launch_instances "han-crdb-juicer-server-east1" 3 "$INSTANCE_TYPE_SERVER" "us-east-1" "$AMI_US_EAST_1" "$SUBNET_us_east_1" "$SG_us_east_1" "han-crdb-server"
+launch_instances "han-crdb-juicer-client-east1" 3 "$INSTANCE_TYPE_CLIENT" "us-east-1" "$AMI_US_EAST_1" "$SUBNET_us_east_1" "$SG_us_east_1" "han-crdb-client"
 
-launch_instances "juicer-server-east2" 3 "$INSTANCE_TYPE_SERVER" "us-east-2" "$AMI_US_EAST_2" "$SUBNET_us_east_2" "$SG_us_east_2" "server"
-launch_instances "juicer-client-east2" 3 "$INSTANCE_TYPE_CLIENT" "us-east-2" "$AMI_US_EAST_2" "$SUBNET_us_east_2" "$SG_us_east_2" "client"
+launch_instances "han-crdb-juicer-server-east2" 3 "$INSTANCE_TYPE_SERVER" "us-east-2" "$AMI_US_EAST_2" "$SUBNET_us_east_2" "$SG_us_east_2" "han-crdb-server"
+launch_instances "han-crdb-juicer-client-east2" 3 "$INSTANCE_TYPE_CLIENT" "us-east-2" "$AMI_US_EAST_2" "$SUBNET_us_east_2" "$SG_us_east_2" "han-crdb-client"
 
-launch_instances "juicer-server-west1" 3 "$INSTANCE_TYPE_SERVER" "us-west-1" "$AMI_US_WEST_1" "$SUBNET_us_west_1" "$SG_us_west_1" "server"
-launch_instances "juicer-client-west1" 3 "$INSTANCE_TYPE_CLIENT" "us-west-1" "$AMI_US_WEST_1" "$SUBNET_us_west_1" "$SG_us_west_1" "client"
+launch_instances "han-crdb-juicer-server-west1" 3 "$INSTANCE_TYPE_SERVER" "us-west-1" "$AMI_US_WEST_1" "$SUBNET_us_west_1" "$SG_us_west_1" "han-crdb-server"
+launch_instances "han-crdb-juicer-client-west1" 3 "$INSTANCE_TYPE_CLIENT" "us-west-1" "$AMI_US_WEST_1" "$SUBNET_us_west_1" "$SG_us_west_1" "han-crdb-client"
 
 # Test SSH connections
 echo ""
@@ -240,7 +240,7 @@ for REGION in us-east-1 us-east-2 us-west-1; do
 
     TEST_IP=$(aws ec2 describe-instances \
         --region "$REGION" \
-        --filters "Name=tag:Project,Values=juicer-eval" "Name=instance-state-name,Values=running" \
+        --filters "Name=tag:Project,Values=han-crdb-juicer-eval" "Name=instance-state-name,Values=running" \
         --query 'Reservations[0].Instances[0].PublicIpAddress' \
         --output text)
 
@@ -272,7 +272,7 @@ for REGION in us-east-1 us-east-2 us-west-1; do
     echo "# SERVERS - $REGION" >> "$OUTPUT_FILE"
     aws ec2 describe-instances \
         --region "$REGION" \
-        --filters "Name=tag:Role,Values=server" "Name=instance-state-name,Values=running" \
+        --filters "Name=tag:Role,Values=han-crdb-server" "Name=instance-state-name,Values=running" "Name=tag:Project,Values=han-crdb-juicer-eval" \
         --query 'Reservations[*].Instances[*].[Tags[?Key==`Name`].Value|[0],PublicIpAddress,PrivateIpAddress]' \
         --output text | sort | while read -r name public private; do
             echo "${name}: public=${public}  private=${private}  region=${REGION}" >> "$OUTPUT_FILE"
@@ -283,7 +283,7 @@ for REGION in us-east-1 us-east-2 us-west-1; do
     echo "# CLIENTS - $REGION" >> "$OUTPUT_FILE"
     aws ec2 describe-instances \
         --region "$REGION" \
-        --filters "Name=tag:Role,Values=client" "Name=instance-state-name,Values=running" \
+        --filters "Name=tag:Role,Values=han-crdb-client" "Name=instance-state-name,Values=running" "Name=tag:Project,Values=han-crdb-juicer-eval" \
         --query 'Reservations[*].Instances[*].[Tags[?Key==`Name`].Value|[0],PublicIpAddress,PrivateIpAddress]' \
         --output text | sort | while read -r name public private; do
             echo "${name}: public=${public}  private=${private}  region=${REGION}" >> "$OUTPUT_FILE"

@@ -7,7 +7,7 @@ echo "=========================================="
 echo "Stop/Terminate Juicer AWS Instances"
 echo "=========================================="
 echo ""
-echo "This script will find all instances tagged with 'Project=juicer-eval'"
+echo "This script will find all instances tagged with 'Project=han-crdb-juicer-eval'"
 echo ""
 
 # Check AWS CLI
@@ -21,7 +21,7 @@ get_instances_in_region() {
     local REGION=$1
     aws ec2 describe-instances \
         --region "$REGION" \
-        --filters "Name=tag:Project,Values=juicer-eval" "Name=instance-state-name,Values=running,stopped" \
+        --filters "Name=tag:Project,Values=han-crdb-juicer-eval" "Name=instance-state-name,Values=running,stopped" \
         --query 'Reservations[*].Instances[*].[InstanceId,State.Name,Tags[?Key==`Name`].Value|[0]]' \
         --output text 2>/dev/null || echo ""
 }
@@ -47,7 +47,7 @@ for REGION in "${REGIONS[@]}"; do
 done
 
 if [ $TOTAL_COUNT -eq 0 ]; then
-    echo "No Juicer instances found."
+    echo "No han-crdb-juicer-eval instances found."
     exit 0
 fi
 
@@ -94,7 +94,7 @@ esac
 for REGION in "${REGIONS[@]}"; do
     INSTANCE_IDS=$(aws ec2 describe-instances \
         --region "$REGION" \
-        --filters "Name=tag:Project,Values=juicer-eval" "Name=instance-state-name,Values=running" \
+        --filters "Name=tag:Project,Values=han-crdb-juicer-eval" "Name=instance-state-name,Values=running" \
         --query 'Reservations[*].Instances[*].InstanceId' \
         --output text 2>/dev/null)
 

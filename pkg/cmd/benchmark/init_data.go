@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -243,14 +242,14 @@ func initDataConcurrent(ctx context.Context, db *kv.DB, cfg InitDataConfig) erro
 
 	select {
 	case err := <-errChan:
-		cancel()   // Ensure context is cancelled
-		wg.Wait()  // Wait for all workers to exit
+		cancel()  // Ensure context is cancelled
+		wg.Wait() // Wait for all workers to exit
 		return err
 	case <-done:
 		return nil
 	case <-ctx.Done():
-		cancel()   // Cancel worker context
-		wg.Wait()  // Wait for all workers to exit
+		cancel()  // Cancel worker context
+		wg.Wait() // Wait for all workers to exit
 		return ctx.Err()
 	}
 }
@@ -261,10 +260,11 @@ func initDataWithBulkAdder(ctx context.Context, db *kv.DB, cfg InitDataConfig) e
 
 	// Get DistSender and RangeCache
 	ds := db.NonTransactionalSender()
-	distSender, ok := ds.(*kvcoord.DistSender)
-	if !ok {
-		return errors.New("failed to get DistSender from DB")
-	}
+	distSender := ds.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
+	// distSender, ok := ds.(*kvcoord.DistSender)
+	// if !ok {
+	// 	return errors.New("failed to get DistSender from DB")
+	// }
 
 	rangeCache := rangecache.NewRangeCache(
 		cluster.MakeTestingClusterSettings(),
@@ -288,7 +288,7 @@ func initDataWithBulkAdder(ctx context.Context, db *kv.DB, cfg InitDataConfig) e
 		db,
 		rangeCache,
 		cluster.MakeTestingClusterSettings(),
-		hlc.Timestamp{}, // Use current time
+		db.Clock().Now(), // Use current time
 		kvserverbase.BulkAdderOptions{
 			Name:          "benchmark-init",
 			MaxBufferSize: func() int64 { return cfg.BulkAdderBufferSize },
@@ -302,6 +302,7 @@ func initDataWithBulkAdder(ctx context.Context, db *kv.DB, cfg InitDataConfig) e
 	}
 	defer bulkAdder.Close(ctx)
 
+	fmt.Printf("Begin writing data to BulkAdder\n")
 	// Write data
 	for i := 0; i < cfg.NumKeys; i++ {
 		keyID := (i + 1) % cfg.KeyRange
@@ -316,8 +317,10 @@ func initDataWithBulkAdder(ctx context.Context, db *kv.DB, cfg InitDataConfig) e
 			return errors.Wrapf(err, "failed to add key at index %d", i)
 		}
 
+		fmt.Printf("Added key at index %d\n", i)
 		// Periodically flush (BulkAdder also auto-flushes)
 		if (i+1)%1000 == 0 {
+			fmt.Printf("Begin flushing at index %d\n", i)
 			if err := bulkAdder.Flush(ctx); err != nil {
 				return errors.Wrapf(err, "failed to flush at index %d", i)
 			}

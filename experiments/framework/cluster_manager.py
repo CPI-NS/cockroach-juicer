@@ -200,7 +200,7 @@ class ClusterManager:
         if not self.remote_mode:
             return True
 
-        server_nodes = [n for n in self.remote_nodes if n.get('role') == 'cockroach']
+        server_nodes = [n for n in self.remote_nodes if n.get('role') == 'han-crdb-server']
 
         for node in server_nodes:
             hostname = node['hostname']
@@ -247,7 +247,7 @@ class ClusterManager:
         if not self.remote_mode:
             return True
 
-        client_nodes = [n for n in self.remote_nodes if n.get('role') == 'benchmark']
+        client_nodes = [n for n in self.remote_nodes if n.get('role') == 'han-crdb-client']
 
         self.logger.info(f"Deploying benchmark binary to {len(client_nodes)} client nodes...")
 
@@ -336,7 +336,7 @@ class ClusterManager:
 
     def _start_remote_cluster(self, insecure: bool, store_size: str) -> bool:
         """Start CockroachDB cluster on remote nodes."""
-        server_nodes = [n for n in self.remote_nodes if n.get('role') == 'cockroach']
+        server_nodes = [n for n in self.remote_nodes if n.get('role') == 'han-crdb-server']
 
         if not server_nodes:
             self.logger.error("No server nodes defined in remote configuration")
@@ -453,7 +453,7 @@ class ClusterManager:
 
     def _wait_until_ready_remote(self, timeout: int = 30) -> bool:
         """Wait for remote cluster to be ready."""
-        server_nodes = [n for n in self.remote_nodes if n.get('role') == 'cockroach']
+        server_nodes = [n for n in self.remote_nodes if n.get('role') == 'han-crdb-server']
         if not server_nodes:
             return False
 
@@ -640,7 +640,7 @@ class ClusterManager:
 
     def _stop_remote_cluster(self, graceful: bool = True) -> bool:
         """Stop remote CockroachDB cluster."""
-        server_nodes = [n for n in self.remote_nodes if n.get('role') == 'cockroach']
+        server_nodes = [n for n in self.remote_nodes if n.get('role') == 'han-crdb-server']
 
         if not server_nodes:
             return True
@@ -718,7 +718,7 @@ class ClusterManager:
         try:
             if self.remote_mode:
                 # Remote mode: run SQL command via SSH
-                server_nodes = [n for n in self.remote_nodes if n.get('role') == 'cockroach']
+                server_nodes = [n for n in self.remote_nodes if n.get('role') == 'han-crdb-server']
                 if not server_nodes:
                     return False
 
@@ -771,7 +771,7 @@ class ClusterManager:
 
     def _cleanup_remote(self):
         """Cleanup remote cluster data."""
-        server_nodes = [n for n in self.remote_nodes if n.get('role') == 'cockroach']
+        server_nodes = [n for n in self.remote_nodes if n.get('role') == 'han-crdb-server']
 
         for node in server_nodes:
             hostname = node['hostname']
@@ -794,7 +794,7 @@ class ClusterManager:
 
         if self.remote_mode:
             # Use first server node's IP
-            server_nodes = [n for n in self.remote_nodes if n.get('role') == 'cockroach']
+            server_nodes = [n for n in self.remote_nodes if n.get('role') == 'han-crdb-server']
             if server_nodes:
                 host = server_nodes[0]['internal_ip']
                 return f"postgresql://root@{host}:{self.base_port}/{db_name}?sslmode={ssl_mode}"
@@ -811,7 +811,7 @@ class ClusterManager:
                            to connect across VPCs.
         """
         if self.remote_mode:
-            server_nodes = [n for n in self.remote_nodes if n.get('role') == 'cockroach']
+            server_nodes = [n for n in self.remote_nodes if n.get('role') == 'han-crdb-server']
             if use_public_ips:
                 # Use public hostnames for cross-region connectivity
                 return [f"{node['hostname']}:{self.base_port}" for node in server_nodes]
