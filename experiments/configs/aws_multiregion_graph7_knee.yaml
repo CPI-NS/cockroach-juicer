@@ -196,11 +196,11 @@ cluster:
 
 data_init:
   enabled: true
-  num_keys: 1000000
+  num_keys: 10000  # Reduced for fast testing - cluster has only 6/9 nodes joined
   key_prefix: "key"
-  key_range: 1000000
-  batch_size: 10000
-  concurrent: 4  # Reduced from 16 to avoid worker pool deadlock
+  key_range: 10000  # Match num_keys
+  batch_size: 1000  # Smaller batches
+  concurrent: 2  # Lower concurrency for stability
   use_bulk: false  # Disabled: BulkAdder requires DistSender which may not be ready in multi-region
   use_hash_keys: true
-  init_timeout_seconds: 1800  # 30 minutes timeout specifically for data initialization
+  init_timeout_seconds: 600  # 10 minutes should be plenty for 10K keys
