@@ -2,6 +2,7 @@ import queue
 import subprocess
 import time
 import logging
+import socket
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
@@ -489,24 +490,37 @@ class BenchmarkRunner:
             cmd_str = " ".join(cmd)
             self.logger.info(f"  Running data init on remote client {hostname}: {cmd_str}")
 
+            # Use separate timeout for data initialization (default 30 minutes)
+            init_timeout = getattr(cfg, 'init_timeout_seconds', 1800)
+            self.logger.info(f"  Init timeout: {init_timeout}s ({init_timeout/60:.1f} minutes)")
+
             try:
                 rc, stdout, stderr = self.cluster_mgr._run_remote_command(
                     hostname,
                     cmd_str,
                     background=False,
                     port=port,
-                    timeout=self.config.timeout_seconds
+                    timeout=init_timeout
                 )
 
                 if rc != 0:
-                    self.logger.error(f"Data initialization failed: {stderr}")
+                    self.logger.error(f"Data initialization failed (rc={rc})")
+                    self.logger.error(f"STDERR: {stderr}")
+                    self.logger.error(f"STDOUT: {stdout}")
                     return False
 
+                self.logger.info("Data initialization completed successfully")
                 self.logger.info(stdout)
                 return True
 
+            except socket.timeout:
+                self.logger.error(f"Data initialization timed out after {init_timeout}s")
+                self.logger.error("This may indicate network issues or the cluster is not responding")
+                return False
             except Exception as e:
                 self.logger.error(f"Data initialization error: {e}")
+                import traceback
+                self.logger.error(traceback.format_exc())
                 return False
 
         else:

@@ -141,31 +141,64 @@ func initDataConcurrent(ctx context.Context, db *kv.DB, cfg InitDataConfig) erro
 
 	workChan := make(chan workItem, cfg.Concurrency*2)
 	var wg sync.WaitGroup
-	errChan := make(chan error, cfg.Concurrency)
+	errChan := make(chan error, 1) // Only need buffer of 1 - we stop on first error
+
+	// Create a cancellable context so we can abort workers on error
+	workerCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Track progress
+	var progressMu sync.Mutex
+	keysProcessed := 0
 
 	// Start worker goroutines
 	for i := 0; i < cfg.Concurrency; i++ {
 		wg.Add(1)
-		go func() {
+		go func(workerID int) {
 			defer wg.Done()
-			for item := range workChan {
-				batch := db.NewBatch()
-				for j := 0; j < item.count; j++ {
-					keyID := (item.startIdx + j) % cfg.KeyRange
-					if keyID == 0 {
-						keyID = cfg.KeyRange
+			for {
+				select {
+				case <-workerCtx.Done():
+					return // Context cancelled, exit cleanly
+				case item, ok := <-workChan:
+					if !ok {
+						return // Channel closed, no more work
 					}
-					key := roachpb.Key(fmt.Sprintf("%s-%d", cfg.KeyPrefix, keyID))
-					value := fmt.Sprintf("init-value-%d", item.startIdx+j)
-					batch.Put(key, value)
-				}
 
-				if err := db.Run(ctx, batch); err != nil {
-					errChan <- errors.Wrapf(err, "failed to write batch at offset %d", item.startIdx)
-					return
+					batch := db.NewBatch()
+					for j := 0; j < item.count; j++ {
+						keyID := (item.startIdx + j) % cfg.KeyRange
+						if keyID == 0 {
+							keyID = cfg.KeyRange
+						}
+						key := roachpb.Key(fmt.Sprintf("%s-%d", cfg.KeyPrefix, keyID))
+						value := fmt.Sprintf("init-value-%d", item.startIdx+j)
+						batch.Put(key, value)
+					}
+
+					// Use worker context so this can be cancelled
+					if err := db.Run(workerCtx, batch); err != nil {
+						// Send error and cancel context to abort other workers
+						select {
+						case errChan <- errors.Wrapf(err, "failed to write batch at offset %d (worker %d)", item.startIdx, workerID):
+						default:
+							// Error channel full, another error already reported
+						}
+						cancel() // Cancel context to stop other workers
+						return
+					}
+
+					// Update progress
+					progressMu.Lock()
+					keysProcessed += item.count
+					if keysProcessed%10000 == 0 || keysProcessed >= cfg.NumKeys {
+						fmt.Printf("  Progress: %d/%d keys (%.1f%%)\n",
+							keysProcessed, cfg.NumKeys, float64(keysProcessed)/float64(cfg.NumKeys)*100)
+					}
+					progressMu.Unlock()
 				}
 			}
-		}()
+		}(i)
 	}
 
 	// Distribute work
@@ -173,6 +206,13 @@ func initDataConcurrent(ctx context.Context, db *kv.DB, cfg InitDataConfig) erro
 		defer close(workChan)
 		keysWritten := 0
 		for keysWritten < cfg.NumKeys {
+			// Check if context cancelled (error occurred)
+			select {
+			case <-workerCtx.Done():
+				return // Stop distributing work
+			default:
+			}
+
 			batchSize := cfg.BatchSize
 			if keysWritten+batchSize > cfg.NumKeys {
 				batchSize = cfg.NumKeys - keysWritten
@@ -181,8 +221,8 @@ func initDataConcurrent(ctx context.Context, db *kv.DB, cfg InitDataConfig) erro
 			select {
 			case workChan <- workItem{startIdx: keysWritten, count: batchSize}:
 				keysWritten += batchSize
-			case <-errChan:
-				return
+			case <-workerCtx.Done():
+				return // Context cancelled, stop distributing
 			}
 		}
 	}()
@@ -196,10 +236,14 @@ func initDataConcurrent(ctx context.Context, db *kv.DB, cfg InitDataConfig) erro
 
 	select {
 	case err := <-errChan:
+		cancel()   // Ensure context is cancelled
+		wg.Wait()  // Wait for all workers to exit
 		return err
 	case <-done:
 		return nil
 	case <-ctx.Done():
+		cancel()   // Cancel worker context
+		wg.Wait()  // Wait for all workers to exit
 		return ctx.Err()
 	}
 }

@@ -439,9 +439,12 @@ class ClusterManager:
             )
 
             if rc != 0:
-                self.logger.warning(
-                    f"Cluster init returned {rc}: {stderr} (may already be initialized)"
-                )
+                if "already been initialized" in stderr:
+                    self.logger.info("Cluster already initialized; continuing")
+                else:
+                    self.logger.warning(
+                        f"Cluster init returned {rc}: {stderr} (may already be initialized)"
+                    )
             else:
                 self.logger.info(f"Cluster initialized successfully: {stdout}")
 
