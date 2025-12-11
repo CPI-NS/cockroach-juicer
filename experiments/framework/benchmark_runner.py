@@ -415,34 +415,40 @@ class BenchmarkRunner:
             self.logger.warning(f"    Only {len(successful_results)}/{num_clients} clients succeeded")
 
         # Weighted average for latencies (by transaction count)
+        # Metrics from parser are already in milliseconds, not nanoseconds
         total_weight = sum(tx_count for _, tx_count in successful_results)
         total_attempts_count = sum(m.attempts_count for m, tx_count in successful_results)
 
-        weighted_p50 = sum(m.latency_p50 * tx_count for m, tx_count in successful_results) / total_weight
-        weighted_p99 = sum(m.latency_p99 * tx_count for m, tx_count in successful_results) / total_weight
-        weighted_p999 = sum(m.latency_p999 * tx_count for m, tx_count in successful_results) / total_weight
+        weighted_p50 = sum(m.latency_p50 * tx_count for m, tx_count in successful_results) / total_weight if total_weight > 0 else 0.0
+        weighted_p90 = sum(m.latency_p90 * tx_count for m, tx_count in successful_results) / total_weight if total_weight > 0 else 0.0
+        weighted_p95 = sum(m.latency_p95 * tx_count for m, tx_count in successful_results) / total_weight if total_weight > 0 else 0.0
+        weighted_p99 = sum(m.latency_p99 * tx_count for m, tx_count in successful_results) / total_weight if total_weight > 0 else 0.0
+        weighted_p999 = sum(m.latency_p999 * tx_count for m, tx_count in successful_results) / total_weight if total_weight > 0 else 0.0
 
         # Sum throughput (ops/sec from all clients combined)
         total_throughput = sum(m.throughput for m, _ in successful_results)
 
         # Weighted average for abort rate
-        weighted_abort_rate = sum(m.abort_rate * m.attempts_count for m, tx_count in successful_results) / total_attempts_count
-        
-        
-        
-        # Create aggregated metrics
+        weighted_abort_rate = sum(m.abort_rate * m.attempts_count for m, tx_count in successful_results) / total_attempts_count if total_attempts_count > 0 else 0.0
+
+        # Create aggregated metrics (values already in milliseconds)
         aggregated = BenchmarkMetrics(
-            latency_p50=weighted_p50 / 1000000,
-            latency_p99=weighted_p99 / 1000000,
-            latency_p999=weighted_p999 / 1000000,
+            tx_count=sum(m.tx_count for m, _ in successful_results),
+            commit_count=sum(m.commit_count for m, _ in successful_results),
+            abort_count=sum(m.abort_count for m, _ in successful_results),
+            latency_p50=weighted_p50,
+            latency_p90=weighted_p90,
+            latency_p95=weighted_p95,
+            latency_p99=weighted_p99,
+            latency_p999=weighted_p999,
             throughput=total_throughput,
             abort_rate=weighted_abort_rate
         )
         aggregated.errors = errors
 
-        self.logger.info(f"    Aggregated Result: Latency P50={format_ns(weighted_p50)}, "
-                    f"P99={format_ns(weighted_p99)}, "
-                    f"P999={format_ns(weighted_p999)}, "
+        self.logger.info(f"    Aggregated Result: Latency P50={weighted_p50:.3f}ms, "
+                    f"P99={weighted_p99:.3f}ms, "
+                    f"P99.9={weighted_p999:.3f}ms, "
                     f"Throughput={aggregated.throughput:.2f} ops/sec, "
                     f"Abort Rate={aggregated.abort_rate:.2f}%")
 
