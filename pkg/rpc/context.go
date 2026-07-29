@@ -200,6 +200,12 @@ func NewServerEx(
 	grpcOpts = append(grpcOpts, grpc.ChainUnaryInterceptor(unaryInterceptor...))
 	grpcOpts = append(grpcOpts, grpc.ChainStreamInterceptor(streamInterceptor...))
 
+	if jOpts := juicerServerOptions(); jOpts != nil {
+		grpcOpts = append(grpcOpts, jOpts...)
+		log.Dev.Infof(ctx, "juicer: interception enabled (unary %v, stream %v)",
+			juicerUnaryBatchPaths, juicerStreamBatchPaths)
+	}
+
 	s = grpc.NewServer(grpcOpts...)
 
 	RegisterHeartbeatServer(s, rpcCtx.NewHeartbeatService())
