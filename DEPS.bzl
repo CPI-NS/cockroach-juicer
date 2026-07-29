@@ -11222,8 +11222,8 @@ def go_deps():
         importpath = "google.golang.org/grpc",
         replace = "github.com/CPI-NS/juicer-grpc-go",
         # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
-        sum = "h1:ptX2/3LqHex8xLwfDYkiRgEEG2e6ygR9x2W6tWByS4w=",
-        version = "v1.57.2-juicer-10",
+        sum = "h1:HbA9kyBNpg3tGln9/bnGgGJPuTs8j8Nfemw3Z+ddPlQ=",
+        version = "v1.57.2-juicer-12",
     )
     go_repository(
         name = "org_golang_google_grpc_cmd_protoc_gen_go_grpc",

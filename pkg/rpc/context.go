@@ -202,6 +202,7 @@ func NewServerEx(
 
 	if jOpts := juicerServerOptions(); jOpts != nil {
 		grpcOpts = append(grpcOpts, jOpts...)
+		startJuicerHitReporter(context.Background())
 		log.Dev.Infof(ctx, "juicer: interception enabled (unary %v, stream %v)",
 			juicerUnaryBatchPaths, juicerStreamBatchPaths)
 	}

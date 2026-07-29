@@ -6,14 +6,18 @@
 package rpc
 
 import (
+	"context"
 	"encoding/binary"
 	"hash/fnv"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/juicer"
 )
@@ -31,6 +35,33 @@ var (
 	juicerUnaryBatchPaths  = []string{"/cockroach.roachpb.Internal/Batch", "/cockroach.roachpb.KVBatch/Batch"}
 	juicerStreamBatchPaths = []string{"/cockroach.roachpb.Internal/BatchStream", "/cockroach.roachpb.KVBatch/BatchStream"}
 )
+
+// Interception-hit counters: SplitMarker/IsSelfAbortedResponse are called
+// only by the fork's interceptors, so non-zero deltas prove real traffic is
+// flowing through Juicer (a single node short-circuits local ranges via the
+// internal client adapter and shows zeros here).
+var (
+	juicerSplitCalls    atomic.Uint64
+	juicerResponseCalls atomic.Uint64
+	juicerReporterOnce  sync.Once
+)
+
+// startJuicerHitReporter logs interception-hit deltas once a minute.
+func startJuicerHitReporter(ctx context.Context) {
+	juicerReporterOnce.Do(func() {
+		go func() {
+			var lastSplit, lastResp uint64
+			ticker := time.NewTicker(60 * time.Second)
+			defer ticker.Stop()
+			for range ticker.C {
+				s, r := juicerSplitCalls.Load(), juicerResponseCalls.Load()
+				log.Dev.Infof(ctx, "juicer: interception hits: +%d batches split, +%d responses observed (totals %d/%d)",
+					s-lastSplit, r-lastResp, s, r)
+				lastSplit, lastResp = s, r
+			}
+		}()
+	})
+}
 
 // juicerServerOptions returns the fork ServerOptions that enable Juicer
 // interception of Batch/BatchStream, or nil when disabled.
@@ -170,6 +201,7 @@ func sortableJuicerOp(op juicer.OperationType) bool {
 // batch. Non-transactional batches return nil: they are never sorted, which
 // also keeps txn id 0 (the enforcer's "unbound" sentinel) out of the queues.
 func (crdbJuicerSPI) SplitMarker(req interface{}) []juicer.Marker[int64] {
+	juicerSplitCalls.Add(1)
 	ba := asBatchRequest(req)
 	if ba == nil || ba.Txn == nil {
 		return nil
@@ -274,6 +306,7 @@ func (s crdbJuicerSPI) IsAbortRequest(req interface{}) bool {
 func (crdbJuicerSPI) IsPrepareRequest(req interface{}) bool { return false }
 
 func (crdbJuicerSPI) IsSelfAbortedResponse(resp interface{}) bool {
+	juicerResponseCalls.Add(1)
 	br, ok := resp.(*kvpb.BatchResponse)
 	return ok && br != nil && br.Error != nil
 }
