@@ -8,6 +8,7 @@ package rpc
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"hash/fnv"
 	"sync"
 	"sync/atomic"
@@ -32,6 +33,7 @@ var (
 	juicerSkipQueueing     = envutil.EnvOrDefaultBool("COCKROACH_JUICER_SKIP_QUEUEING", false)
 	juicerScaleFactor      = envutil.EnvOrDefaultFloat64("COCKROACH_JUICER_SCALE_FACTOR", 0)
 	juicerMaxHoldMillis    = envutil.EnvOrDefaultInt("COCKROACH_JUICER_MAX_HOLD_MS", 25)
+	juicerDebugLogs        = envutil.EnvOrDefaultBool("COCKROACH_JUICER_DEBUG", false)
 	juicerUnaryBatchPaths  = []string{"/cockroach.roachpb.Internal/Batch", "/cockroach.roachpb.KVBatch/Batch"}
 	juicerStreamBatchPaths = []string{"/cockroach.roachpb.Internal/BatchStream", "/cockroach.roachpb.KVBatch/BatchStream"}
 )
@@ -311,7 +313,30 @@ func (crdbJuicerSPI) IsSelfAbortedResponse(resp interface{}) bool {
 	return ok && br != nil && br.Error != nil
 }
 
-func (crdbJuicerSPI) ServerLogger() *juicer.Logger { return nil }
+// crdbJuicerLogBridge routes the fork's Juicer logs (queue events, pairing
+// violations, block escapes) into CRDB's Dev channel so they appear in the
+// normal node logs. Debug-level fork logs are per-operation and only flow
+// when COCKROACH_JUICER_DEBUG=true.
+type crdbJuicerLogBridge struct{}
+
+func (crdbJuicerLogBridge) Debug(format string, v ...interface{}) {
+	log.Dev.Infof(context.Background(), "juicer[debug]: %s", fmt.Sprintf(format, v...))
+}
+func (crdbJuicerLogBridge) Info(format string, v ...interface{}) {
+	log.Dev.Infof(context.Background(), "juicer: %s", fmt.Sprintf(format, v...))
+}
+func (crdbJuicerLogBridge) Warning(format string, v ...interface{}) {
+	log.Dev.Warningf(context.Background(), "juicer: %s", fmt.Sprintf(format, v...))
+}
+func (crdbJuicerLogBridge) Error(format string, v ...interface{}) {
+	log.Dev.Errorf(context.Background(), "juicer: %s", fmt.Sprintf(format, v...))
+}
+
+var crdbJuicerLogger = juicer.NewLogger(
+	"crdb", crdbJuicerLogBridge{}, "" /* logDir */, 0 /* serverID */, false /* hotkeyLogging */, juicerDebugLogs,
+)
+
+func (crdbJuicerSPI) ServerLogger() *juicer.Logger { return crdbJuicerLogger }
 
 // The 2PC helper hooks below serve juicer-cc's manual dispatch modes only;
 // the interceptor pipeline used for CRDB never calls them.
