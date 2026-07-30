@@ -185,7 +185,7 @@ func TestJuicerSPIFailureClassification(t *testing.T) {
 
 	// Nothing above carried a detail that belongs in the "other" tally, so the
 	// pre-formatted breakdown must stay empty.
-	if s := juicerOtherBreakdown(after, before); s != "" {
+	if s := kvOtherBreakdown(after, before); s != "" {
 		t.Errorf("other-detail breakdown = %q, want empty", s)
 	}
 

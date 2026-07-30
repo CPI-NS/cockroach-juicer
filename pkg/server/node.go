@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -1957,6 +1958,15 @@ func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchR
 	if buildutil.CrdbTestBuild && br.Error != nil && n.testingErrorEvent != nil {
 		n.testingErrorEvent(ctx, args, errors.DecodeError(ctx, br.Error.EncodedError))
 	}
+
+	// Feed the mode-independent KV-layer error counters. This is the single choke
+	// point for the whole KV batch surface: batchStreamImpl calls back into this
+	// method for every streamed batch, and both DRPC entry points delegate here
+	// too, so one call covers unary, stream and DRPC alike. See
+	// rpc.ObserveKVResponse for why the metric cannot live in the Juicer
+	// interceptor instead.
+	rpc.ObserveKVResponse(br)
+
 	return br, nil
 }
 
