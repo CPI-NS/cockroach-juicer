@@ -205,6 +205,8 @@ func NewServerEx(
 		startJuicerHitReporter(context.Background())
 		log.Dev.Infof(ctx, "juicer: interception enabled (unary %v, stream %v)",
 			juicerUnaryBatchPaths, juicerStreamBatchPaths)
+		log.Dev.Infof(ctx, "juicer: dependency rules mode = %s (COCKROACH_JUICER_RULES=%q)",
+			juicerRulesMode(), juicerRulesEnv)
 	}
 
 	s = grpc.NewServer(grpcOpts...)

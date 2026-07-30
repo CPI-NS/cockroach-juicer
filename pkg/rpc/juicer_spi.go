@@ -55,6 +55,34 @@ var (
 	juicerFilterS = envutil.EnvOrDefaultInt("COCKROACH_JUICER_FILTER_S", 100)
 )
 
+// juicerRules names the strength of the dependency relation BuildRules hands to
+// the enforcer. See BuildRules for what each one means and why the axis exists.
+type juicerRules string
+
+const (
+	juicerRulesFull juicerRules = "full"
+	juicerRulesSFU  juicerRules = "sfu"
+	juicerRulesOff  juicerRules = "off"
+)
+
+var juicerRulesEnv = envutil.EnvOrDefaultString("COCKROACH_JUICER_RULES", string(juicerRulesFull))
+
+// juicerRulesMode parses COCKROACH_JUICER_RULES, falling back to full on an
+// unrecognized value. Falling back rather than failing is deliberate: this is a
+// measurement knob, and a typo must not change the shipped default silently in
+// one direction — the mode is logged once at injection so a fallback is visible
+// in the node log.
+func juicerRulesMode() juicerRules {
+	switch juicerRules(strings.ToLower(strings.TrimSpace(juicerRulesEnv))) {
+	case juicerRulesOff:
+		return juicerRulesOff
+	case juicerRulesSFU:
+		return juicerRulesSFU
+	default:
+		return juicerRulesFull
+	}
+}
+
 // Interception-hit counters: SplitMarker/IsSelfAbortedResponse are called
 // only by the fork's interceptors, so non-zero deltas prove real traffic is
 // flowing through Juicer (a single node short-circuits local ranges via the
@@ -502,22 +530,56 @@ func (crdbJuicerSPI) ExecutePrepareRequest(req interface{}) (interface{}, error)
 func (crdbJuicerSPI) ExecuteAbortRequest(req interface{}) (interface{}, error)   { return nil, nil }
 func (crdbJuicerSPI) AbortCurrentRequest(req interface{}) (interface{}, error)   { return nil, nil }
 
-// BuildRules declares CRDB's dependency semantics to the enforcer: locking
-// operations (SFU reads and writes) of different transactions mutually
-// exclude; plain MVCC reads never wait (CRDB readers do not block on
-// unreplicated exclusive locks). A holder releases when its EndTxn or
-// ResolveIntent is observed on the key, when its own write batch response
-// returns (1PC hot path: response return == committed), or on any failed
-// response. Note an OpGetForPut response deliberately does NOT release: the
-// SFU lock must be held through commit — that is what kills the aborts.
+// BuildRules declares CRDB's dependency semantics to the enforcer, in one of
+// three strengths selected by COCKROACH_JUICER_RULES. The switch exists because
+// Juicer does two separable things — it sorts requests into per-key arrival
+// order, and it enforces a dependency relation between them — and a single
+// on/off flag cannot tell you which one produced an effect. Measuring "on"
+// against "off" with only juicerRulesFull available conflates the value of the
+// sorting with the cost of the enforcer.
+//
+//	full (default)  Locking operations (SFU reads and writes) of different
+//	                transactions mutually exclude. This is the relation as
+//	                originally written, and the one that cost 85-98% of
+//	                throughput while cutting aborts by 90-97%.
+//	sfu             Only two cross-txn SFU *reads* exclude. Write-write
+//	                exclusion is left entirely to CRDB's lock table, which
+//	                already solves it below this layer; Juicer only adds the
+//	                ordering guarantee CRDB does not provide, namely that a
+//	                reader intending to write is not overtaken. Same release
+//	                relation and MaxHold as full.
+//	off             The zero-value DependencyRules. Enabled() is false, so
+//	                QueueManager builds no enforcer and the per-key queues do
+//	                pure timestamp sorting with no blocking. This isolates the
+//	                sorting from the enforcement.
+//
+// In every mode a holder releases when its EndTxn or ResolveIntent is observed
+// on the key, when its own write batch response returns (1PC hot path: response
+// return == committed), or on any failed response. Note an OpGetForPut response
+// deliberately does NOT release: the SFU lock must be held through commit — that
+// is what kills the aborts.
 func (crdbJuicerSPI) BuildRules() juicer.DependencyRules {
+	mode := juicerRulesMode()
+	if mode == juicerRulesOff {
+		// Zero value: DependencyRules.Enabled() is false and the fork's
+		// enforcerFactory returns nil, leaving the queues in sorting-only mode.
+		return juicer.DependencyRules{}
+	}
+
 	locking := func(o juicer.OperationType) bool {
 		return o == juicer.OpGetForPut || o == juicer.OpSet
 	}
+	blocks := func(h, hd juicer.OpRef) bool {
+		if h.TxnID == hd.TxnID {
+			return false
+		}
+		if mode == juicerRulesSFU {
+			return h.OpType == juicer.OpGetForPut && hd.OpType == juicer.OpGetForPut
+		}
+		return locking(h.OpType) && locking(hd.OpType)
+	}
 	return juicer.DependencyRules{
-		Blocks: func(h, hd juicer.OpRef) bool {
-			return h.TxnID != hd.TxnID && locking(h.OpType) && locking(hd.OpType)
-		},
+		Blocks: blocks,
 		Releases: func(h juicer.OpRef, ev juicer.Event) bool {
 			if ev.TxnID != h.TxnID {
 				return false

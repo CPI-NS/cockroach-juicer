@@ -225,8 +225,94 @@ func TestJuicerFilterSizesArePositive(t *testing.T) {
 	}
 }
 
+// TestJuicerRulesModes covers the COCKROACH_JUICER_RULES axis: each mode must
+// produce the blocking relation it advertises, because the whole point of the
+// switch is to attribute an observed effect to sorting or to enforcement. It
+// drives juicerRulesEnv directly rather than the process environment, which is
+// what juicerRulesMode reads.
+func TestJuicerRulesModes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer func(saved string) { juicerRulesEnv = saved }(juicerRulesEnv)
+
+	sfuA := juicer.OpRef{TxnID: 1, OpType: juicer.OpGetForPut}
+	sfuB := juicer.OpRef{TxnID: 2, OpType: juicer.OpGetForPut}
+	writeB := juicer.OpRef{TxnID: 2, OpType: juicer.OpSet}
+
+	for _, tc := range []struct {
+		name                string
+		env                 string
+		expectedMode        juicerRules
+		expectedEnabled     bool
+		expectedBlocksSFU   bool
+		expectedBlocksWrite bool
+	}{
+		{
+			name: "default is full", env: "", expectedMode: juicerRulesFull,
+			expectedEnabled: true, expectedBlocksSFU: true, expectedBlocksWrite: true,
+		},
+		{
+			name: "full blocks every locking pair", env: "full", expectedMode: juicerRulesFull,
+			expectedEnabled: true, expectedBlocksSFU: true, expectedBlocksWrite: true,
+		},
+		{
+			name: "sfu leaves write-write to the lock table", env: "sfu", expectedMode: juicerRulesSFU,
+			expectedEnabled: true, expectedBlocksSFU: true, expectedBlocksWrite: false,
+		},
+		{
+			name: "off disables the enforcer entirely", env: "off", expectedMode: juicerRulesOff,
+			expectedEnabled: false,
+		},
+		{
+			name: "case and space tolerated", env: "  SFU ", expectedMode: juicerRulesSFU,
+			expectedEnabled: true, expectedBlocksSFU: true, expectedBlocksWrite: false,
+		},
+		{
+			name: "unrecognized value falls back to full", env: "bogus", expectedMode: juicerRulesFull,
+			expectedEnabled: true, expectedBlocksSFU: true, expectedBlocksWrite: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			juicerRulesEnv = tc.env
+			if got := juicerRulesMode(); got != tc.expectedMode {
+				t.Fatalf("mode = %q, want %q", got, tc.expectedMode)
+			}
+			rules := newCRDBJuicerSPI().BuildRules()
+			if got := rules.Enabled(); got != tc.expectedEnabled {
+				t.Fatalf("Enabled() = %v, want %v", got, tc.expectedEnabled)
+			}
+			if !tc.expectedEnabled {
+				// A disabled relation must be the zero value throughout, or the
+				// fork would still build an enforcer off a non-nil field.
+				if rules.Releases != nil || rules.MaxHold != 0 {
+					t.Fatalf("off mode returned a non-zero DependencyRules: %+v", rules)
+				}
+				return
+			}
+			if got := rules.Blocks(sfuA, sfuB); got != tc.expectedBlocksSFU {
+				t.Errorf("Blocks(sfu, sfu) = %v, want %v", got, tc.expectedBlocksSFU)
+			}
+			if got := rules.Blocks(sfuA, writeB); got != tc.expectedBlocksWrite {
+				t.Errorf("Blocks(sfu, write) = %v, want %v", got, tc.expectedBlocksWrite)
+			}
+			// Same-txn pairs never block in any mode: the enforcer evaluates the
+			// head against the whole in-flight set, including the txn's own ops.
+			if rules.Blocks(sfuA, juicer.OpRef{TxnID: 1, OpType: juicer.OpSet}) {
+				t.Error("same-txn write upgrade blocked itself")
+			}
+			// Plain reads never wait in any mode.
+			readB := juicer.OpRef{TxnID: 2, OpType: juicer.OpGet}
+			if rules.Blocks(sfuA, readB) || rules.Blocks(readB, sfuA) {
+				t.Error("plain read participated in blocking")
+			}
+		})
+	}
+}
+
 func TestJuicerCRDBRules(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer func(saved string) { juicerRulesEnv = saved }(juicerRulesEnv)
+	juicerRulesEnv = string(juicerRulesFull)
+
 	rules := newCRDBJuicerSPI().BuildRules()
 	if !rules.Enabled() {
 		t.Fatal("rules disabled")
