@@ -205,6 +205,26 @@ func TestJuicerSPIFailureClassification(t *testing.T) {
 	}
 }
 
+// TestJuicerFilterSizesArePositive guards the defect this test was written for:
+// the fork's defaultServerOptions leaves juicerFilterK/juicerFilterS at zero, and
+// AbortTracker.calculateAndSendDelta bails out when TopNFirstFilter <= 0, so a
+// zero here silently disables the entire hot-key pipeline -- aborts are recorded,
+// no key is ever promoted, and no per-key queue is ever created. Nothing else in
+// the build fails if this regresses, which is exactly why it needs a test.
+func TestJuicerFilterSizesArePositive(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	if juicerFilterK <= 0 {
+		t.Errorf("juicerFilterK = %d; a non-positive first-filter size disables hot-key promotion entirely", juicerFilterK)
+	}
+	if juicerFilterS <= 0 {
+		t.Errorf("juicerFilterS = %d; second-filter size must be positive", juicerFilterS)
+	}
+	if juicerFilterS > juicerFilterK {
+		t.Errorf("juicerFilterS (%d) > juicerFilterK (%d): the second filter cannot track more keys than the first admits",
+			juicerFilterS, juicerFilterK)
+	}
+}
+
 func TestJuicerCRDBRules(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rules := newCRDBJuicerSPI().BuildRules()

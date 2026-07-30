@@ -39,6 +39,22 @@ var (
 	juicerStreamBatchPaths = []string{"/cockroach.roachpb.Internal/BatchStream", "/cockroach.roachpb.KVBatch/BatchStream"}
 )
 
+// Sizes of the fork's two hot-key filters: K keys admitted by the abort tracker
+// (Level 1), S of those tracked for reorder damage (Level 2).
+//
+// These MUST be passed explicitly. The fork's defaultServerOptions does not
+// initialize juicerFilterK/juicerFilterS, so omitting the ServerOptions leaves
+// both at Go's zero value, and AbortTracker.calculateAndSendDelta returns
+// immediately when TopNFirstFilter <= 0. Level 1 then never promotes a key, never
+// emits a TopKeysDelta, and no per-key queue is ever created — however many
+// aborts are recorded. The defaults below mirror the fork's own
+// juicer.DefaultAbortTrackerConfig() (1000/100), which the interceptor
+// construction path does not consult.
+var (
+	juicerFilterK = envutil.EnvOrDefaultInt("COCKROACH_JUICER_FILTER_K", 1000)
+	juicerFilterS = envutil.EnvOrDefaultInt("COCKROACH_JUICER_FILTER_S", 100)
+)
+
 // Interception-hit counters: SplitMarker/IsSelfAbortedResponse are called
 // only by the fork's interceptors, so non-zero deltas prove real traffic is
 // flowing through Juicer (a single node short-circuits local ranges via the
@@ -197,6 +213,8 @@ func juicerServerOptions() []grpc.ServerOption {
 		grpc.JuicerSPIImpl(newCRDBJuicerSPI()),
 		grpc.JuicerUnaryMethods(juicerUnaryBatchPaths),
 		grpc.JuicerStreamMethods(juicerStreamBatchPaths),
+		grpc.JuicerFilterK(juicerFilterK),
+		grpc.JuicerFilterS(juicerFilterS),
 	}
 	if juicerSkipQueueing {
 		opts = append(opts, grpc.JuicerSkipQueueing(true))
