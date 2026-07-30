@@ -76,3 +76,7 @@ pkg/testutils/serverutils/*_generated.go
 .vscode/
 CLAUDE.local.md
 .claude/*.local.*
+
+.claude
+.playwright-mcp
+juicer-docs
