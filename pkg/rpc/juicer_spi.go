@@ -10,6 +10,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"hash/fnv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -48,11 +49,118 @@ var (
 	juicerReporterOnce  sync.Once
 )
 
+// juicerFailureCounters classifies the failed BatchResponses the interceptor
+// sees, i.e. exactly the population that feeds the fork's abort tracker. It
+// exists to answer one question: does CRDB return enough KV-visible conflict
+// errors on this path for a Level-1 hot-key filter fed by aborts to have
+// anything to work with?
+//
+// Counts are call-granular (one Add per IsSelfAbortedResponse call carrying an
+// error), not response-granular, matching juicerResponseCalls above. All fields
+// are written from the RPC fast path and read only by the minute reporter.
+//
+// byType retains the raw kvpb.ErrorDetailType tally for everything that falls
+// into "other", so a dominant unclassified error (NotLeaseHolder, RangeKeyMismatch,
+// ...) can be named in the report rather than hidden behind a single number.
+type juicerFailureCounters struct {
+	total             atomic.Uint64
+	writeTooOld       atomic.Uint64
+	retry             atomic.Uint64
+	retrySerializable atomic.Uint64
+	aborted           atomic.Uint64
+	lockConflict      atomic.Uint64
+	uncertainty       atomic.Uint64
+	other             atomic.Uint64
+	byType            [kvpb.NumErrors]atomic.Uint64
+}
+
+var juicerFailures juicerFailureCounters
+
+// juicerFailureSnapshot is a plain-value copy of juicerFailureCounters so the
+// reporter can difference successive ticks without re-reading racing atomics.
+type juicerFailureSnapshot struct {
+	total             uint64
+	writeTooOld       uint64
+	retry             uint64
+	retrySerializable uint64
+	aborted           uint64
+	lockConflict      uint64
+	uncertainty       uint64
+	other             uint64
+	byType            [kvpb.NumErrors]uint64
+}
+
+func (c *juicerFailureCounters) snapshot() juicerFailureSnapshot {
+	s := juicerFailureSnapshot{
+		total:             c.total.Load(),
+		writeTooOld:       c.writeTooOld.Load(),
+		retry:             c.retry.Load(),
+		retrySerializable: c.retrySerializable.Load(),
+		aborted:           c.aborted.Load(),
+		lockConflict:      c.lockConflict.Load(),
+		uncertainty:       c.uncertainty.Load(),
+		other:             c.other.Load(),
+	}
+	for i := range c.byType {
+		s.byType[i] = c.byType[i].Load()
+	}
+	return s
+}
+
+// recordFailure buckets one errored BatchResponse. The kvpb.Error detail is the
+// authoritative discriminator: br.Error.TransactionRestart() only says whether a
+// restart is possible, and merges WriteTooOld with serializable retries.
+func (c *juicerFailureCounters) recordFailure(pErr *kvpb.Error) {
+	c.total.Add(1)
+	detail := pErr.GetDetail()
+	switch d := detail.(type) {
+	case *kvpb.WriteTooOldError:
+		c.writeTooOld.Add(1)
+	case *kvpb.TransactionRetryError:
+		c.retry.Add(1)
+		if d.Reason == kvpb.RETRY_SERIALIZABLE {
+			c.retrySerializable.Add(1)
+		}
+	case *kvpb.TransactionAbortedError:
+		c.aborted.Add(1)
+	case *kvpb.LockConflictError, *kvpb.WriteIntentError:
+		c.lockConflict.Add(1)
+	case *kvpb.ReadWithinUncertaintyIntervalError:
+		c.uncertainty.Add(1)
+	default:
+		c.other.Add(1)
+		// A nil detail means the error carries no recognized kvpb detail (a
+		// plain internal or communication error); there is no type to tally.
+		if detail != nil {
+			if t := int(detail.Type()); t >= 0 && t < len(c.byType) {
+				c.byType[t].Add(1)
+			}
+		}
+	}
+}
+
+// juicerOtherBreakdown pre-formats the per-ErrorDetailType tally of the "other"
+// bucket for the reporter. It is passed to the log call as a single %s argument
+// because fmtsafe requires the format string itself to be a constant.
+func juicerOtherBreakdown(cur, prev juicerFailureSnapshot) string {
+	var parts []string
+	for i := range cur.byType {
+		if delta := cur.byType[i] - prev.byType[i]; delta > 0 {
+			parts = append(parts, fmt.Sprintf("%s=%d", kvpb.ErrorDetailType(i), delta))
+		}
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return " other-detail[" + strings.Join(parts, " ") + "]"
+}
+
 // startJuicerHitReporter logs interception-hit deltas once a minute.
 func startJuicerHitReporter(ctx context.Context) {
 	juicerReporterOnce.Do(func() {
 		go func() {
 			var lastSplit, lastResp uint64
+			var lastFail juicerFailureSnapshot
 			ticker := time.NewTicker(60 * time.Second)
 			defer ticker.Stop()
 			for range ticker.C {
@@ -60,6 +168,20 @@ func startJuicerHitReporter(ctx context.Context) {
 				log.Dev.Infof(ctx, "juicer: interception hits: +%d batches split, +%d responses observed (totals %d/%d)",
 					s-lastSplit, r-lastResp, s, r)
 				lastSplit, lastResp = s, r
+
+				f := juicerFailures.snapshot()
+				log.Dev.Infof(ctx,
+					"juicer: failed responses: +%d total (wto=%d retry=%d[serializable=%d] aborted=%d lock=%d uncert=%d other=%d)%s",
+					f.total-lastFail.total,
+					f.writeTooOld-lastFail.writeTooOld,
+					f.retry-lastFail.retry,
+					f.retrySerializable-lastFail.retrySerializable,
+					f.aborted-lastFail.aborted,
+					f.lockConflict-lastFail.lockConflict,
+					f.uncertainty-lastFail.uncertainty,
+					f.other-lastFail.other,
+					juicerOtherBreakdown(f, lastFail))
+				lastFail = f
 			}
 		}()
 	})
@@ -310,7 +432,11 @@ func (crdbJuicerSPI) IsPrepareRequest(req interface{}) bool { return false }
 func (crdbJuicerSPI) IsSelfAbortedResponse(resp interface{}) bool {
 	juicerResponseCalls.Add(1)
 	br, ok := resp.(*kvpb.BatchResponse)
-	return ok && br != nil && br.Error != nil
+	if !ok || br == nil || br.Error == nil {
+		return false
+	}
+	juicerFailures.recordFailure(br.Error)
+	return true
 }
 
 // crdbJuicerLogBridge routes the fork's Juicer logs (queue events, pairing

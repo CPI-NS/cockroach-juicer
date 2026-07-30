@@ -132,6 +132,79 @@ func TestJuicerSPIClassification(t *testing.T) {
 	}
 }
 
+// TestJuicerSPIFailureClassification checks that the per-error-type counters
+// feeding the minute reporter bucket a real kvpb error detail correctly. Deltas
+// are used rather than absolute values because the counters are package-level
+// and other tests in this package also drive IsSelfAbortedResponse.
+func TestJuicerSPIFailureClassification(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	spi := newCRDBJuicerSPI()
+
+	before := juicerFailures.snapshot()
+
+	// A serializable retry must land in the retry bucket and in its reason
+	// sub-counter, and must not leak into any other bucket.
+	retryResp := &kvpb.BatchResponse{}
+	retryResp.Error = kvpb.NewError(&kvpb.TransactionRetryError{Reason: kvpb.RETRY_SERIALIZABLE})
+	if !spi.IsSelfAbortedResponse(retryResp) {
+		t.Fatal("TransactionRetryError response not flagged as aborted")
+	}
+
+	// An error with no recognized kvpb detail falls into "other" and adds
+	// nothing to the per-detail-type tally.
+	plainResp := &kvpb.BatchResponse{}
+	plainResp.Error = kvpb.NewErrorf("boom")
+	if !spi.IsSelfAbortedResponse(plainResp) {
+		t.Fatal("plain error response not flagged as aborted")
+	}
+
+	// A clean response must not be counted at all.
+	if spi.IsSelfAbortedResponse(&kvpb.BatchResponse{}) {
+		t.Fatal("clean response flagged as aborted")
+	}
+
+	after := juicerFailures.snapshot()
+	for _, tc := range []struct {
+		name          string
+		expectedDelta uint64
+		got           uint64
+	}{
+		{name: "total", expectedDelta: 2, got: after.total - before.total},
+		{name: "retry", expectedDelta: 1, got: after.retry - before.retry},
+		{name: "retrySerializable", expectedDelta: 1, got: after.retrySerializable - before.retrySerializable},
+		{name: "other", expectedDelta: 1, got: after.other - before.other},
+		{name: "writeTooOld", expectedDelta: 0, got: after.writeTooOld - before.writeTooOld},
+		{name: "aborted", expectedDelta: 0, got: after.aborted - before.aborted},
+		{name: "lockConflict", expectedDelta: 0, got: after.lockConflict - before.lockConflict},
+		{name: "uncertainty", expectedDelta: 0, got: after.uncertainty - before.uncertainty},
+	} {
+		if tc.got != tc.expectedDelta {
+			t.Errorf("%s delta = %d, want %d", tc.name, tc.got, tc.expectedDelta)
+		}
+	}
+
+	// Nothing above carried a detail that belongs in the "other" tally, so the
+	// pre-formatted breakdown must stay empty.
+	if s := juicerOtherBreakdown(after, before); s != "" {
+		t.Errorf("other-detail breakdown = %q, want empty", s)
+	}
+
+	// A WriteTooOldError is the other bucket the campaign cares most about.
+	wtoBefore := juicerFailures.snapshot()
+	wtoResp := &kvpb.BatchResponse{}
+	wtoResp.Error = kvpb.NewError(&kvpb.WriteTooOldError{})
+	if !spi.IsSelfAbortedResponse(wtoResp) {
+		t.Fatal("WriteTooOldError response not flagged as aborted")
+	}
+	wtoAfter := juicerFailures.snapshot()
+	if d := wtoAfter.writeTooOld - wtoBefore.writeTooOld; d != 1 {
+		t.Errorf("writeTooOld delta = %d, want 1", d)
+	}
+	if d := wtoAfter.retry - wtoBefore.retry; d != 0 {
+		t.Errorf("WriteTooOldError leaked into retry bucket (delta %d)", d)
+	}
+}
+
 func TestJuicerCRDBRules(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rules := newCRDBJuicerSPI().BuildRules()
