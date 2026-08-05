@@ -55,6 +55,16 @@ func endTxn(commit bool) *kvpb.EndTxnRequest {
 	}
 }
 
+func refresh(key string) *kvpb.RefreshRequest {
+	return &kvpb.RefreshRequest{RequestHeader: kvpb.RequestHeader{Key: roachpb.Key(key)}}
+}
+
+func refreshRange(start, end string) *kvpb.RefreshRangeRequest {
+	return &kvpb.RefreshRangeRequest{
+		RequestHeader: kvpb.RequestHeader{Key: roachpb.Key(start), EndKey: roachpb.Key(end)},
+	}
+}
+
 func TestJuicerSPIClassification(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	spi := newCRDBJuicerSPI()
@@ -130,6 +140,118 @@ func TestJuicerSPIClassification(t *testing.T) {
 	if !spi.IsSelfAbortedResponse(br) {
 		t.Fatal("errored response not flagged as aborted")
 	}
+}
+
+// A refresh is the message whose outcome decides whether a transaction
+// commits or restarts. Leaving it unsortable meant the order Juicer arranged
+// for a key's reads was not the order in which those reads were validated, so
+// the ordering could not affect the metric it was supposed to affect.
+func TestJuicerSPIRefreshIsSortable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	spi := newCRDBJuicerSPI()
+
+	for _, tc := range []struct {
+		name           string
+		req            kvpb.Request
+		expectedOpName string
+	}{
+		{name: "point refresh", req: refresh("k1"), expectedOpName: "Refresh"},
+		{name: "range refresh", req: refreshRange("k1", "k9"), expectedOpName: "RefreshRange"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			txn := juicerTestTxn(77)
+			defer juicerTxnKeys.forget(txn.ID)
+			ba := juicerBatch(txn, tc.req)
+
+			if op := spi.GetOperationType(ba); op != juicer.OpGet {
+				t.Fatalf("refresh batch op = %v, want OpGet", op)
+			}
+			if !sortableJuicerOp(spi.GetOperationType(ba)) {
+				t.Fatal("refresh batch is not sortable")
+			}
+			markers := spi.SplitMarker(ba)
+			if len(markers) != 1 {
+				t.Fatalf("refresh markers = %d, want 1", len(markers))
+			}
+			if markers[0].OpType != tc.expectedOpName {
+				t.Fatalf("refresh marker op name = %q, want %q", markers[0].OpType, tc.expectedOpName)
+			}
+			// A RefreshRange is placed on the queue of its start key: the
+			// sorting queues are per point key, so a span has no exact
+			// representation.
+			if markers[0].Key != juicerKeyHash([]byte("k1")) {
+				t.Fatalf("refresh marker key = %d, want the hash of the start key", markers[0].Key)
+			}
+			if markers[0].Timestamp != 77 {
+				t.Fatalf("refresh marker timestamp = %d, want the txn's pinned key", markers[0].Timestamp)
+			}
+		})
+	}
+
+	// A refresh mixed with a write is still a write: the batch-level type is
+	// the strongest operation in it.
+	txn := juicerTestTxn(88)
+	defer juicerTxnKeys.forget(txn.ID)
+	if op := spi.GetOperationType(juicerBatch(txn, refresh("k1"), put("k2"))); op != juicer.OpSet {
+		t.Fatalf("refresh+write batch op = %v, want OpSet", op)
+	}
+}
+
+// The sorting key is (WallTime, Logical) pinned to the transaction's first
+// read timestamp. Both halves matter: without Logical the key is not a total
+// order, and without the pin a mid-flight timestamp bump moves a transaction's
+// later operations to a different position than its earlier ones.
+func TestJuicerSPISortKeyIsPinnedAndCarriesLogical(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	spi := newCRDBJuicerSPI()
+
+	txn := juicerTestTxn(100)
+	txn.ReadTimestamp = hlc.Timestamp{WallTime: 100, Logical: 4}
+	defer juicerTxnKeys.forget(txn.ID)
+
+	markers := spi.SplitMarker(juicerBatch(txn, plainGet("k1")))
+	if len(markers) != 1 {
+		t.Fatalf("markers = %d, want 1", len(markers))
+	}
+	if markers[0].Timestamp != 100 || markers[0].Logical != 4 {
+		t.Fatalf("sort key = (%d,%d), want (100,4)", markers[0].Timestamp, markers[0].Logical)
+	}
+
+	// CockroachDB pushes the read timestamp forward mid-transaction. The
+	// sorting key must not follow it.
+	txn.ReadTimestamp = hlc.Timestamp{WallTime: 500, Logical: 0}
+	markers = spi.SplitMarker(juicerBatch(txn, plainGet("k1")))
+	if markers[0].Timestamp != 100 || markers[0].Logical != 4 {
+		t.Fatalf("sort key after a timestamp bump = (%d,%d), want the pinned (100,4)",
+			markers[0].Timestamp, markers[0].Logical)
+	}
+	if got := spi.GetTimestamp(juicerBatch(txn, plainGet("k1"))); got != 100 {
+		t.Fatalf("GetTimestamp = %d, want the pinned wall time 100", got)
+	}
+
+	// Observing the transaction's EndTxn releases the pin, so the table does
+	// not grow with every transaction the node ever sees.
+	if op := spi.GetOperationType(juicerBatch(txn, endTxn(true))); op != juicer.OpCommit {
+		t.Fatalf("EndTxn(commit) op = %v, want OpCommit", op)
+	}
+	markers = spi.SplitMarker(juicerBatch(txn, plainGet("k1")))
+	if markers[0].Timestamp != 500 {
+		t.Fatalf("sort key after EndTxn = %d, want a fresh pin at 500", markers[0].Timestamp)
+	}
+	juicerTxnKeys.forget(txn.ID)
+
+	// An abort releases it too.
+	txn2 := juicerTestTxn(200)
+	spi.SplitMarker(juicerBatch(txn2, plainGet("k1")))
+	if op := spi.GetOperationType(juicerBatch(txn2, endTxn(false))); op != juicer.OpAbort {
+		t.Fatalf("EndTxn(abort) op = %v, want OpAbort", op)
+	}
+	txn2.ReadTimestamp = hlc.Timestamp{WallTime: 999}
+	markers = spi.SplitMarker(juicerBatch(txn2, plainGet("k1")))
+	if markers[0].Timestamp != 999 {
+		t.Fatalf("sort key after abort = %d, want a fresh pin at 999", markers[0].Timestamp)
+	}
+	juicerTxnKeys.forget(txn2.ID)
 }
 
 // TestJuicerSPIFailureClassification checks that the per-error-type counters

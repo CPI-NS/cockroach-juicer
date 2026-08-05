@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/juicer"
 )
@@ -60,6 +61,11 @@ var (
 	// from the clock.
 	juicerRandomDelaySeed = envutil.EnvOrDefaultInt64("COCKROACH_JUICER_RANDOM_DELAY_SEED", 0)
 )
+
+// juicerTxnKeys pins each transaction's sorting key for its lifetime; see
+// juicerTxnKeyTable. It is package-level because the SPI is a stateless value
+// type constructed per server, while the pin has to outlive individual calls.
+var juicerTxnKeys = newJuicerTxnKeyTable(juicerTxnKeyTTL, juicerTxnKeySweepInterval)
 
 // Sizes of the fork's two hot-key filters: K keys admitted by the abort tracker
 // (Level 1), S of those tracked for reorder damage (Level 2).
@@ -347,11 +353,17 @@ func asBatchRequest(req interface{}) *kvpb.BatchRequest {
 //   - ResolveIntent{,Range} -> OpCommit / OpAbort by intent status (async
 //     resolution is the only commit signal non-anchor participants see).
 //   - Locking Get (implicit SFU) -> OpGetForPut; plain Get -> OpGet.
+//   - Refresh{,Range} -> OpGet. A refresh re-reads a span to check whether
+//     anything wrote to it since the transaction's original read timestamp,
+//     so it is a read for ordering purposes and must be sortable: it is the
+//     single message whose outcome decides whether the transaction commits or
+//     restarts, and leaving it unsorted meant the arrival order Juicer
+//     arranged for the reads was not the order in which they were validated.
 func classifyBatch(ba *kvpb.BatchRequest) juicer.OperationType {
 	if ba == nil {
 		return juicer.OpUnknown
 	}
-	var hasWrite, hasLockingGet, hasGet bool
+	var hasWrite, hasLockingGet, hasGet, hasRefresh bool
 	var endTxn *kvpb.EndTxnRequest
 	var resolve juicer.OperationType
 	for i := range ba.Requests {
@@ -364,6 +376,8 @@ func classifyBatch(ba *kvpb.BatchRequest) juicer.OperationType {
 			}
 		case *kvpb.PutRequest, *kvpb.ConditionalPutRequest, *kvpb.IncrementRequest, *kvpb.DeleteRequest:
 			hasWrite = true
+		case *kvpb.RefreshRequest, *kvpb.RefreshRangeRequest:
+			hasRefresh = true
 		case *kvpb.EndTxnRequest:
 			endTxn = r
 		case *kvpb.ResolveIntentRequest:
@@ -383,7 +397,7 @@ func classifyBatch(ba *kvpb.BatchRequest) juicer.OperationType {
 		return resolve
 	case hasLockingGet:
 		return juicer.OpGetForPut
-	case hasGet:
+	case hasGet || hasRefresh:
 		return juicer.OpGet
 	default:
 		return juicer.OpUnknown
@@ -410,9 +424,21 @@ func sortableJuicerOp(op juicer.OperationType) bool {
 	return op == juicer.OpGet || op == juicer.OpGetForPut || op == juicer.OpSet
 }
 
+// juicerSortKey returns the pinned sorting key of ba's transaction. See
+// juicerTxnKeyTable for why the key is pinned rather than read off the batch.
+func juicerSortKey(ba *kvpb.BatchRequest) juicerTxnSortKey {
+	return juicerTxnKeys.keyFor(ba.Txn.ID, ba.Txn.ReadTimestamp, timeutil.Now())
+}
+
 // SplitMarker emits one marker per point request of a transactional, sortable
 // batch. Non-transactional batches return nil: they are never sorted, which
 // also keeps txn id 0 (the enforcer's "unbound" sentinel) out of the queues.
+//
+// A RefreshRange contributes a marker for its start key only. The sorting
+// queues are per point key, so a span cannot be represented exactly; the start
+// key is the span's position in the same key space and puts the refresh on a
+// queue the transaction's own reads are likely to be on. This under-covers a
+// wide refresh rather than over-blocking one.
 func (crdbJuicerSPI) SplitMarker(req interface{}) []juicer.Marker[int64] {
 	juicerSplitCalls.Add(1)
 	ba := asBatchRequest(req)
@@ -423,7 +449,7 @@ func (crdbJuicerSPI) SplitMarker(req interface{}) []juicer.Marker[int64] {
 		return nil
 	}
 	txnID := juicerTxnID(ba)
-	ts := ba.Txn.ReadTimestamp.WallTime
+	sortKey := juicerSortKey(ba)
 	markers := make([]juicer.Marker[int64], 0, len(ba.Requests))
 	for i := range ba.Requests {
 		var key []byte
@@ -444,11 +470,16 @@ func (crdbJuicerSPI) SplitMarker(req interface{}) []juicer.Marker[int64] {
 			key, opName = r.Key, "Increment"
 		case *kvpb.DeleteRequest:
 			key, opName = r.Key, "Delete"
+		case *kvpb.RefreshRequest:
+			key, opName = r.Key, "Refresh"
+		case *kvpb.RefreshRangeRequest:
+			key, opName = r.Key, "RefreshRange"
 		default:
 			continue
 		}
 		markers = append(markers, juicer.Marker[int64]{
-			Timestamp: ts,
+			Timestamp: sortKey.wallTime,
+			Logical:   int64(sortKey.logical),
 			TxnId:     txnID,
 			Key:       juicerKeyHash(key),
 			OpIndex:   int64(i),
@@ -464,7 +495,7 @@ func (crdbJuicerSPI) GetTxnId(req interface{}) int64 {
 
 func (crdbJuicerSPI) GetTimestamp(req interface{}) int64 {
 	if ba := asBatchRequest(req); ba != nil && ba.Txn != nil {
-		return ba.Txn.ReadTimestamp.WallTime
+		return juicerSortKey(ba).wallTime
 	}
 	return 0
 }
@@ -476,8 +507,20 @@ func (crdbJuicerSPI) GetOperationCount(req interface{}) int32 {
 	return 0
 }
 
+// GetOperationType classifies a batch and, as a side effect, releases the
+// transaction's pinned sorting key when the batch is its EndTxn. This is the
+// eviction hook: it is the one SPI method the interceptor calls for every
+// message on both the sortable and the non-sortable path, and the SPI has no
+// lifecycle callback of its own. Transactions whose EndTxn this node never
+// sees — 1PC batches (classified OpSet, so no eviction here), or a coordinator
+// that moved — are cleaned up by juicerTxnKeyTable's TTL instead.
 func (s crdbJuicerSPI) GetOperationType(req interface{}) juicer.OperationType {
-	return classifyBatch(asBatchRequest(req))
+	ba := asBatchRequest(req)
+	op := classifyBatch(ba)
+	if (op == juicer.OpCommit || op == juicer.OpAbort) && ba != nil && ba.Txn != nil {
+		juicerTxnKeys.forget(ba.Txn.ID)
+	}
+	return op
 }
 
 // GetKeysFromRequest hashes every keyed request in the batch, including

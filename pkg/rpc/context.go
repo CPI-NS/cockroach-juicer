@@ -213,6 +213,28 @@ func NewServerEx(
 
 	RegisterHeartbeatServer(s, rpcCtx.NewHeartbeatService())
 
+	// Juicer's interceptor is installed by the fork inside NewServer, which
+	// only covers RPCs that arrive over the gRPC transport. Same-node KV
+	// batches never do: internalClientAdapter answers them in-process, running
+	// only the interceptors handed back in ServerInterceptorInfo below. That
+	// path carried the majority of the batches in the campaign-6 cluster —
+	// measured Juicer interception coverage was 29.2% of the KV batches the
+	// server actually served — so Juicer was ordering an unknown minority of
+	// the traffic it claimed to order.
+	//
+	// Appending here rather than to the slice passed to ChainUnaryInterceptor
+	// above is deliberate: this must reach the local path *only*. The
+	// transport path already has it, and interception on both would enqueue
+	// every operation on its sorting queue twice.
+	//
+	// JuicerUnaryInterceptor returns nil when Juicer is disabled, so a
+	// baseline node's local path stays free of any Juicer code — which is what
+	// makes the baseline a valid transparency control.
+	if ji := s.JuicerUnaryInterceptor(); ji != nil {
+		unaryInterceptor = append(unaryInterceptor, ji)
+		log.Dev.Infof(ctx, "juicer: local fast path (internalClientAdapter) registered for interception")
+	}
+
 	return s, ServerInterceptorInfo{
 		UnaryInterceptors:  unaryInterceptor,
 		StreamInterceptors: streamInterceptor,
