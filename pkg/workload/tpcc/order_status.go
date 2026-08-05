@@ -65,6 +65,9 @@ var _ tpccTx = &orderStatus{}
 func createOrderStatus(
 	ctx context.Context, config *tpcc, mcp *workload.MultiConnPool,
 ) (tpccTx, error) {
+	if config.oneShot {
+		return createOrderStatusOneShot(ctx, config, mcp)
+	}
 	o := &orderStatus{
 		config: config,
 		mcp:    mcp,

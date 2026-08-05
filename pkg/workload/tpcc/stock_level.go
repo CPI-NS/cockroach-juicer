@@ -50,6 +50,9 @@ var _ tpccTx = &stockLevel{}
 func createStockLevel(
 	ctx context.Context, config *tpcc, mcp *workload.MultiConnPool,
 ) (tpccTx, error) {
+	if config.oneShot {
+		return createStockLevelOneShot(ctx, config, mcp)
+	}
 	s := &stockLevel{
 		config: config,
 		mcp:    mcp,

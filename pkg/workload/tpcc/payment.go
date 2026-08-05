@@ -96,6 +96,9 @@ type payment struct {
 var _ tpccTx = &payment{}
 
 func createPayment(ctx context.Context, config *tpcc, mcp *workload.MultiConnPool) (tpccTx, error) {
+	if config.oneShot {
+		return createPaymentOneShot(ctx, config, mcp)
+	}
 	p := &payment{
 		config: config,
 		mcp:    mcp,

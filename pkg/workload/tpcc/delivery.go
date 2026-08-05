@@ -47,6 +47,9 @@ var _ tpccTx = &delivery{}
 func createDelivery(
 	ctx context.Context, config *tpcc, mcp *workload.MultiConnPool,
 ) (tpccTx, error) {
+	if config.oneShot {
+		return createDeliveryOneShot(ctx, config, mcp)
+	}
 	del := &delivery{
 		config: config,
 		mcp:    mcp,

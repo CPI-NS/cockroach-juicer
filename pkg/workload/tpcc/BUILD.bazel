@@ -9,6 +9,7 @@ go_library(
         "delivery.go",
         "generate.go",
         "new_order.go",
+        "one_shot.go",
         "order_status.go",
         "partition.go",
         "payment.go",

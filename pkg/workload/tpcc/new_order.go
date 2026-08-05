@@ -85,6 +85,9 @@ var _ tpccTx = &newOrder{}
 func createNewOrder(
 	ctx context.Context, config *tpcc, mcp *workload.MultiConnPool,
 ) (tpccTx, error) {
+	if config.oneShot {
+		return createNewOrderOneShot(ctx, config, mcp)
+	}
 	n := &newOrder{
 		config: config,
 		mcp:    mcp,

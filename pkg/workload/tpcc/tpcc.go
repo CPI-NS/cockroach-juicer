@@ -145,6 +145,12 @@ type tpcc struct {
 	// selects, and performs each row select/update separately, as opposed to
 	// batching them using an IN list.
 	literalImplementation bool
+
+	// oneShot issues every transaction as a single implicit-transaction SQL
+	// statement (see one_shot.go). No client round trips occur inside a
+	// transaction, which also places each transaction on the server's
+	// automatic retry path for retryable errors.
+	oneShot bool
 }
 
 type waitSetter struct {
@@ -285,6 +291,7 @@ var tpccMeta = workload.Meta{
 		}
 		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
+			`one-shot`:                 {RuntimeOnly: true},
 			`mix`:                      {RuntimeOnly: true},
 			`partitions`:               {RuntimeOnly: true},
 			`ignore-partitions`:        {RuntimeOnly: true},
@@ -358,6 +365,7 @@ var tpccMeta = workload.Meta{
 			"This is an optional parameter to specify AOST; used exclusively in conjunction with the TPC-C consistency "+
 				"check. Example values are (\"'-1m'\", \"'-1h'\")")
 		g.flags.BoolVar(&g.literalImplementation, "literal-implementation", false, "If true, use a literal implementation of the TPC-C kit instead of an optimized version")
+		g.flags.BoolVar(&g.oneShot, "one-shot", false, "If true, issue each transaction as a single implicit-transaction SQL statement with no client round trips inside the transaction")
 		g.flags.Var(&lastDurationSetter{val: &[]time.Duration{0}[0], tpcc: g}, "last-duration", "The duration of the previous workload run (Used to determine which consistency checks to skip for long duration workloads).")
 
 		RandomSeed.AddFlag(&g.flags)
@@ -413,6 +421,18 @@ func (w *tpcc) Hooks() workload.Hooks {
 		Validate: func() error {
 			if w.warehouses < 1 {
 				return errors.Errorf(`--warehouses must be positive`)
+			}
+
+			if w.oneShot {
+				if w.literalImplementation {
+					return errors.Errorf(`--one-shot is incompatible with --literal-implementation`)
+				}
+				if w.repairOrderIds {
+					return errors.Errorf(`--one-shot is incompatible with --repair-order-ids`)
+				}
+				if w.txnPreambleFile != "" {
+					return errors.Errorf(`--one-shot is incompatible with --txn-preamble-file`)
+				}
 			}
 
 			if w.activeWarehouses > w.warehouses {
