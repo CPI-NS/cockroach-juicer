@@ -147,9 +147,9 @@ func createNewOrderOneShot(
 			RETURNING ol_amount
 		)
 		SELECT
-			CASE WHEN (SELECT count(*) FROM item_info) = $4::INT
+			(CASE WHEN (SELECT count(*) FROM item_info) = $4::INT
 				AND (SELECT count(*) FROM ol_ins) = $4::INT
-				THEN 0 ELSE 1/0 END,
+				THEN 0 ELSE 1/0 END)::INT,
 			(SELECT sum(ol_amount) FROM ol_ins)
 				* (1 - c.c_discount) * (1 + w.w_tax + d.d_tax),
 			c.c_last, c.c_credit, d.o_id
@@ -318,7 +318,7 @@ func createPaymentOneShot(
 						count(*) OVER () AS cnt
 					FROM customer
 					WHERE c_w_id = $4 AND c_d_id = $5 AND c_last = $7
-				) WHERE rn = (cnt + 1) / 2
+				) WHERE rn = (cnt + 1) // 2
 			) END AS c_id
 		),
 		cust AS (
@@ -345,7 +345,7 @@ func createPaymentOneShot(
 			RETURNING h_c_id
 		)
 		SELECT
-			CASE WHEN (SELECT count(*) FROM cust) = 1 THEN 0 ELSE 1/0 END,
+			(CASE WHEN (SELECT count(*) FROM cust) = 1 THEN 0 ELSE 1/0 END)::INT,
 			c.c_id, c.c_first, c.c_middle, c.c_last, c.c_street_1, c.c_street_2,
 			c.c_city, c.c_state, c.c_zip, c.c_phone, c.c_since, c.c_credit,
 			c.c_credit_lim, c.c_discount, c.c_balance, c.c_data_out,
@@ -453,7 +453,7 @@ func createOrderStatusOneShot(
 						count(*) OVER () AS cnt
 					FROM customer
 					WHERE c_w_id = $1 AND c_d_id = $2 AND c_last = $4
-				) WHERE rn = (cnt + 1) / 2
+				) WHERE rn = (cnt + 1) // 2
 			) END AS c_id
 		),
 		cust AS (
