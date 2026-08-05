@@ -225,6 +225,50 @@ func TestJuicerFilterSizesArePositive(t *testing.T) {
 	}
 }
 
+// Every measurement arm has to be off unless its environment variable is set,
+// and Juicer as a whole has to contribute no server options at all when it is
+// disabled. The second half is what makes the baseline a valid transparency
+// control: a baseline node must be byte-identical to upstream, not "upstream
+// plus an interceptor that happens to do nothing".
+func TestJuicerMeasurementArmsDefaultOff(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	if juicerWaitStrategy != "" {
+		t.Errorf("COCKROACH_JUICER_WAIT_STRATEGY default = %q, want empty (contention-blind insertion-time strategy)",
+			juicerWaitStrategy)
+	}
+	if juicerWaitMinQLen != 2 {
+		t.Errorf("COCKROACH_JUICER_WAIT_MIN_QLEN default = %d, want 2", juicerWaitMinQLen)
+	}
+	if juicerRandomDelay {
+		t.Error("COCKROACH_JUICER_RANDOM_DELAY default = true, want false")
+	}
+	if juicerRandomDelaySeed != 0 {
+		t.Errorf("COCKROACH_JUICER_RANDOM_DELAY_SEED default = %d, want 0 (seed from the clock)",
+			juicerRandomDelaySeed)
+	}
+
+	defer func(saved bool) { juicerEnabled = saved }(juicerEnabled)
+	juicerEnabled = false
+	if opts := juicerServerOptions(); opts != nil {
+		t.Fatalf("juicer disabled but %d server options were returned", len(opts))
+	}
+	juicerEnabled = true
+	base := len(juicerServerOptions())
+
+	// Each arm adds options only when selected.
+	defer func(s string, r bool) { juicerWaitStrategy, juicerRandomDelay = s, r }(juicerWaitStrategy, juicerRandomDelay)
+	juicerWaitStrategy = juicer.WaitStrategyQLenGated
+	if got := len(juicerServerOptions()); got <= base {
+		t.Errorf("selecting a wait strategy added no server options (%d, base %d)", got, base)
+	}
+	juicerWaitStrategy = ""
+	juicerRandomDelay = true
+	if got := len(juicerServerOptions()); got <= base {
+		t.Errorf("selecting the random delay arm added no server options (%d, base %d)", got, base)
+	}
+}
+
 // TestJuicerRulesModes covers the COCKROACH_JUICER_RULES axis: each mode must
 // produce the blocking relation it advertises, because the whole point of the
 // switch is to attribute an observed effect to sorting or to enforcement. It

@@ -39,6 +39,28 @@ var (
 	juicerStreamBatchPaths = []string{"/cockroach.roachpb.Internal/BatchStream", "/cockroach.roachpb.KVBatch/BatchStream"}
 )
 
+// Measurement-arm knobs. Both select an alternative to the default sorting
+// behaviour and both are off unless set, so a run that does not set them is
+// the sorting arm exactly as before.
+var (
+	// juicerWaitStrategy names the fork's head wait strategy. "qlen-gated"
+	// imposes the wait window only when the per-key queue holds at least
+	// COCKROACH_JUICER_WAIT_MIN_QLEN markers; empty (the default) keeps the
+	// contention-blind insertion-time strategy.
+	juicerWaitStrategy = envutil.EnvOrDefaultString("COCKROACH_JUICER_WAIT_STRATEGY", "")
+	juicerWaitMinQLen  = envutil.EnvOrDefaultInt("COCKROACH_JUICER_WAIT_MIN_QLEN", 2)
+
+	// juicerRandomDelay swaps the sorting queues for an injected random sleep
+	// on nominated keys, drawn from the wait-window distribution Juicer
+	// actually imposed (juicer.DefaultDelayQuantiles). Nothing is reordered
+	// and nothing is mutually excluded: this is the control arm that
+	// separates the effect of Juicer's ordering from the effect of its delay.
+	juicerRandomDelay = envutil.EnvOrDefaultBool("COCKROACH_JUICER_RANDOM_DELAY", false)
+	// juicerRandomDelaySeed makes the delay sequence reproducible; 0 seeds
+	// from the clock.
+	juicerRandomDelaySeed = envutil.EnvOrDefaultInt64("COCKROACH_JUICER_RANDOM_DELAY_SEED", 0)
+)
+
 // Sizes of the fork's two hot-key filters: K keys admitted by the abort tracker
 // (Level 1), S of those tracked for reorder damage (Level 2).
 //
@@ -260,6 +282,16 @@ func juicerServerOptions() []grpc.ServerOption {
 	}
 	if juicerScaleFactor > 0 {
 		opts = append(opts, grpc.JuicerScaleFactor(juicerScaleFactor))
+	}
+	if juicerWaitStrategy != "" {
+		opts = append(opts,
+			grpc.JuicerWaitStrategy(juicerWaitStrategy),
+			grpc.JuicerWaitMinQLen(juicerWaitMinQLen))
+	}
+	if juicerRandomDelay {
+		opts = append(opts,
+			grpc.JuicerRandomDelay(true),
+			grpc.JuicerRandomDelaySeed(juicerRandomDelaySeed))
 	}
 	return opts
 }
