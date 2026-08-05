@@ -130,10 +130,12 @@ func createNewOrderOneShot(
 		ord AS (
 			INSERT INTO "order" (o_id, o_d_id, o_w_id, o_c_id, o_entry_d, o_ol_cnt, o_all_local)
 			SELECT d.o_id, $2, $1, $3, $6::TIMESTAMP, $4, $5 FROM dist d
+			RETURNING o_id
 		),
 		no_ins AS (
 			INSERT INTO new_order (no_o_id, no_d_id, no_w_id)
 			SELECT d.o_id, $2, $1 FROM dist d
+			RETURNING no_o_id
 		),
 		ol_ins AS (
 			INSERT INTO order_line (ol_o_id, ol_d_id, ol_w_id, ol_number, ol_i_id,
@@ -337,9 +339,10 @@ func createPaymentOneShot(
 		hist AS (
 			INSERT INTO history (h_c_id, h_c_d_id, h_c_w_id, h_d_id, h_w_id,
 				h_amount, h_date, h_data)
-			SELECT c.c_id, $5, $4, $3, $2, $1, $8::TIMESTAMP,
+			SELECT c.c_id, $5, $4, $3, $2, ($1:::FLOAT)::DECIMAL, $8::TIMESTAMP,
 				w.w_name || '    ' || d.d_name
 			FROM cust c, wh w, dst d
+			RETURNING h_c_id
 		)
 		SELECT
 			CASE WHEN (SELECT count(*) FROM cust) = 1 THEN 0 ELSE 1/0 END,
@@ -551,7 +554,7 @@ func createDeliveryOneShot(
 		),
 		ord AS (
 			UPDATE "order" SET o_carrier_id = $2 FROM cand c
-			WHERE o_w_id = $1 AND o_d_id = c.d_id AND o_id = c.o_id
+			WHERE o_w_id = $1 AND o_d_id = c.d_id AND "order".o_id = c.o_id
 			RETURNING o_d_id, o_c_id
 		),
 		cust AS (
