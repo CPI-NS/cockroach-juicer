@@ -578,7 +578,7 @@ func createDeliveryOneShot(
 			CASE WHEN (SELECT count(*) FROM ord) = (SELECT count(*) FROM cand)
 				AND (SELECT count(*) FROM cust) = (SELECT count(*) FROM cand)
 				AND (SELECT count(*) FROM del) = (SELECT count(*) FROM cand)
-				THEN (SELECT count(*) FROM ol_upd) ELSE 1/0 END`,
+				THEN (SELECT count(*) FROM ol_upd)::INT ELSE (1/0)::INT END`,
 	)
 
 	if err := del.sr.Init(ctx, "delivery-one-shot", mcp); err != nil {
