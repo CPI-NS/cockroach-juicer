@@ -36,6 +36,7 @@ go_library(
         "//pkg/workload/vecann",
         "//pkg/workload/workload_generator",
         "//pkg/workload/ycsb",
+        "//pkg/workload/ycsbt",
     ],
 )
 

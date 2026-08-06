@@ -40,4 +40,5 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/workload/vecann"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/workload_generator"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/ycsb"
+	_ "github.com/cockroachdb/cockroach/pkg/workload/ycsbt"
 )

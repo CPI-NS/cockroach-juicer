@@ -43,6 +43,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/workload/ttllogger"          // registers workloads
 	_ "github.com/cockroachdb/cockroach/pkg/workload/workload_generator" //registers workloads
 	_ "github.com/cockroachdb/cockroach/pkg/workload/ycsb"               // registers workloads
+	_ "github.com/cockroachdb/cockroach/pkg/workload/ycsbt"              // registers workloads
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )

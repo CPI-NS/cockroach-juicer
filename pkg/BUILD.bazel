@@ -917,6 +917,7 @@ ALL_TESTS = [
     "//pkg/workload/workload_generator:workload_generator_test",
     "//pkg/workload/workloadimpl:workloadimpl_test",
     "//pkg/workload/workloadsql:workloadsql_test",
+    "//pkg/workload/ycsbt:ycsbt_test",
     "//pkg/workload:workload_test",
 ]
 
@@ -3165,6 +3166,8 @@ GO_TARGETS = [
     "//pkg/workload/workloadsql:workloadsql",
     "//pkg/workload/workloadsql:workloadsql_test",
     "//pkg/workload/ycsb:ycsb",
+    "//pkg/workload/ycsbt:ycsbt",
+    "//pkg/workload/ycsbt:ycsbt_test",
     "//pkg/workload:workload",
     "//pkg/workload:workload_test",
 ]
