@@ -71,9 +71,10 @@ const (
 // Histogram names. A run reports one line per name, so they double as the
 // classification of what happened to a transaction.
 const (
-	// txnOpName is a transaction that completed. Both shapes are recorded
-	// under the name that describes what they did, so a --read-pct 100 run is
-	// not silently reported as read-modify-write traffic.
+	// A completed transaction is recorded under the name that describes what
+	// it did, so a --read-pct 100 run is not silently reported as
+	// read-modify-write traffic. Exactly one of the two is ever used in a
+	// given run, since the split is fixed for the run.
 	readWriteOpName = `readModifyWrite`
 	readOnlyOpName  = `readOnly`
 	// retryErrOpName is a transaction the server gave up retrying and returned
@@ -434,7 +435,8 @@ func (o *ycsbtOp) run(ctx context.Context) error {
 	}
 
 	start := timeutil.Now()
-	var gotReads, gotWrites int
+	// int64 rather than int: count(*) comes back as INT8.
+	var gotReads, gotWrites int64
 	if err := o.stmt.QueryRow(ctx, o.args...).Scan(&gotReads, &gotWrites); err != nil {
 		// A serialization failure means the server exhausted its automatic
 		// retries. On a contended workload that is the quantity being
@@ -451,7 +453,7 @@ func (o *ycsbtOp) run(ctx context.Context) error {
 	// Every key is loaded before the run, so a short count means the statement
 	// silently touched fewer rows than the transaction asked for -- which would
 	// show up as free throughput rather than as an error.
-	if gotReads != o.reads || gotWrites != o.writes {
+	if gotReads != int64(o.reads) || gotWrites != int64(o.writes) {
 		return errors.Errorf("ycsbt transaction touched %d/%d rows, want %d reads and %d writes",
 			gotReads, gotWrites, o.reads, o.writes)
 	}
