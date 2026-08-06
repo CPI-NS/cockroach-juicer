@@ -46,10 +46,16 @@ var (
 var (
 	// juicerWaitStrategy names the fork's head wait strategy. "qlen-gated"
 	// imposes the wait window only when the per-key queue holds at least
-	// COCKROACH_JUICER_WAIT_MIN_QLEN markers; empty (the default) keeps the
-	// contention-blind insertion-time strategy.
+	// COCKROACH_JUICER_WAIT_MIN_QLEN markers; "fixed" imposes a constant
+	// COCKROACH_JUICER_FIXED_WAIT_MS window measured from each message's
+	// arrival, ignoring the damage feedback entirely; empty (the default) keeps
+	// the contention-blind insertion-time strategy.
 	juicerWaitStrategy = envutil.EnvOrDefaultString("COCKROACH_JUICER_WAIT_STRATEGY", "")
 	juicerWaitMinQLen  = envutil.EnvOrDefaultInt("COCKROACH_JUICER_WAIT_MIN_QLEN", 2)
+	// juicerFixedWaitMillis is the "fixed" strategy's window, in floating-point
+	// milliseconds so a sweep can go below 1 ms. 0 makes "fixed" a zero-window
+	// arm: pure sorting, no delay.
+	juicerFixedWaitMillis = envutil.EnvOrDefaultFloat64("COCKROACH_JUICER_FIXED_WAIT_MS", 0)
 
 	// juicerRandomDelay swaps the sorting queues for an injected random sleep
 	// on nominated keys, drawn from the wait-window distribution Juicer
@@ -60,12 +66,97 @@ var (
 	// juicerRandomDelaySeed makes the delay sequence reproducible; 0 seeds
 	// from the clock.
 	juicerRandomDelaySeed = envutil.EnvOrDefaultInt64("COCKROACH_JUICER_RANDOM_DELAY_SEED", 0)
+	// juicerRandomDelayFixedMillis, when positive, replaces the quantile table
+	// with a constant: every nominated operation sleeps exactly this many
+	// (floating-point) milliseconds. The seed is then unused. 0 (the default)
+	// keeps the empirical distribution.
+	juicerRandomDelayFixedMillis = envutil.EnvOrDefaultFloat64("COCKROACH_JUICER_RANDOM_DELAY_FIXED_MS", 0)
 )
+
+// millisToDuration converts a floating-point millisecond knob to a Duration.
+// Non-positive values yield 0, which every consumer reads as "not set".
+func millisToDuration(ms float64) time.Duration {
+	if ms <= 0 {
+		return 0
+	}
+	return time.Duration(ms * float64(time.Millisecond))
+}
 
 // juicerTxnKeys pins each transaction's sorting key for its lifetime; see
 // juicerTxnKeyTable. It is package-level because the SPI is a stateless value
 // type constructed per server, while the pin has to outlive individual calls.
+// It is consulted only in juicerSortKeyPinnedRead mode (and as the fallback
+// for a batch whose MinTimestamp is empty).
 var juicerTxnKeys = newJuicerTxnKeyTable(juicerTxnKeyTTL, juicerTxnKeySweepInterval)
+
+// juicerSortKeySource names where a transaction's sorting key comes from.
+//
+// Juicer sorts a key's operations by transaction. For that to mean anything the
+// per-transaction sorting key must be one value, agreed on by every node that
+// participates in the transaction and stable for the transaction's whole life.
+// The two sources below differ in how much of that they achieve.
+type juicerSortKeySource string
+
+const (
+	// juicerSortKeyMinTimestamp takes the key from the transaction header's
+	// MinTimestamp: the gateway's clock reading when the transaction was
+	// created (roachpb.MakeTransaction, pkg/roachpb/data.go). It is the right
+	// answer to all three requirements at once, and it needs no state:
+	//
+	//   - It is assigned exactly once. The only writes after creation are
+	//     Transaction.Update, which merges with Backward and so can never
+	//     raise it, and TxnCoordSender.SetFixedTimestamp, which is rejected
+	//     once the transaction has read or written and therefore cannot fire
+	//     mid-flight.
+	//   - It survives internal retries. Transaction.Restart, BumpEpoch and
+	//     BumpReadTimestamp do not touch it, and kvpb.PrepareTransactionForRetry
+	//     leaves it alone for every retry reason except TransactionAbortedError
+	//     — which mints a whole new transaction, new UUID included, so the
+	//     retry is a different transaction by every measure, not just this one.
+	//   - Every node sees the same value. It rides in the embedded TxnMeta of
+	//     Header.Txn, serialized into every BatchRequest; kvcoord clones the
+	//     proto per range without modifying it, and the first server-side
+	//     mutation (Store.Send's UpdateObservedTimestamp) runs downstream of
+	//     this interceptor.
+	//
+	// CockroachDB already relies on exactly this property elsewhere:
+	// kv.AdmissionHeaderForLockUpdateForTxn uses MinTimestamp.WallTime as a
+	// transaction's stable FIFO ordering timestamp for admission control.
+	juicerSortKeyMinTimestamp juicerSortKeySource = "min-timestamp"
+
+	// juicerSortKeyPinnedRead is the campaign-7 behaviour: the key is the
+	// ReadTimestamp of the first batch of the transaction *this node* happened
+	// to see, held in juicerTxnKeyTable for the transaction's lifetime.
+	//
+	// It is retained only so campaign 7 can be reproduced. It solves the
+	// mid-flight instability of a raw ReadTimestamp, but it solves it locally:
+	// the pin is per node and first-sight, so a node that first sees the
+	// transaction after a refresh pins a later key than one that saw it
+	// earlier. Measured on the campaign-7 debug cells, 49.7% of multi-node
+	// transactions (3,721 of 7,484) were pinned to different keys on different
+	// nodes, which means the participants sorted them into inconsistent
+	// positions. It also makes the key cover the whole retry chain, so a
+	// transaction's apparent age — and with it the damage feedback — grows
+	// without bound while it retries.
+	juicerSortKeyPinnedRead juicerSortKeySource = "pinned-read-timestamp"
+)
+
+var juicerSortKeyEnv = envutil.EnvOrDefaultString(
+	"COCKROACH_JUICER_SORT_KEY", string(juicerSortKeyMinTimestamp))
+
+// juicerSortKeyMode is resolved once at startup rather than per batch: it is
+// read on the RPC hot path, and an unrecognized value must not change the
+// shipped default silently, so the resolved mode is logged at injection.
+var juicerSortKeyMode = parseJuicerSortKeySource(juicerSortKeyEnv)
+
+func parseJuicerSortKeySource(s string) juicerSortKeySource {
+	switch juicerSortKeySource(strings.ToLower(strings.TrimSpace(s))) {
+	case juicerSortKeyPinnedRead:
+		return juicerSortKeyPinnedRead
+	default:
+		return juicerSortKeyMinTimestamp
+	}
+}
 
 // Sizes of the fork's two hot-key filters: K keys admitted by the abort tracker
 // (Level 1), S of those tracked for reorder damage (Level 2).
@@ -238,9 +329,16 @@ func kvOtherBreakdown(cur, prev kvFailureSnapshot) string {
 	return " other-detail[" + strings.Join(parts, " ") + "]"
 }
 
-// startJuicerHitReporter logs interception-hit deltas once a minute.
+// startJuicerHitReporter logs the resolved configuration once, then
+// interception-hit deltas every minute.
 func startJuicerHitReporter(ctx context.Context) {
 	juicerReporterOnce.Do(func() {
+		// The sorting key source decides what "sorted by transaction" means on
+		// this node, and an unrecognized COCKROACH_JUICER_SORT_KEY resolves to
+		// the default rather than failing, so the resolved value has to appear
+		// in the node log for a run to be interpretable after the fact.
+		log.Dev.Infof(ctx, "juicer: sorting key source = %s (COCKROACH_JUICER_SORT_KEY=%q)",
+			string(juicerSortKeyMode), juicerSortKeyEnv)
 		go func() {
 			var lastSplit, lastResp uint64
 			var lastFail kvFailureSnapshot
@@ -292,12 +390,14 @@ func juicerServerOptions() []grpc.ServerOption {
 	if juicerWaitStrategy != "" {
 		opts = append(opts,
 			grpc.JuicerWaitStrategy(juicerWaitStrategy),
-			grpc.JuicerWaitMinQLen(juicerWaitMinQLen))
+			grpc.JuicerWaitMinQLen(juicerWaitMinQLen),
+			grpc.JuicerFixedWait(millisToDuration(juicerFixedWaitMillis)))
 	}
 	if juicerRandomDelay {
 		opts = append(opts,
 			grpc.JuicerRandomDelay(true),
-			grpc.JuicerRandomDelaySeed(juicerRandomDelaySeed))
+			grpc.JuicerRandomDelaySeed(juicerRandomDelaySeed),
+			grpc.JuicerRandomDelayFixed(millisToDuration(juicerRandomDelayFixedMillis)))
 	}
 	return opts
 }
@@ -424,9 +524,21 @@ func sortableJuicerOp(op juicer.OperationType) bool {
 	return op == juicer.OpGet || op == juicer.OpGetForPut || op == juicer.OpSet
 }
 
-// juicerSortKey returns the pinned sorting key of ba's transaction. See
-// juicerTxnKeyTable for why the key is pinned rather than read off the batch.
+// juicerSortKey returns the sorting key of ba's transaction, from whichever
+// source juicerSortKeyMode selects. See juicerSortKeySource for what each one
+// guarantees.
+//
+// Nothing in CockroachDB asserts that MinTimestamp is non-zero — AssertInitialized
+// checks only ID and WriteTimestamp — so an empty one falls back to the pinned
+// table rather than collapsing every such transaction onto the sorting key 0.
+// The fallback is not expected to fire: MakeTransaction is the only path to
+// ba.Txn and it always sets MinTimestamp from an HLC reading.
 func juicerSortKey(ba *kvpb.BatchRequest) juicerTxnSortKey {
+	if juicerSortKeyMode == juicerSortKeyMinTimestamp {
+		if ts := ba.Txn.MinTimestamp; !ts.IsEmpty() {
+			return juicerTxnSortKey{wallTime: ts.WallTime, logical: ts.Logical}
+		}
+	}
 	return juicerTxnKeys.keyFor(ba.Txn.ID, ba.Txn.ReadTimestamp, timeutil.Now())
 }
 
@@ -514,10 +626,15 @@ func (crdbJuicerSPI) GetOperationCount(req interface{}) int32 {
 // lifecycle callback of its own. Transactions whose EndTxn this node never
 // sees — 1PC batches (classified OpSet, so no eviction here), or a coordinator
 // that moved — are cleaned up by juicerTxnKeyTable's TTL instead.
+//
+// In juicerSortKeyMinTimestamp mode the table holds nothing worth evicting (it
+// is only touched by the empty-MinTimestamp fallback), so the eviction is
+// skipped rather than taking a shard lock per EndTxn on the hot path.
 func (s crdbJuicerSPI) GetOperationType(req interface{}) juicer.OperationType {
 	ba := asBatchRequest(req)
 	op := classifyBatch(ba)
-	if (op == juicer.OpCommit || op == juicer.OpAbort) && ba != nil && ba.Txn != nil {
+	if juicerSortKeyMode == juicerSortKeyPinnedRead &&
+		(op == juicer.OpCommit || op == juicer.OpAbort) && ba != nil && ba.Txn != nil {
 		juicerTxnKeys.forget(ba.Txn.ID)
 	}
 	return op

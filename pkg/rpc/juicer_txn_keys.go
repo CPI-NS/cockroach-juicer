@@ -41,8 +41,15 @@ const juicerTxnKeyTTL = time.Minute
 const juicerTxnKeySweepInterval = 10 * time.Second
 
 // juicerTxnSortKey is the sorting key Juicer orders a transaction's operations
-// by: the (WallTime, Logical) pair of an hlc.Timestamp, which is CockroachDB's
-// commit order and is a total order, unlike WallTime alone.
+// by: the (WallTime, Logical) pair of an hlc.Timestamp. Both components are
+// carried because WallTime alone is not a total order — CockroachDB's HLC
+// breaks same-nanosecond ties in Logical, and dropping it hands those ties to
+// the fork's heap to break arbitrarily.
+//
+// Which timestamp fills it is chosen by juicerSortKeySource. It is a
+// transaction *start* order (MinTimestamp, or a pinned first-seen
+// ReadTimestamp), not a commit order: the commit order is WriteTimestamp as of
+// commit, which no message carries at the time it has to be sorted.
 type juicerTxnSortKey struct {
 	wallTime int64
 	logical  int32
@@ -65,7 +72,13 @@ type juicerTxnKeyShard struct {
 // timestamp first observed for it, and holds that pin for the transaction's
 // lifetime.
 //
-// Why the pin is needed: CockroachDB advances a transaction's ReadTimestamp
+// It is live only under COCKROACH_JUICER_SORT_KEY=pinned-read-timestamp, which
+// exists to reproduce campaign 7; the default sorting key is the transaction
+// header's MinTimestamp, which needs no table at all. See juicerSortKeySource
+// for why the pin was not enough — in short, it is per node and first-sight,
+// so different participants pin different keys for the same transaction.
+//
+// Why the pin is needed at all: CockroachDB advances a transaction's ReadTimestamp
 // mid-flight — a refresh, a push, or an uncertainty restart all move it
 // forward. Deriving the sorting key from the timestamp on each batch therefore
 // makes a transaction's own operations arrive at successive per-key queues
