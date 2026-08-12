@@ -101,6 +101,37 @@ func TestBuildStmt(t *testing.T) {
 	}
 }
 
+// Same discipline as TestBuildStmt: the blind statement is the workload, so
+// its exact text is pinned, and the (key, value) pair placeholders must be
+// exactly $1..$2n in order because runBlind fills them positionally.
+func TestBuildBlindStmt(t *testing.T) {
+	require.Equal(t,
+		`UPSERT INTO usertable (ycsb_key, field0) VALUES ($1, $2), ($3, $4)`,
+		buildBlindStmt(2))
+
+	placeholderRE := regexp.MustCompile(`\$(\d+)`)
+	for _, writes := range []int{1, 5, 10} {
+		stmt := buildBlindStmt(writes)
+		var got []int
+		for _, m := range placeholderRE.FindAllStringSubmatch(stmt, -1) {
+			n, err := strconv.Atoi(m[1])
+			require.NoError(t, err)
+			got = append(got, n)
+		}
+		want := make([]int, 0, 2*writes)
+		for i := 1; i <= 2*writes; i++ {
+			want = append(want, i)
+		}
+		require.Equalf(t, want, got, "%d writes: placeholder sequence", writes)
+
+		// The blind statement must never read: no RETURNING, no CTE, no scan
+		// of existing rows. Its text starting with UPSERT is the cheap proxy
+		// this test can check for that plan property.
+		require.NotContains(t, stmt, "RETURNING")
+		require.NotContains(t, stmt, "SELECT")
+	}
+}
+
 func TestValidateConfig(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -122,6 +153,10 @@ func TestValidateConfig(t *testing.T) {
 			expectedErr: "--keys (0) must be at least 1"},
 		{name: "more splits than keys", flags: []string{`--keys=10`, `--splits=10`},
 			expectedErr: "must be less than --keys"},
+		{name: "blind write only", flags: []string{`--blind`, `--read-pct=0`}},
+		{name: "blind mode must not silently drop requested reads",
+			flags:       []string{`--blind`, `--read-pct=50`},
+			expectedErr: "requires --read-pct 0"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

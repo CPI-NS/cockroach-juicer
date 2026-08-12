@@ -30,6 +30,19 @@
 // merely on a lock, so the aborts and retries the reordering layer is supposed
 // to prevent actually occur. The RETURNING is not decorative: a mutating CTE
 // whose output nothing consumes may not be evaluated at all.
+//
+// The --blind mode trades that property away on purpose. Each transaction
+// becomes one multi-row UPSERT that overwrites its keys with client-chosen
+// values and reads nothing: on this table (primary index only, every column
+// written) CockroachDB plans it as a blind put — an upsert fed by values,
+// no scan — so the whole transaction reaches the KV layer as a single wave
+// of writes committed together. An UPDATE could not do this: even with a
+// constant SET it plans a locking scan first. This is the closest a SQL
+// workload gets to the single-wave one-shot class the reordering layer's
+// model assumes, at the cost of a different failure mix: with no read set a
+// WriteTooOld error bumps the timestamp and commits without a refresh, so
+// serialization restarts vanish and the abort channel narrows to lock
+// cycles between transactions writing the same hot keys across ranges.
 package ycsbt
 
 import (
@@ -38,6 +51,7 @@ import (
 	"math/rand/v2"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -73,10 +87,11 @@ const (
 const (
 	// A completed transaction is recorded under the name that describes what
 	// it did, so a --read-pct 100 run is not silently reported as
-	// read-modify-write traffic. Exactly one of the two is ever used in a
-	// given run, since the split is fixed for the run.
+	// read-modify-write traffic. Exactly one of the three is ever used in a
+	// given run, since the split (and --blind) is fixed for the run.
 	readWriteOpName = `readModifyWrite`
 	readOnlyOpName  = `readOnly`
+	blindOpName     = `blindWrite`
 	// retryErrOpName is a transaction the server gave up retrying and returned
 	// a serialization failure for. It is recorded rather than propagated: on a
 	// contended workload these are the signal, not a reason to stop the run.
@@ -96,6 +111,7 @@ type ycsbt struct {
 	readPct   int
 	zipfTheta float64
 	splits    int
+	blind     bool
 }
 
 func init() {
@@ -116,6 +132,11 @@ var ycsbtMeta = workload.Meta{
 	wipe out a side the caller asked for -- e.g. --ops-per-txn 5 --read-pct 95
 	rounds to 5 reads and 0 writes -- it is clamped to leave one operation on
 	that side, so a run that asked for writes always performs writes.
+
+	With --blind (requires --read-pct 0) every transaction is instead one
+	multi-row UPSERT that overwrites its keys without reading them, which
+	CockroachDB plans as a blind put: the transaction reaches the KV layer as
+	a single wave of writes.
 	`,
 	Version:    `1.0.0`,
 	RandomSeed: RandomSeed,
@@ -128,6 +149,7 @@ var ycsbtMeta = workload.Meta{
 			`ops-per-txn`: {RuntimeOnly: true},
 			`read-pct`:    {RuntimeOnly: true},
 			`zipf-theta`:  {RuntimeOnly: true},
+			`blind`:       {RuntimeOnly: true},
 		}
 		g.flags.IntVar(&g.keys, `keys`, defaultKeys,
 			`Number of rows loaded into usertable, and the support of the Zipf key distribution.`)
@@ -139,6 +161,8 @@ var ycsbtMeta = workload.Meta{
 			`Skew of the Zipf key distribution. Larger is more skewed; must be positive and not exactly 1.`)
 		g.flags.IntVar(&g.splits, `splits`, 0,
 			`Number of range splits to perform on usertable before the workload starts.`)
+		g.flags.BoolVar(&g.blind, `blind`, false,
+			`Replace the read-modify-write statement with one blind multi-row UPSERT (requires --read-pct 0).`)
 		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
@@ -174,6 +198,12 @@ func (w *ycsbt) validateConfig() error {
 	}
 	if w.readPct < 0 || w.readPct > 100 {
 		return errors.Errorf("--read-pct (%d) must be between 0 and 100", w.readPct)
+	}
+	// Blind mode performs no reads by construction; a nonzero --read-pct
+	// would silently measure a different transaction than the one asked for,
+	// so it is rejected rather than ignored.
+	if w.blind && w.readPct != 0 {
+		return errors.Errorf("--blind performs no reads; it requires --read-pct 0, not %d", w.readPct)
 	}
 	// Matches workloadimpl.NewZipfGenerator's own precondition, checked here so
 	// the failure is a flag error rather than a mid-run one.
@@ -277,6 +307,24 @@ func buildStmt(reads, writes int) string {
 	return b.String()
 }
 
+// buildBlindStmt renders the --blind statement: one UPSERT overwriting writes
+// keys. Placeholders are (key, value) pairs in order — $1, $2 for the first
+// row and so on. There is no RETURNING: an UPSERT is evaluated for its
+// effect (unlike a mutating CTE), and the row count is checked from the
+// command tag instead. Adding a RETURNING that touched existing row state
+// would also force the read this statement exists to avoid.
+func buildBlindStmt(writes int) string {
+	var b strings.Builder
+	b.WriteString("UPSERT INTO usertable (ycsb_key, field0) VALUES ")
+	for i := 0; i < writes; i++ {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		fmt.Fprintf(&b, "($%d, $%d)", 2*i+1, 2*i+2)
+	}
+	return b.String()
+}
+
 // writePlaceholders emits `$first, $first+1, ... ` for n placeholders.
 func writePlaceholders(b *strings.Builder, first, n int) {
 	for i := 0; i < n; i++ {
@@ -307,6 +355,14 @@ func (w *ycsbt) Ops(
 	if writes == 0 {
 		opName = readOnlyOpName
 	}
+	// argsLen is the placeholder count: one key per operation, plus one value
+	// per operation in blind mode, whose rows are (key, value) pairs.
+	argsLen := w.opsPerTxn
+	if w.blind {
+		stmtStr = buildBlindStmt(w.opsPerTxn)
+		opName = blindOpName
+		argsLen = 2 * w.opsPerTxn
+	}
 
 	var retryErrors atomic.Int64
 	ql := workload.QueryLoad{ResultHist: opName}
@@ -330,14 +386,18 @@ func (w *ycsbt) Ops(
 			zipf:        zipf,
 			rng:         rand.New(rand.NewPCG(RandomSeed.Seed(), uint64(i)+uint64(w.connFlags.Concurrency))),
 			keys:        make([]int64, w.opsPerTxn),
-			args:        make([]interface{}, w.opsPerTxn),
+			args:        make([]interface{}, argsLen),
 			retryErrors: &retryErrors,
 		}
 		op.stmt = op.sr.Define(stmtStr)
 		if err := op.sr.Init(ctx, "ycsbt", mcp); err != nil {
 			return workload.QueryLoad{}, err
 		}
-		ql.WorkerFns = append(ql.WorkerFns, op.run)
+		runFn := op.run
+		if w.blind {
+			runFn = op.runBlind
+		}
+		ql.WorkerFns = append(ql.WorkerFns, runFn)
 	}
 	ql.Close = func(context.Context) error {
 		if n := retryErrors.Load(); n != 0 {
@@ -438,14 +498,7 @@ func (o *ycsbtOp) run(ctx context.Context) error {
 	// int64 rather than int: count(*) comes back as INT8.
 	var gotReads, gotWrites int64
 	if err := o.stmt.QueryRow(ctx, o.args...).Scan(&gotReads, &gotWrites); err != nil {
-		// A serialization failure means the server exhausted its automatic
-		// retries. On a contended workload that is the quantity being
-		// measured, so it is counted and timed rather than propagated -- an
-		// error here would abort the whole run.
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
-			o.retryErrors.Add(1)
-			o.hists.Get(retryErrOpName).Record(timeutil.Since(start))
+		if o.recordIfSerializationFailure(err, start) {
 			return nil
 		}
 		return errors.Wrap(err, "ycsbt transaction failed")
@@ -459,4 +512,47 @@ func (o *ycsbtOp) run(ctx context.Context) error {
 	}
 	o.hists.Get(o.opName).Record(timeutil.Since(start))
 	return nil
+}
+
+// runBlind is the --blind worker: overwrite the drawn keys with one UPSERT.
+// The values are drawn fresh per transaction, so successive overwrites of a
+// key change the row rather than rewriting an identical one.
+func (o *ycsbtOp) runBlind(ctx context.Context) error {
+	o.drawKeys()
+	for i, k := range o.keys {
+		o.args[2*i] = k
+		o.args[2*i+1] = o.rng.Int64N(1 << 30)
+	}
+
+	start := timeutil.Now()
+	tag, err := o.stmt.Exec(ctx, o.args...)
+	if err != nil {
+		if o.recordIfSerializationFailure(err, start) {
+			return nil
+		}
+		return errors.Wrap(err, "ycsbt blind transaction failed")
+	}
+	// The statement lists each key exactly once, so anything but an exact row
+	// count means rows were silently dropped -- which would show up as free
+	// throughput rather than as an error.
+	if got := tag.RowsAffected(); got != int64(len(o.keys)) {
+		return errors.Errorf("ycsbt blind transaction wrote %d rows, want %d", got, len(o.keys))
+	}
+	o.hists.Get(o.opName).Record(timeutil.Since(start))
+	return nil
+}
+
+// recordIfSerializationFailure reports whether err is a serialization
+// failure, meaning the server exhausted its automatic retries; if so it is
+// counted and timed under retryErrOpName. On a contended workload these are
+// the quantity being measured, so the caller swallows them rather than
+// aborting the whole run.
+func (o *ycsbtOp) recordIfSerializationFailure(err error, start time.Time) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
+		o.retryErrors.Add(1)
+		o.hists.Get(retryErrOpName).Record(timeutil.Since(start))
+		return true
+	}
+	return false
 }
