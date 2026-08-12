@@ -160,8 +160,12 @@ func TestValidateConfig(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			gen := workload.FromFlags(ycsbtMeta, tc.flags...)
-			err := gen.(*ycsbt).validateConfig()
+			// Not workload.FromFlags: that helper runs the Validate hook and,
+			// by documented contract, panics on its error -- which is exactly
+			// the value the negative cases below need to observe instead.
+			gen := ycsbtMeta.New().(*ycsbt)
+			require.NoError(t, gen.flags.Parse(tc.flags))
+			err := gen.validateConfig()
 			if tc.expectedErr != "" {
 				require.ErrorContains(t, err, tc.expectedErr)
 				return
