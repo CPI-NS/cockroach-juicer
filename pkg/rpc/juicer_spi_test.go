@@ -724,3 +724,42 @@ func TestJuicerCRDBRules(t *testing.T) {
 		t.Fatal("observed commit message did not release")
 	}
 }
+
+// The batch-now sorting key comes from the header Now — the gateway
+// DistSender clock reading taken once per client-level send — so a retry
+// sorts at its retry time instead of at the transaction birth, and the two
+// messages of one wave still agree on every node. An empty Now falls back to
+// the MinTimestamp key rather than collapsing onto key zero.
+func TestJuicerSPISortKeyBatchNow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	spi := newCRDBJuicerSPI()
+
+	saved := juicerSortKeyMode
+	juicerSortKeyMode = juicerSortKeyBatchNow
+	t.Cleanup(func() { juicerSortKeyMode = saved })
+
+	txn := juicerTestTxn(100)
+	txn.MinTimestamp = hlc.Timestamp{WallTime: 100, Logical: 4}
+
+	ba := juicerBatch(txn, plainGet("k1"))
+	ba.Now = hlc.ClockTimestamp{WallTime: 777, Logical: 3}
+	markers := spi.SplitMarker(ba)
+	if len(markers) != 1 {
+		t.Fatalf("markers = %d, want 1", len(markers))
+	}
+	if markers[0].Timestamp != 777 || markers[0].Logical != 3 {
+		t.Fatalf("sort key = (%d,%d), want the batch Now (777,3)",
+			markers[0].Timestamp, markers[0].Logical)
+	}
+
+	bare := juicerBatch(txn, plainGet("k1"))
+	markers = spi.SplitMarker(bare)
+	if len(markers) != 1 || markers[0].Timestamp != 100 || markers[0].Logical != 4 {
+		t.Fatalf("empty-Now fallback sort key = (%d,%d), want the MinTimestamp (100,4)",
+			markers[0].Timestamp, markers[0].Logical)
+	}
+
+	if got := parseJuicerSortKeySource("batch-now"); got != juicerSortKeyBatchNow {
+		t.Fatalf("parseJuicerSortKeySource(batch-now) = %q", got)
+	}
+}

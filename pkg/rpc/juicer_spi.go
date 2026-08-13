@@ -71,6 +71,16 @@ var (
 	// (floating-point) milliseconds. The seed is then unused. 0 (the default)
 	// keeps the empirical distribution.
 	juicerRandomDelayFixedMillis = envutil.EnvOrDefaultFloat64("COCKROACH_JUICER_RANDOM_DELAY_FIXED_MS", 0)
+
+	// juicerHoldUntilDone turns on the sorting queues' completion coupling:
+	// a key admits its next message only after the previous one released on
+	// that key has completed (its response was observed, success or failure).
+	// Per message, independent of COCKROACH_JUICER_RULES; the two can be
+	// combined. juicerMaxBusyMillis bounds one hold (the response can be
+	// lost, or the released message can be waiting for its sibling markers
+	// on other keys); 0 falls back to the fork's DefaultMaxBusy.
+	juicerHoldUntilDone = envutil.EnvOrDefaultBool("COCKROACH_JUICER_HOLD_UNTIL_DONE", false)
+	juicerMaxBusyMillis = envutil.EnvOrDefaultFloat64("COCKROACH_JUICER_MAX_BUSY_MS", 25)
 )
 
 // millisToDuration converts a floating-point millisecond knob to a Duration.
@@ -124,6 +134,32 @@ const (
 	// transaction's stable FIFO ordering timestamp for admission control.
 	juicerSortKeyMinTimestamp juicerSortKeySource = "min-timestamp"
 
+	// juicerSortKeyBatchNow takes the key from the batch header's Now: the
+	// gateway DistSender's clock reading, stamped once per client-level send
+	// in initAndVerifyBatch (pkg/kv/kvclient/kvcoord/dist_sender.go) and
+	// shared verbatim by every per-range sub-batch of that send.
+	//
+	// It changes the unit being sorted from "one transaction" to "one send
+	// attempt". MinTimestamp is assigned once and survives every internal
+	// retry, so late messages of a long-lived transaction sort as very old
+	// and are mostly BYPASSED (their key is below the queue's released
+	// watermark) — the sorting is thrown away exactly where it was supposed
+	// to act, and the damage feedback measures transaction age instead of
+	// arrival disorder (campaign 10: MaxDamage p50 4.6 s against a 0.169 ms
+	// RTT). Now moves with each attempt, so the key-to-arrival gap shrinks
+	// to one-way network latency and both defects close at once.
+	//
+	// Two knowingly accepted imperfections, from the 2026-08-13 audit:
+	// DistSender-internal transport retries (NotLeaseHolder and friends)
+	// re-send without re-stamping, so those arrivals still look as old as
+	// their client-level send — but never as old as the transaction; and a
+	// proxied sub-batch is re-stamped with the proxying node's clock, so it
+	// can disagree with its siblings by up to the cluster's clock offset.
+	// Cross-gateway ties within one HLC tick are broken arbitrarily by the
+	// heap; unlike the MinTimestamp key, where every message of a
+	// transaction ties by construction, such ties are vanishingly rare.
+	juicerSortKeyBatchNow juicerSortKeySource = "batch-now"
+
 	// juicerSortKeyPinnedRead is the campaign-7 behaviour: the key is the
 	// ReadTimestamp of the first batch of the transaction *this node* happened
 	// to see, held in juicerTxnKeyTable for the transaction's lifetime.
@@ -153,6 +189,8 @@ func parseJuicerSortKeySource(s string) juicerSortKeySource {
 	switch juicerSortKeySource(strings.ToLower(strings.TrimSpace(s))) {
 	case juicerSortKeyPinnedRead:
 		return juicerSortKeyPinnedRead
+	case juicerSortKeyBatchNow:
+		return juicerSortKeyBatchNow
 	default:
 		return juicerSortKeyMinTimestamp
 	}
@@ -399,6 +437,11 @@ func juicerServerOptions() []grpc.ServerOption {
 			grpc.JuicerRandomDelaySeed(juicerRandomDelaySeed),
 			grpc.JuicerRandomDelayFixed(millisToDuration(juicerRandomDelayFixedMillis)))
 	}
+	if juicerHoldUntilDone {
+		opts = append(opts,
+			grpc.JuicerHoldUntilDone(true),
+			grpc.JuicerMaxBusy(millisToDuration(juicerMaxBusyMillis)))
+	}
 	return opts
 }
 
@@ -534,7 +577,17 @@ func sortableJuicerOp(op juicer.OperationType) bool {
 // The fallback is not expected to fire: MakeTransaction is the only path to
 // ba.Txn and it always sets MinTimestamp from an HLC reading.
 func juicerSortKey(ba *kvpb.BatchRequest) juicerTxnSortKey {
-	if juicerSortKeyMode == juicerSortKeyMinTimestamp {
+	switch juicerSortKeyMode {
+	case juicerSortKeyBatchNow:
+		// The header documents Now as optional, so an empty one falls down
+		// the same ladder as the other modes: MinTimestamp, then the pinned
+		// table. In practice everything arriving over gRPC came through a
+		// DistSender and carries it.
+		if now := ba.Now; !now.IsEmpty() {
+			return juicerTxnSortKey{wallTime: now.WallTime, logical: now.Logical}
+		}
+		fallthrough
+	case juicerSortKeyMinTimestamp:
 		if ts := ba.Txn.MinTimestamp; !ts.IsEmpty() {
 			return juicerTxnSortKey{wallTime: ts.WallTime, logical: ts.Logical}
 		}
