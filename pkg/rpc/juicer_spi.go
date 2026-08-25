@@ -53,11 +53,15 @@ var (
 	// juicerHoldUntilDone is ON by default: the completion gate — a key
 	// admits its next message only after the previous one released on that
 	// key has completed (its response was observed, success or failure) — is
-	// the one intervention with a demonstrated win (campaign #11), so it is
-	// part of the standard configuration and switching it OFF is what has to
-	// be asked for by name. juicerMaxBusyMillis bounds one hold (the response
-	// can be lost, or the released message can be waiting for its sibling
-	// markers on other keys); 0 falls back to the fork's DefaultMaxBusy.
+	// the one intervention with a demonstrated win (campaigns #11/#12), so it
+	// is part of the standard configuration and switching it OFF is what has
+	// to be asked for by name. juicerMaxBusyMillis bounds one hold; 0
+	// DISABLES the TTL so the gate waits on the response alone (safe against
+	// queue-layer deadlock under the per-send total order, but a lost
+	// response then closes the key until its next bypass-eligible arrival —
+	// the default 25 keeps that backstop; the busyExpirations counter in the
+	// fork's per-minute "queue counters" log line measures how often the TTL
+	// actually fires).
 	juicerHoldUntilDone = envutil.EnvOrDefaultBool("COCKROACH_JUICER_HOLD_UNTIL_DONE", true)
 	juicerMaxBusyMillis = envutil.EnvOrDefaultFloat64("COCKROACH_JUICER_MAX_BUSY_MS", 25)
 )
