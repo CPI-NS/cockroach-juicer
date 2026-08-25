@@ -30,15 +30,6 @@ func juicerTestTxn(wallTime int64) *roachpb.Transaction {
 	return txn
 }
 
-// withPinnedSortKey switches the package to the campaign-7 sorting key for the
-// duration of a test.
-func withPinnedSortKey(t *testing.T) {
-	t.Helper()
-	saved := juicerSortKeyMode
-	juicerSortKeyMode = juicerSortKeyPinnedRead
-	t.Cleanup(func() { juicerSortKeyMode = saved })
-}
-
 func juicerBatch(txn *roachpb.Transaction, reqs ...kvpb.Request) *kvpb.BatchRequest {
 	ba := &kvpb.BatchRequest{}
 	ba.Txn = txn
@@ -175,7 +166,6 @@ func TestJuicerSPIRefreshIsSortable(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			txn := juicerTestTxn(77)
-			defer juicerTxnKeys.forget(txn.ID)
 			ba := juicerBatch(txn, tc.req)
 
 			if op := spi.GetOperationType(ba); op != juicer.OpGet {
@@ -198,7 +188,7 @@ func TestJuicerSPIRefreshIsSortable(t *testing.T) {
 				t.Fatalf("refresh marker key = %d, want the hash of the start key", markers[0].Key)
 			}
 			if markers[0].Timestamp != 77 {
-				t.Fatalf("refresh marker timestamp = %d, want the txn's pinned key", markers[0].Timestamp)
+				t.Fatalf("refresh marker timestamp = %d, want the MinTimestamp fallback", markers[0].Timestamp)
 			}
 		})
 	}
@@ -206,222 +196,68 @@ func TestJuicerSPIRefreshIsSortable(t *testing.T) {
 	// A refresh mixed with a write is still a write: the batch-level type is
 	// the strongest operation in it.
 	txn := juicerTestTxn(88)
-	defer juicerTxnKeys.forget(txn.ID)
 	if op := spi.GetOperationType(juicerBatch(txn, refresh("k1"), put("k2"))); op != juicer.OpSet {
 		t.Fatalf("refresh+write batch op = %v, want OpSet", op)
 	}
 }
 
-// The default sorting key is the transaction header's MinTimestamp: one value
-// per transaction, assigned at creation, carried in every batch to every node,
-// and untouched by internal retries. Everything Juicer needs from a sorting key
-// follows from that, with no per-node state to keep.
-func TestJuicerSPISortKeyIsTheTransactionMinTimestamp(t *testing.T) {
+// The sorting key is the batch header's Now — the gateway's per-send clock
+// reading — so a retry sorts at its retry time, and every per-range sub-batch
+// of one send shares the key by construction (they ShallowCopy one header).
+// There is no per-node sorting state: two nodes given the same batch bytes
+// compute the same key, which is the cross-node agreement property the old
+// pinned key lacked.
+func TestJuicerSPISortKeyIsTheBatchNow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	spi := newCRDBJuicerSPI()
-
-	if juicerSortKeyMode != juicerSortKeyMinTimestamp {
-		t.Fatalf("default sorting key source = %q, want %q",
-			juicerSortKeyMode, juicerSortKeyMinTimestamp)
-	}
 
 	txn := juicerTestTxn(100)
 	txn.MinTimestamp = hlc.Timestamp{WallTime: 100, Logical: 4}
-	// The read timestamp starts elsewhere to prove the key does not come
-	// from it.
-	txn.ReadTimestamp = hlc.Timestamp{WallTime: 300, Logical: 9}
 
-	markers := spi.SplitMarker(juicerBatch(txn, plainGet("k1")))
-	if len(markers) != 1 {
-		t.Fatalf("markers = %d, want 1", len(markers))
-	}
-	if markers[0].Timestamp != 100 || markers[0].Logical != 4 {
-		t.Fatalf("sort key = (%d,%d), want the MinTimestamp (100,4)",
-			markers[0].Timestamp, markers[0].Logical)
-	}
-	if got := spi.GetTimestamp(juicerBatch(txn, plainGet("k1"))); got != 100 {
-		t.Fatalf("GetTimestamp = %d, want the MinTimestamp wall time 100", got)
-	}
-
-	// An internal restart bumps the epoch and moves both timestamps forward.
-	// roachpb.Transaction.Restart is called rather than hand-edited fields, so
-	// the test fails if a future release starts touching MinTimestamp there.
-	before := txn.MinTimestamp
-	txn.Restart(roachpb.NormalUserPriority, 0 /* upgradePriority */, hlc.Timestamp{WallTime: 900})
-	if txn.Epoch == 0 {
-		t.Fatal("Restart did not bump the epoch; the test is not exercising a restart")
-	}
-	if txn.MinTimestamp != before {
-		t.Fatalf("Restart moved MinTimestamp %v -> %v: it is no longer restart-invariant "+
-			"and this sorting key source has to be reconsidered", before, txn.MinTimestamp)
-	}
-	markers = spi.SplitMarker(juicerBatch(txn, plainGet("k1")))
-	if markers[0].Timestamp != 100 || markers[0].Logical != 4 {
-		t.Fatalf("sort key after an internal restart = (%d,%d), want (100,4)",
-			markers[0].Timestamp, markers[0].Logical)
-	}
-
-	// A read refresh moves the read timestamp without a restart.
-	txn.BumpReadTimestamp(hlc.Timestamp{WallTime: 5000})
-	markers = spi.SplitMarker(juicerBatch(txn, plainGet("k1")))
-	if markers[0].Timestamp != 100 {
-		t.Fatalf("sort key after a read refresh = %d, want 100", markers[0].Timestamp)
-	}
-
-	// There is no pin to release, so observing the EndTxn changes nothing: the
-	// key is a property of the transaction, not of what this node has seen.
-	if op := spi.GetOperationType(juicerBatch(txn, endTxn(true))); op != juicer.OpCommit {
-		t.Fatalf("EndTxn(commit) op = %v, want OpCommit", op)
-	}
-	markers = spi.SplitMarker(juicerBatch(txn, plainGet("k1")))
-	if markers[0].Timestamp != 100 {
-		t.Fatalf("sort key after EndTxn = %d, want the unchanged 100", markers[0].Timestamp)
-	}
-}
-
-// Nothing in CockroachDB asserts MinTimestamp is set (AssertInitialized checks
-// only ID and WriteTimestamp), so an empty one must not collapse every such
-// transaction onto the sorting key 0. It falls back to the pinned table.
-func TestJuicerSPISortKeyFallsBackWhenMinTimestampIsEmpty(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	spi := newCRDBJuicerSPI()
-
-	txn := juicerTestTxn(0)
-	txn.MinTimestamp = hlc.Timestamp{}
-	txn.ReadTimestamp = hlc.Timestamp{WallTime: 700, Logical: 2}
-	defer juicerTxnKeys.forget(txn.ID)
-
-	markers := spi.SplitMarker(juicerBatch(txn, plainGet("k1")))
-	if markers[0].Timestamp != 700 || markers[0].Logical != 2 {
-		t.Fatalf("fallback sort key = (%d,%d), want the read timestamp (700,2)",
-			markers[0].Timestamp, markers[0].Logical)
-	}
-	// And the fallback is pinned, so it is at least stable on this node.
-	txn.ReadTimestamp = hlc.Timestamp{WallTime: 800}
-	markers = spi.SplitMarker(juicerBatch(txn, plainGet("k1")))
-	if markers[0].Timestamp != 700 {
-		t.Fatalf("fallback sort key after a bump = %d, want the pinned 700", markers[0].Timestamp)
-	}
-}
-
-// The defect this sorting key source was introduced to fix: a transaction must
-// get the same key on every node that participates in it. Under the pinned key
-// it did not — 49.7% of multi-node transactions in the campaign-7 debug cells
-// were pinned differently on different nodes — because the pin is taken from
-// whatever read timestamp that particular node happened to see first.
-func TestJuicerSPISortKeyAgreesAcrossNodes(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	// Node 1 sees the transaction on its first attempt; node 2 only joins
-	// after a refresh has moved the read timestamp forward. Both see the same
-	// transaction, so both must sort it into the same position.
-	txn := juicerTestTxn(100)
-	early := juicerBatch(txn, plainGet("k1"))
-
-	refreshed := txn.Clone()
-	refreshed.BumpReadTimestamp(hlc.Timestamp{WallTime: 4000})
-	late := juicerBatch(refreshed, plainGet("k1"))
-
-	k1 := sortKeyOnFreshNode(t, early)
-	k2 := sortKeyOnFreshNode(t, late)
-	if k1 != k2 {
-		t.Fatalf("nodes disagree on the sorting key: %+v vs %+v", k1, k2)
-	}
-	if k1.wallTime != 100 {
-		t.Fatalf("sorting key = %+v, want the shared MinTimestamp 100", k1)
-	}
-
-	// The same scenario under the campaign-7 key, which is what the change is
-	// measured against: the two nodes pin different keys. Asserting the defect
-	// keeps the comparison arm honest — if this ever stops diverging, the two
-	// modes are no longer measuring different things.
-	withPinnedSortKey(t)
-	p1 := sortKeyOnFreshNode(t, early)
-	p2 := sortKeyOnFreshNode(t, late)
-	if p1 == p2 {
-		t.Fatalf("pinned mode no longer diverges across nodes (%+v): the campaign-7 "+
-			"comparison arm is not reproducing campaign-7 behaviour", p1)
-	}
-	if p1.wallTime != 100 || p2.wallTime != 4000 {
-		t.Fatalf("pinned keys = %+v / %+v, want each node's first-seen read timestamp", p1, p2)
-	}
-}
-
-// sortKeyOnFreshNode returns the sorting key a node that has never seen this
-// transaction assigns to ba. juicerTxnKeys is the entirety of a node's Juicer
-// sorting state — crdbJuicerSPI is a stateless value type constructed per
-// server — so a fresh table is a faithful stand-in for a second node.
-func sortKeyOnFreshNode(t *testing.T, ba *kvpb.BatchRequest) juicerTxnSortKey {
-	t.Helper()
-	saved := juicerTxnKeys
-	juicerTxnKeys = newJuicerTxnKeyTable(juicerTxnKeyTTL, juicerTxnKeySweepInterval)
-	defer func() { juicerTxnKeys = saved }()
-
-	spi := newCRDBJuicerSPI()
+	ba := juicerBatch(txn, plainGet("k1"))
+	ba.Now = hlc.ClockTimestamp{WallTime: 777, Logical: 3}
 	markers := spi.SplitMarker(ba)
 	if len(markers) != 1 {
 		t.Fatalf("markers = %d, want 1", len(markers))
 	}
-	return juicerTxnSortKey{wallTime: markers[0].Timestamp, logical: int32(markers[0].Logical)}
-}
-
-// The campaign-7 sorting key: (WallTime, Logical) pinned to the transaction's
-// first read timestamp seen on this node. Both halves matter: without Logical
-// the key is not a total order, and without the pin a mid-flight timestamp bump
-// moves a transaction's later operations to a different position than its
-// earlier ones.
-func TestJuicerSPIPinnedSortKeyIsPinnedAndCarriesLogical(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	withPinnedSortKey(t)
-	spi := newCRDBJuicerSPI()
-
-	txn := juicerTestTxn(100)
-	txn.ReadTimestamp = hlc.Timestamp{WallTime: 100, Logical: 4}
-	defer juicerTxnKeys.forget(txn.ID)
-
-	markers := spi.SplitMarker(juicerBatch(txn, plainGet("k1")))
-	if len(markers) != 1 {
-		t.Fatalf("markers = %d, want 1", len(markers))
-	}
-	if markers[0].Timestamp != 100 || markers[0].Logical != 4 {
-		t.Fatalf("sort key = (%d,%d), want (100,4)", markers[0].Timestamp, markers[0].Logical)
-	}
-
-	// CockroachDB pushes the read timestamp forward mid-transaction. The
-	// sorting key must not follow it.
-	txn.ReadTimestamp = hlc.Timestamp{WallTime: 500, Logical: 0}
-	markers = spi.SplitMarker(juicerBatch(txn, plainGet("k1")))
-	if markers[0].Timestamp != 100 || markers[0].Logical != 4 {
-		t.Fatalf("sort key after a timestamp bump = (%d,%d), want the pinned (100,4)",
+	if markers[0].Timestamp != 777 || markers[0].Logical != 3 {
+		t.Fatalf("sort key = (%d,%d), want the batch Now (777,3)",
 			markers[0].Timestamp, markers[0].Logical)
 	}
-	if got := spi.GetTimestamp(juicerBatch(txn, plainGet("k1"))); got != 100 {
-		t.Fatalf("GetTimestamp = %d, want the pinned wall time 100", got)
+	if got := spi.GetTimestamp(ba); got != 777 {
+		t.Fatalf("GetTimestamp = %d, want the batch Now wall time 777", got)
 	}
 
-	// Observing the transaction's EndTxn releases the pin, so the table does
-	// not grow with every transaction the node ever sees.
-	if op := spi.GetOperationType(juicerBatch(txn, endTxn(true))); op != juicer.OpCommit {
-		t.Fatalf("EndTxn(commit) op = %v, want OpCommit", op)
+	// The transaction's own timestamps moving does not move the key: a
+	// restart or refresh changes what the transaction reads at, not when
+	// this batch was sent.
+	txn.Restart(roachpb.NormalUserPriority, 0 /* upgradePriority */, hlc.Timestamp{WallTime: 900})
+	txn.BumpReadTimestamp(hlc.Timestamp{WallTime: 5000})
+	markers = spi.SplitMarker(ba)
+	if markers[0].Timestamp != 777 || markers[0].Logical != 3 {
+		t.Fatalf("sort key after restart+refresh = (%d,%d), want the unchanged (777,3)",
+			markers[0].Timestamp, markers[0].Logical)
 	}
-	markers = spi.SplitMarker(juicerBatch(txn, plainGet("k1")))
-	if markers[0].Timestamp != 500 {
-		t.Fatalf("sort key after EndTxn = %d, want a fresh pin at 500", markers[0].Timestamp)
-	}
-	juicerTxnKeys.forget(txn.ID)
 
-	// An abort releases it too.
-	txn2 := juicerTestTxn(200)
-	spi.SplitMarker(juicerBatch(txn2, plainGet("k1")))
-	if op := spi.GetOperationType(juicerBatch(txn2, endTxn(false))); op != juicer.OpAbort {
-		t.Fatalf("EndTxn(abort) op = %v, want OpAbort", op)
+	// A later send re-stamps Now, so the same transaction's next attempt
+	// sorts at its own send time — the retry-aware property the key exists
+	// for.
+	resend := juicerBatch(txn, plainGet("k1"))
+	resend.Now = hlc.ClockTimestamp{WallTime: 4000, Logical: 1}
+	markers = spi.SplitMarker(resend)
+	if markers[0].Timestamp != 4000 || markers[0].Logical != 1 {
+		t.Fatalf("re-send sort key = (%d,%d), want (4000,1)",
+			markers[0].Timestamp, markers[0].Logical)
 	}
-	txn2.ReadTimestamp = hlc.Timestamp{WallTime: 999}
-	markers = spi.SplitMarker(juicerBatch(txn2, plainGet("k1")))
-	if markers[0].Timestamp != 999 {
-		t.Fatalf("sort key after abort = %d, want a fresh pin at 999", markers[0].Timestamp)
+
+	// The header documents Now as optional: an empty one falls back to the
+	// transaction's MinTimestamp rather than collapsing onto key zero.
+	bare := juicerBatch(txn, plainGet("k1"))
+	markers = spi.SplitMarker(bare)
+	if len(markers) != 1 || markers[0].Timestamp != 100 || markers[0].Logical != 4 {
+		t.Fatalf("empty-Now fallback sort key = (%d,%d), want the MinTimestamp (100,4)",
+			markers[0].Timestamp, markers[0].Logical)
 	}
-	juicerTxnKeys.forget(txn2.ID)
 }
 
 // TestJuicerSPIFailureClassification checks that the per-error-type counters
@@ -517,59 +353,27 @@ func TestJuicerFilterSizesArePositive(t *testing.T) {
 	}
 }
 
-// Every measurement arm has to be off unless its environment variable is set,
-// and Juicer as a whole has to contribute no server options at all when it is
-// disabled. The second half is what makes the baseline a valid transparency
-// control: a baseline node must be byte-identical to upstream, not "upstream
-// plus an interceptor that happens to do nothing".
-func TestJuicerMeasurementArmsDefaultOff(t *testing.T) {
+// The standard configuration must resolve exactly as documented — wait time
+// 0, completion gate ON, dependency rules OFF — and Juicer as a whole must
+// contribute no server options at all when disabled. That last half is what
+// makes the baseline a valid transparency control: a baseline node must be
+// byte-identical to upstream, not "upstream plus an interceptor that happens
+// to do nothing".
+func TestJuicerStandardConfigDefaults(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	if juicerWaitStrategy != "" {
-		t.Errorf("COCKROACH_JUICER_WAIT_STRATEGY default = %q, want empty (contention-blind insertion-time strategy)",
-			juicerWaitStrategy)
-	}
-	if juicerWaitMinQLen != 2 {
-		t.Errorf("COCKROACH_JUICER_WAIT_MIN_QLEN default = %d, want 2", juicerWaitMinQLen)
-	}
-	if juicerRandomDelay {
-		t.Error("COCKROACH_JUICER_RANDOM_DELAY default = true, want false")
-	}
-	if juicerRandomDelaySeed != 0 {
-		t.Errorf("COCKROACH_JUICER_RANDOM_DELAY_SEED default = %d, want 0 (seed from the clock)",
-			juicerRandomDelaySeed)
-	}
 	if juicerFixedWaitMillis != 0 {
-		t.Errorf("COCKROACH_JUICER_FIXED_WAIT_MS default = %v, want 0 (zero-window arm)",
+		t.Errorf("COCKROACH_JUICER_FIXED_WAIT_MS default = %v, want 0 (no window)",
 			juicerFixedWaitMillis)
 	}
-	if juicerRandomDelayFixedMillis != 0 {
-		t.Errorf("COCKROACH_JUICER_RANDOM_DELAY_FIXED_MS default = %v, want 0 (empirical distribution)",
-			juicerRandomDelayFixedMillis)
+	if !juicerHoldUntilDone {
+		t.Error("COCKROACH_JUICER_HOLD_UNTIL_DONE default = false, want true (the completion gate is standard)")
 	}
-
-	// The sorting key source is deliberately NOT an off-by-default arm: the
-	// per-node pinned key is a defect (it puts the same transaction in
-	// different positions on different nodes), so the corrected key is the
-	// default and the old behaviour is what has to be asked for by name.
-	if juicerSortKeyMode != juicerSortKeyMinTimestamp {
-		t.Errorf("COCKROACH_JUICER_SORT_KEY default = %q, want %q",
-			juicerSortKeyMode, juicerSortKeyMinTimestamp)
+	if juicerMaxBusyMillis != 25 {
+		t.Errorf("COCKROACH_JUICER_MAX_BUSY_MS default = %v, want 25", juicerMaxBusyMillis)
 	}
-	for _, tc := range []struct {
-		name         string
-		env          string
-		expectedMode juicerSortKeySource
-	}{
-		{name: "unset", env: "", expectedMode: juicerSortKeyMinTimestamp},
-		{name: "explicit default", env: "min-timestamp", expectedMode: juicerSortKeyMinTimestamp},
-		{name: "campaign-7 key", env: "pinned-read-timestamp", expectedMode: juicerSortKeyPinnedRead},
-		{name: "case and space tolerated", env: "  Pinned-Read-Timestamp ", expectedMode: juicerSortKeyPinnedRead},
-		{name: "unrecognized falls back to the default", env: "bogus", expectedMode: juicerSortKeyMinTimestamp},
-	} {
-		if got := parseJuicerSortKeySource(tc.env); got != tc.expectedMode {
-			t.Errorf("%s: parse(%q) = %q, want %q", tc.name, tc.env, got, tc.expectedMode)
-		}
+	if got := juicerRulesMode(); got != juicerRulesOff {
+		t.Errorf("COCKROACH_JUICER_RULES default mode = %q, want %q", got, juicerRulesOff)
 	}
 
 	defer func(saved bool) { juicerEnabled = saved }(juicerEnabled)
@@ -580,16 +384,11 @@ func TestJuicerMeasurementArmsDefaultOff(t *testing.T) {
 	juicerEnabled = true
 	base := len(juicerServerOptions())
 
-	// Each arm adds options only when selected.
-	defer func(s string, r bool) { juicerWaitStrategy, juicerRandomDelay = s, r }(juicerWaitStrategy, juicerRandomDelay)
-	juicerWaitStrategy = juicer.WaitStrategyQLenGated
-	if got := len(juicerServerOptions()); got <= base {
-		t.Errorf("selecting a wait strategy added no server options (%d, base %d)", got, base)
-	}
-	juicerWaitStrategy = ""
-	juicerRandomDelay = true
-	if got := len(juicerServerOptions()); got <= base {
-		t.Errorf("selecting the random delay arm added no server options (%d, base %d)", got, base)
+	// The completion gate contributes exactly its two options while enabled.
+	defer func(saved bool) { juicerHoldUntilDone = saved }(juicerHoldUntilDone)
+	juicerHoldUntilDone = false
+	if got := len(juicerServerOptions()); got != base-2 {
+		t.Errorf("disabling hold-until-done changed the option count %d -> %d, want exactly -2", base, got)
 	}
 }
 
@@ -615,8 +414,8 @@ func TestJuicerRulesModes(t *testing.T) {
 		expectedBlocksWrite bool
 	}{
 		{
-			name: "default is full", env: "", expectedMode: juicerRulesFull,
-			expectedEnabled: true, expectedBlocksSFU: true, expectedBlocksWrite: true,
+			name: "default is off", env: "", expectedMode: juicerRulesOff,
+			expectedEnabled: false,
 		},
 		{
 			name: "full blocks every locking pair", env: "full", expectedMode: juicerRulesFull,
@@ -635,8 +434,8 @@ func TestJuicerRulesModes(t *testing.T) {
 			expectedEnabled: true, expectedBlocksSFU: true, expectedBlocksWrite: false,
 		},
 		{
-			name: "unrecognized value falls back to full", env: "bogus", expectedMode: juicerRulesFull,
-			expectedEnabled: true, expectedBlocksSFU: true, expectedBlocksWrite: true,
+			name: "unrecognized value falls back to off", env: "bogus", expectedMode: juicerRulesOff,
+			expectedEnabled: false,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -725,41 +524,3 @@ func TestJuicerCRDBRules(t *testing.T) {
 	}
 }
 
-// The batch-now sorting key comes from the header Now — the gateway
-// DistSender clock reading taken once per client-level send — so a retry
-// sorts at its retry time instead of at the transaction birth, and the two
-// messages of one wave still agree on every node. An empty Now falls back to
-// the MinTimestamp key rather than collapsing onto key zero.
-func TestJuicerSPISortKeyBatchNow(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	spi := newCRDBJuicerSPI()
-
-	saved := juicerSortKeyMode
-	juicerSortKeyMode = juicerSortKeyBatchNow
-	t.Cleanup(func() { juicerSortKeyMode = saved })
-
-	txn := juicerTestTxn(100)
-	txn.MinTimestamp = hlc.Timestamp{WallTime: 100, Logical: 4}
-
-	ba := juicerBatch(txn, plainGet("k1"))
-	ba.Now = hlc.ClockTimestamp{WallTime: 777, Logical: 3}
-	markers := spi.SplitMarker(ba)
-	if len(markers) != 1 {
-		t.Fatalf("markers = %d, want 1", len(markers))
-	}
-	if markers[0].Timestamp != 777 || markers[0].Logical != 3 {
-		t.Fatalf("sort key = (%d,%d), want the batch Now (777,3)",
-			markers[0].Timestamp, markers[0].Logical)
-	}
-
-	bare := juicerBatch(txn, plainGet("k1"))
-	markers = spi.SplitMarker(bare)
-	if len(markers) != 1 || markers[0].Timestamp != 100 || markers[0].Logical != 4 {
-		t.Fatalf("empty-Now fallback sort key = (%d,%d), want the MinTimestamp (100,4)",
-			markers[0].Timestamp, markers[0].Logical)
-	}
-
-	if got := parseJuicerSortKeySource("batch-now"); got != juicerSortKeyBatchNow {
-		t.Fatalf("parseJuicerSortKeySource(batch-now) = %q", got)
-	}
-}
