@@ -43,6 +43,15 @@
 // WriteTooOld error bumps the timestamp and commits without a refresh, so
 // serialization restarts vanish and the abort channel narrows to lock
 // cycles between transactions writing the same hot keys across ranges.
+//
+// With --read-txn-pct the blind mode becomes a two-sided one-shot mix: each
+// transaction is EITHER one read-only wave (a plain non-locking SELECT over
+// its keys — a read-only implicit transaction needs no commit round) or one
+// blind-write wave, drawn per transaction. Both sides stay single-wave, and
+// they meet at the KV layer only the way MVCC lets them: a read conflicts
+// with a writer's intent, never with another read. This is the workload for
+// measuring the reordering layer's read/write interaction inside the
+// one-shot class.
 package ycsbt
 
 import (
@@ -87,8 +96,9 @@ const (
 const (
 	// A completed transaction is recorded under the name that describes what
 	// it did, so a --read-pct 100 run is not silently reported as
-	// read-modify-write traffic. Exactly one of the three is ever used in a
-	// given run, since the split (and --blind) is fixed for the run.
+	// read-modify-write traffic. The CTE modes use exactly one of the first
+	// two per run; the blind mode uses blindWrite alone, or blindWrite plus
+	// readOnly when --read-txn-pct mixes read-only transactions in.
 	readWriteOpName = `readModifyWrite`
 	readOnlyOpName  = `readOnly`
 	blindOpName     = `blindWrite`
@@ -106,12 +116,13 @@ type ycsbt struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
-	keys      int
-	opsPerTxn int
-	readPct   int
-	zipfTheta float64
-	splits    int
-	blind     bool
+	keys       int
+	opsPerTxn  int
+	readPct    int
+	zipfTheta  float64
+	splits     int
+	blind      bool
+	readTxnPct int
 }
 
 func init() {
@@ -136,7 +147,9 @@ var ycsbtMeta = workload.Meta{
 	With --blind (requires --read-pct 0) every transaction is instead one
 	multi-row UPSERT that overwrites its keys without reading them, which
 	CockroachDB plans as a blind put: the transaction reaches the KV layer as
-	a single wave of writes.
+	a single wave of writes. Adding --read-txn-pct N makes N percent of the
+	transactions one-wave read-only SELECTs instead, drawn per transaction:
+	a read-only/write-only one-shot mix over the same Zipf key space.
 	`,
 	Version:    `1.0.0`,
 	RandomSeed: RandomSeed,
@@ -146,10 +159,11 @@ var ycsbtMeta = workload.Meta{
 		// Only --keys and --splits shape the loaded data; the rest describe
 		// the transaction mix and are meaningless at init time.
 		g.flags.Meta = map[string]workload.FlagMeta{
-			`ops-per-txn`: {RuntimeOnly: true},
-			`read-pct`:    {RuntimeOnly: true},
-			`zipf-theta`:  {RuntimeOnly: true},
-			`blind`:       {RuntimeOnly: true},
+			`ops-per-txn`:  {RuntimeOnly: true},
+			`read-pct`:     {RuntimeOnly: true},
+			`zipf-theta`:   {RuntimeOnly: true},
+			`blind`:        {RuntimeOnly: true},
+			`read-txn-pct`: {RuntimeOnly: true},
 		}
 		g.flags.IntVar(&g.keys, `keys`, defaultKeys,
 			`Number of rows loaded into usertable, and the support of the Zipf key distribution.`)
@@ -163,6 +177,8 @@ var ycsbtMeta = workload.Meta{
 			`Number of range splits to perform on usertable before the workload starts.`)
 		g.flags.BoolVar(&g.blind, `blind`, false,
 			`Replace the read-modify-write statement with one blind multi-row UPSERT (requires --read-pct 0).`)
+		g.flags.IntVar(&g.readTxnPct, `read-txn-pct`, 0,
+			`Percent (0-100) of transactions that are one-wave read-only SELECTs instead of blind writes (requires --blind).`)
 		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
@@ -204,6 +220,14 @@ func (w *ycsbt) validateConfig() error {
 	// so it is rejected rather than ignored.
 	if w.blind && w.readPct != 0 {
 		return errors.Errorf("--blind performs no reads; it requires --read-pct 0, not %d", w.readPct)
+	}
+	if w.readTxnPct < 0 || w.readTxnPct > 100 {
+		return errors.Errorf("--read-txn-pct (%d) must be between 0 and 100", w.readTxnPct)
+	}
+	// The transaction mix only exists in the blind mode: the CTE modes mix
+	// reads and writes inside one statement via --read-pct instead.
+	if w.readTxnPct != 0 && !w.blind {
+		return errors.Errorf("--read-txn-pct is the blind mode's transaction mix; it requires --blind")
 	}
 	// Matches workloadimpl.NewZipfGenerator's own precondition, checked here so
 	// the failure is a flag error rather than a mid-run one.
@@ -325,6 +349,19 @@ func buildBlindStmt(writes int) string {
 	return b.String()
 }
 
+// buildReadStmt renders the read-only transaction of the mixed one-shot
+// mode: one plain SELECT whose count both forces the read and verifies the
+// row count. Non-locking on purpose — the read side must conflict with
+// writers only through their intents, the way any MVCC read does, and never
+// with other reads.
+func buildReadStmt(reads int) string {
+	var b strings.Builder
+	b.WriteString("SELECT count(*) FROM usertable WHERE ycsb_key IN (")
+	writePlaceholders(&b, 1, reads)
+	b.WriteString(")")
+	return b.String()
+}
+
 // writePlaceholders emits `$first, $first+1, ... ` for n placeholders.
 func writePlaceholders(b *strings.Builder, first, n int) {
 	for i := 0; i < n; i++ {
@@ -365,7 +402,15 @@ func (w *ycsbt) Ops(
 	}
 
 	var retryErrors atomic.Int64
-	ql := workload.QueryLoad{ResultHist: opName}
+	resultHist := opName
+	if w.blind && w.readTxnPct > 0 {
+		// Two histograms are live in the mixed mode; an empty ResultHist
+		// makes the benchmark's __result line aggregate both, so the
+		// headline number is total throughput. The per-name lines still
+		// separate read and write latencies.
+		resultHist = ``
+	}
+	ql := workload.QueryLoad{ResultHist: resultHist}
 	for i := 0; i < w.connFlags.Concurrency; i++ {
 		// Every worker draws from the same distribution but owns its own
 		// generator and random stream. A single shared generator would
@@ -390,12 +435,20 @@ func (w *ycsbt) Ops(
 			retryErrors: &retryErrors,
 		}
 		op.stmt = op.sr.Define(stmtStr)
+		if w.blind && w.readTxnPct > 0 {
+			op.readTxnPct = w.readTxnPct
+			op.readArgs = make([]interface{}, w.opsPerTxn)
+			op.readStmt = op.sr.Define(buildReadStmt(w.opsPerTxn))
+		}
 		if err := op.sr.Init(ctx, "ycsbt", mcp); err != nil {
 			return workload.QueryLoad{}, err
 		}
 		runFn := op.run
 		if w.blind {
 			runFn = op.runBlind
+			if w.readTxnPct > 0 {
+				runFn = op.runMixed
+			}
 		}
 		ql.WorkerFns = append(ql.WorkerFns, runFn)
 	}
@@ -427,6 +480,13 @@ type ycsbtOp struct {
 	keys        []int64
 	args        []interface{}
 	retryErrors *atomic.Int64
+
+	// Mixed one-shot mode (--read-txn-pct): the read-only statement, its own
+	// argument scratch (keys only, no values), and the per-transaction read
+	// probability in percent. Zero readTxnPct leaves them unused.
+	readTxnPct int
+	readStmt   workload.StmtHandle
+	readArgs   []interface{}
 }
 
 // maxDrawAttempts bounds rejection sampling for one key before drawKeys falls
@@ -539,6 +599,42 @@ func (o *ycsbtOp) runBlind(ctx context.Context) error {
 		return errors.Errorf("ycsbt blind transaction wrote %d rows, want %d", got, len(o.keys))
 	}
 	o.hists.Get(o.opName).Record(timeutil.Since(start))
+	return nil
+}
+
+// runMixed is the --blind worker when --read-txn-pct is set: each
+// transaction is EITHER one read-only wave or one blind-write wave, drawn
+// independently per transaction so the mix converges to the requested
+// percentage without any cross-worker coordination.
+func (o *ycsbtOp) runMixed(ctx context.Context) error {
+	if o.rng.IntN(100) < o.readTxnPct {
+		return o.runReadOnly(ctx)
+	}
+	return o.runBlind(ctx)
+}
+
+// runReadOnly is the read side of the mixed mode: one non-locking SELECT
+// over the drawn keys, verified by its count.
+func (o *ycsbtOp) runReadOnly(ctx context.Context) error {
+	o.drawKeys()
+	for i, k := range o.keys {
+		o.readArgs[i] = k
+	}
+
+	start := timeutil.Now()
+	var got int64
+	if err := o.readStmt.QueryRow(ctx, o.readArgs...).Scan(&got); err != nil {
+		if o.recordIfSerializationFailure(err, start) {
+			return nil
+		}
+		return errors.Wrap(err, "ycsbt read transaction failed")
+	}
+	// Every key is loaded before the run, so a short count means the read
+	// silently missed rows -- free throughput rather than an error.
+	if got != int64(len(o.keys)) {
+		return errors.Errorf("ycsbt read transaction found %d rows, want %d", got, len(o.keys))
+	}
+	o.hists.Get(readOnlyOpName).Record(timeutil.Since(start))
 	return nil
 }
 

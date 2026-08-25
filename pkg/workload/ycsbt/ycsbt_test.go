@@ -157,6 +157,13 @@ func TestValidateConfig(t *testing.T) {
 		{name: "blind mode must not silently drop requested reads",
 			flags:       []string{`--blind`, `--read-pct=50`},
 			expectedErr: "requires --read-pct 0"},
+		{name: "mixed one-shot", flags: []string{`--blind`, `--read-pct=0`, `--read-txn-pct=50`}},
+		{name: "transaction mix outside the blind mode",
+			flags:       []string{`--read-txn-pct=50`},
+			expectedErr: "requires --blind"},
+		{name: "transaction mix above 100",
+			flags:       []string{`--blind`, `--read-pct=0`, `--read-txn-pct=101`},
+			expectedErr: "between 0 and 100"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -266,5 +273,34 @@ func newTestOp(t *testing.T, keys, opsPerTxn int, theta float64) *ycsbtOp {
 		rng:      rand.New(rand.NewPCG(3, 4)),
 		keys:     make([]int64, opsPerTxn),
 		args:     make([]interface{}, opsPerTxn),
+	}
+}
+
+// The read side of the mixed mode is one plain SELECT: pinned text, exact
+// placeholder sequence, and — the property the mode exists for — nothing
+// locking and nothing mutating in it.
+func TestBuildReadStmt(t *testing.T) {
+	require.Equal(t,
+		`SELECT count(*) FROM usertable WHERE ycsb_key IN ($1, $2)`,
+		buildReadStmt(2))
+
+	placeholderRE := regexp.MustCompile(`\$(\d+)`)
+	for _, reads := range []int{1, 5, 10} {
+		stmt := buildReadStmt(reads)
+		var got []int
+		for _, m := range placeholderRE.FindAllStringSubmatch(stmt, -1) {
+			n, err := strconv.Atoi(m[1])
+			require.NoError(t, err)
+			got = append(got, n)
+		}
+		want := make([]int, 0, reads)
+		for i := 1; i <= reads; i++ {
+			want = append(want, i)
+		}
+		require.Equalf(t, want, got, "%d reads: placeholder sequence", reads)
+
+		require.NotContains(t, stmt, "UPDATE")
+		require.NotContains(t, stmt, "UPSERT")
+		require.NotContains(t, stmt, "FOR UPDATE")
 	}
 }
