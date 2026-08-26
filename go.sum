@@ -197,8 +197,8 @@ github.com/CPI-NS/juicer-grpc-go v1.57.2-juicer-16 h1:ZlLfro9VqMUrVxMva4Q87eOBWL
 github.com/CPI-NS/juicer-grpc-go v1.57.2-juicer-16/go.mod h1:gv3lYZk43DTjmO9Rus8A+XqeMjfPtqVswU0xWYzrMEs=
 github.com/CPI-NS/juicer-grpc-go v1.57.2-juicer-17 h1:EAlffuFtJrB6VtfONCXYlHuBwHf9xHoms3HUzOLGlww=
 github.com/CPI-NS/juicer-grpc-go v1.57.2-juicer-17/go.mod h1:gv3lYZk43DTjmO9Rus8A+XqeMjfPtqVswU0xWYzrMEs=
-github.com/CPI-NS/juicer-grpc-go v1.57.2-juicer-18 h1:PzqO8tN/kKoxRnx7i9ofefT8UyLQMr8yaobMM0mQ+qE=
-github.com/CPI-NS/juicer-grpc-go v1.57.2-juicer-18/go.mod h1:gv3lYZk43DTjmO9Rus8A+XqeMjfPtqVswU0xWYzrMEs=
+github.com/CPI-NS/juicer-grpc-go v1.57.2-juicer-19 h1:r+JGAyVQ4xcepIG1qTr2Qk83l4Rs+Ktjzv7rECtxdLE=
+github.com/CPI-NS/juicer-grpc-go v1.57.2-juicer-19/go.mod h1:gv3lYZk43DTjmO9Rus8A+XqeMjfPtqVswU0xWYzrMEs=
 github.com/Codefor/geohash v0.0.0-20140723084247-1b41c28e3a9d h1:iG9B49Q218F/XxXNRM7k/vWf7MKmLIS8AcJV9cGN4nA=
 github.com/Codefor/geohash v0.0.0-20140723084247-1b41c28e3a9d/go.mod h1:RVnhzAX71far8Kc3TQeA0k/dcaEKUnTDSOyet/JCmGI=
 github.com/DATA-DOG/go-sqlmock v1.3.3/go.mod h1:f/Ixk793poVmq4qj/V1dPUg2JEAKC73Q5eFN3EC/SaM=
