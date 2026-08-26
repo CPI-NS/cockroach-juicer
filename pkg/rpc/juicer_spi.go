@@ -674,7 +674,7 @@ func (crdbJuicerSPI) AbortCurrentRequest(req interface{}) (interface{}, error)  
 //	                must select off (campaign #13 measured −73% throughput).
 //	writes          The unified-rule CANDIDATE (validation pending): only
 //	                cross-txn write-write pairs exclude; plain reads and
-//	                locking reads pass untouched and arm nothing. Designed to
+//	                locking reads pass untouched and hold nothing. Designed to
 //	                keep the gate's single-wave wins (on pure-write traffic it
 //	                is literally the gate), delete the read tax, and be
 //	                neutral on RMW — one always-on relation with no
@@ -749,6 +749,11 @@ func (crdbJuicerSPI) BuildRules() juicer.DependencyRules {
 				return ev.Kind == juicer.RespReturned &&
 					(ev.Failed || ev.OpType == juicer.OpSet)
 			},
+			// Only writes can hold, so only writes enter the in-flight set:
+			// a held read could block nothing, would be released by no
+			// response (Releases wants OpSet), and its TTL expiry would
+			// pollute the E/W numerator.
+			Holds:        func(h juicer.OpRef) bool { return h.OpType == juicer.OpSet },
 			MaxHold:      maxHold,
 			AdmitUnbound: true,
 		}
@@ -786,6 +791,10 @@ func (crdbJuicerSPI) BuildRules() juicer.DependencyRules {
 			// above.
 			return ev.OpType == juicer.OpSet && h.OpType == juicer.OpSet
 		},
+		// Only locking operations can hold under full/sfu, so only they enter
+		// the in-flight set — a tracked plain read could block nothing and
+		// its TTL expiry would pollute the E/W numerator.
+		Holds:   func(h juicer.OpRef) bool { return locking(h.OpType) },
 		MaxHold: maxHold,
 	}
 }

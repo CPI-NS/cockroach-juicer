@@ -401,6 +401,9 @@ func TestJuicerGateRules(t *testing.T) {
 	if rules.MaxHold != 25*time.Millisecond {
 		t.Fatalf("gate MaxHold = %v, want 25ms (the standard TTL)", rules.MaxHold)
 	}
+	if rules.Holds != nil {
+		t.Fatal("the gate holds every dispatched head (its blocking is type-blind)")
+	}
 
 	held := juicer.OpRef{TxnID: 1, OpType: juicer.OpSet}
 	// Type-blind and txn-blind blocking: one in-flight message closes the key
@@ -456,6 +459,14 @@ func TestJuicerWritesRules(t *testing.T) {
 
 	if !rules.Blocks(writeA, writeB) {
 		t.Fatal("cross-txn write-write pair did not block (the winning ingredient)")
+	}
+	// Only writes hold: a tracked read/locking-read entry could block nothing
+	// and its TTL expiry would pollute the E/W numerator.
+	if rules.Holds == nil || !rules.Holds(writeA) {
+		t.Fatal("write head does not hold under the writes relation")
+	}
+	if rules.Holds(readB) || rules.Holds(sfuB) {
+		t.Fatal("non-write head holds under the writes relation")
 	}
 	// The RMW exemption, both directions: a locking-read wave neither waits
 	// behind a held write nor (as a hold, which it can never become) blocks
@@ -659,5 +670,14 @@ func TestJuicerCRDBRules(t *testing.T) {
 	}
 	if !rules.Releases(writeA, commitMsg) {
 		t.Fatal("observed commit message did not release the write hold")
+	}
+
+	// Only locking operations hold under full: a tracked plain read could
+	// block nothing and would only pollute the E/W numerator at its TTL.
+	if rules.Holds == nil || !rules.Holds(sfuA) || !rules.Holds(writeA) {
+		t.Fatal("locking head does not hold under full")
+	}
+	if rules.Holds(readB) {
+		t.Fatal("plain read holds under full")
 	}
 }
