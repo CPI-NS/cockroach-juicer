@@ -7,6 +7,7 @@ package rpc
 
 import (
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -354,7 +355,7 @@ func TestJuicerFilterSizesArePositive(t *testing.T) {
 }
 
 // The standard configuration must resolve exactly as documented — wait time
-// 0, completion gate ON, dependency rules OFF — and Juicer as a whole must
+// 0, dependency rules GATE with a 25 ms MaxHold — and Juicer as a whole must
 // contribute no server options at all when disabled. That last half is what
 // makes the baseline a valid transparency control: a baseline node must be
 // byte-identical to upstream, not "upstream plus an interceptor that happens
@@ -366,14 +367,12 @@ func TestJuicerStandardConfigDefaults(t *testing.T) {
 		t.Errorf("COCKROACH_JUICER_FIXED_WAIT_MS default = %v, want 0 (no window)",
 			juicerFixedWaitMillis)
 	}
-	if !juicerHoldUntilDone {
-		t.Error("COCKROACH_JUICER_HOLD_UNTIL_DONE default = false, want true (the completion gate is standard)")
+	if juicerMaxHoldMillis != 25 {
+		t.Errorf("COCKROACH_JUICER_MAX_HOLD_MS default = %v, want 25", juicerMaxHoldMillis)
 	}
-	if juicerMaxBusyMillis != 25 {
-		t.Errorf("COCKROACH_JUICER_MAX_BUSY_MS default = %v, want 25", juicerMaxBusyMillis)
-	}
-	if got := juicerRulesMode(); got != juicerRulesOff {
-		t.Errorf("COCKROACH_JUICER_RULES default mode = %q, want %q", got, juicerRulesOff)
+	if got := juicerRulesMode(); got != juicerRulesGate {
+		t.Errorf("COCKROACH_JUICER_RULES default mode = %q, want %q (the completion gate is standard)",
+			got, juicerRulesGate)
 	}
 
 	defer func(saved bool) { juicerEnabled = saved }(juicerEnabled)
@@ -381,14 +380,55 @@ func TestJuicerStandardConfigDefaults(t *testing.T) {
 	if opts := juicerServerOptions(); opts != nil {
 		t.Fatalf("juicer disabled but %d server options were returned", len(opts))
 	}
-	juicerEnabled = true
-	base := len(juicerServerOptions())
+}
 
-	// The completion gate contributes exactly its two options while enabled.
-	defer func(saved bool) { juicerHoldUntilDone = saved }(juicerHoldUntilDone)
-	juicerHoldUntilDone = false
-	if got := len(juicerServerOptions()); got != base-2 {
-		t.Errorf("disabling hold-until-done changed the option count %d -> %d, want exactly -2", base, got)
+// The default relation is the completion gate: type-blind blocking, released
+// by any same-txn response (success or failure), 25 ms MaxHold, and unbound
+// (txn id 0) heads admitted untracked. These properties carried campaigns
+// #11/#12/#14 and are what the RULES=gate arm must reproduce.
+func TestJuicerGateRules(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer func(saved string) { juicerRulesEnv = saved }(juicerRulesEnv)
+	juicerRulesEnv = ""
+
+	rules := newCRDBJuicerSPI().BuildRules()
+	if !rules.Enabled() {
+		t.Fatal("default rules disabled, want the gate relation")
+	}
+	if !rules.AdmitUnbound {
+		t.Fatal("gate relation must admit unbound heads untracked (non-transactional batches)")
+	}
+	if rules.MaxHold != 25*time.Millisecond {
+		t.Fatalf("gate MaxHold = %v, want 25ms (the standard TTL)", rules.MaxHold)
+	}
+
+	held := juicer.OpRef{TxnID: 1, OpType: juicer.OpSet}
+	// Type-blind and txn-blind blocking: one in-flight message closes the key
+	// to everyone, plain reads and the holder's own transaction included.
+	for _, head := range []juicer.OpRef{
+		{TxnID: 2, OpType: juicer.OpSet},
+		{TxnID: 2, OpType: juicer.OpGet},
+		{TxnID: 1, OpType: juicer.OpSet},
+		{TxnID: 0, OpType: juicer.OpGet},
+	} {
+		if !rules.Blocks(held, head) {
+			t.Errorf("gate did not block head %+v behind an in-flight message", head)
+		}
+	}
+
+	// Any same-txn response is completion; other txns' responses and mere
+	// request arrivals are not.
+	if !rules.Releases(held, juicer.Event{Kind: juicer.RespReturned, OpType: juicer.OpSet, TxnID: 1}) {
+		t.Error("own response did not release the gate hold")
+	}
+	if !rules.Releases(held, juicer.Event{Kind: juicer.RespReturned, OpType: juicer.OpSet, TxnID: 1, Failed: true}) {
+		t.Error("own failed response did not release the gate hold")
+	}
+	if rules.Releases(held, juicer.Event{Kind: juicer.RespReturned, OpType: juicer.OpSet, TxnID: 9}) {
+		t.Error("another txn's response released the gate hold")
+	}
+	if rules.Releases(held, juicer.Event{Kind: juicer.ReqArrived, OpType: juicer.OpCommit, TxnID: 1}) {
+		t.Error("a request arrival released the gate hold (only responses complete a message)")
 	}
 }
 
@@ -410,12 +450,17 @@ func TestJuicerRulesModes(t *testing.T) {
 		env                 string
 		expectedMode        juicerRules
 		expectedEnabled     bool
+		expectedTypeBlind   bool // gate: everything blocks everything
 		expectedBlocksSFU   bool
 		expectedBlocksWrite bool
 	}{
 		{
-			name: "default is off", env: "", expectedMode: juicerRulesOff,
-			expectedEnabled: false,
+			name: "default is the gate", env: "", expectedMode: juicerRulesGate,
+			expectedEnabled: true, expectedTypeBlind: true,
+		},
+		{
+			name: "gate selected by name", env: "gate", expectedMode: juicerRulesGate,
+			expectedEnabled: true, expectedTypeBlind: true,
 		},
 		{
 			name: "full blocks every locking pair", env: "full", expectedMode: juicerRulesFull,
@@ -434,8 +479,8 @@ func TestJuicerRulesModes(t *testing.T) {
 			expectedEnabled: true, expectedBlocksSFU: true, expectedBlocksWrite: false,
 		},
 		{
-			name: "unrecognized value falls back to off", env: "bogus", expectedMode: juicerRulesOff,
-			expectedEnabled: false,
+			name: "unrecognized value resolves to the default gate", env: "bogus", expectedMode: juicerRulesGate,
+			expectedEnabled: true, expectedTypeBlind: true,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -455,19 +500,29 @@ func TestJuicerRulesModes(t *testing.T) {
 				}
 				return
 			}
+			readB := juicer.OpRef{TxnID: 2, OpType: juicer.OpGet}
+			if tc.expectedTypeBlind {
+				// The gate blocks everything behind an in-flight message —
+				// reads and same-txn successors included.
+				for _, head := range []juicer.OpRef{sfuB, writeB, readB, {TxnID: 1, OpType: juicer.OpSet}} {
+					if !rules.Blocks(sfuA, head) {
+						t.Errorf("gate did not block head %+v", head)
+					}
+				}
+				return
+			}
 			if got := rules.Blocks(sfuA, sfuB); got != tc.expectedBlocksSFU {
 				t.Errorf("Blocks(sfu, sfu) = %v, want %v", got, tc.expectedBlocksSFU)
 			}
 			if got := rules.Blocks(sfuA, writeB); got != tc.expectedBlocksWrite {
 				t.Errorf("Blocks(sfu, write) = %v, want %v", got, tc.expectedBlocksWrite)
 			}
-			// Same-txn pairs never block in any mode: the enforcer evaluates the
+			// Same-txn pairs never block in sfu/full: the enforcer evaluates the
 			// head against the whole in-flight set, including the txn's own ops.
 			if rules.Blocks(sfuA, juicer.OpRef{TxnID: 1, OpType: juicer.OpSet}) {
 				t.Error("same-txn write upgrade blocked itself")
 			}
-			// Plain reads never wait in any mode.
-			readB := juicer.OpRef{TxnID: 2, OpType: juicer.OpGet}
+			// Plain reads never wait in sfu/full.
 			if rules.Blocks(sfuA, readB) || rules.Blocks(readB, sfuA) {
 				t.Error("plain read participated in blocking")
 			}
@@ -501,11 +556,17 @@ func TestJuicerCRDBRules(t *testing.T) {
 		t.Fatal("same-txn write upgrade blocked itself")
 	}
 
-	// Releases: commit-batch response returning releases the same txn's SFU
-	// holder; an SFU read's own response returning must NOT release it.
+	// Releases, split by held-entry type (the audit's self-release fix): a
+	// held WRITE ends when a same-txn write response returns; a held LOCKING
+	// READ must survive that same event — its claim resolves only at
+	// commit/abort (or a failed response, or the TTL).
+	writeA := juicer.OpRef{TxnID: 1, OpType: juicer.OpSet}
 	respSet := juicer.Event{Kind: juicer.RespReturned, OpType: juicer.OpSet, TxnID: 1}
-	if !rules.Releases(sfuA, respSet) {
-		t.Fatal("commit-batch response did not release same-txn holder")
+	if !rules.Releases(writeA, respSet) {
+		t.Fatal("write response did not release the same-txn write hold")
+	}
+	if rules.Releases(sfuA, respSet) {
+		t.Fatal("same-txn write response released the locking-read hold before commit (the self-release defect)")
 	}
 	respGFP := juicer.Event{Kind: juicer.RespReturned, OpType: juicer.OpGetForPut, TxnID: 1}
 	if rules.Releases(sfuA, respGFP) {
@@ -522,5 +583,7 @@ func TestJuicerCRDBRules(t *testing.T) {
 	if !rules.Releases(sfuA, commitMsg) {
 		t.Fatal("observed commit message did not release")
 	}
+	if !rules.Releases(writeA, commitMsg) {
+		t.Fatal("observed commit message did not release the write hold")
+	}
 }
-

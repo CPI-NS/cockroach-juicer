@@ -30,40 +30,38 @@ import (
 // Juicer server options are appended and the gRPC server is byte-identical to
 // upstream.
 var (
-	juicerEnabled          = envutil.EnvOrDefaultBool("COCKROACH_JUICER", false)
-	juicerSkipQueueing     = envutil.EnvOrDefaultBool("COCKROACH_JUICER_SKIP_QUEUEING", false)
+	juicerEnabled      = envutil.EnvOrDefaultBool("COCKROACH_JUICER", false)
+	juicerSkipQueueing = envutil.EnvOrDefaultBool("COCKROACH_JUICER_SKIP_QUEUEING", false)
+	// juicerMaxHoldMillis is the hold engine's single TTL: the gate
+	// relation's quantization clock (campaign #14: E/W ≈ 80% on the winning
+	// workpoint — most holds end by this clock, so its value IS the
+	// mechanism's wait time and the axis a MAX_HOLD sweep moves), and the
+	// residency cap of the sfu/full relations. Non-positive values are
+	// clamped upward by the relation constructors: the gate has no no-TTL
+	// mode.
 	juicerMaxHoldMillis    = envutil.EnvOrDefaultInt("COCKROACH_JUICER_MAX_HOLD_MS", 25)
 	juicerDebugLogs        = envutil.EnvOrDefaultBool("COCKROACH_JUICER_DEBUG", false)
 	juicerUnaryBatchPaths  = []string{"/cockroach.roachpb.Internal/Batch", "/cockroach.roachpb.KVBatch/Batch"}
 	juicerStreamBatchPaths = []string{"/cockroach.roachpb.Internal/BatchStream", "/cockroach.roachpb.KVBatch/BatchStream"}
 )
 
-// The standard configuration's two core knobs (the shape campaign #11
-// validated). Historical measurement arms — the damage-scaled window
+// The standard configuration's remaining wait knob. The completion gate is no
+// longer a switch of its own: it is the DEFAULT dependency relation
+// (COCKROACH_JUICER_RULES=gate, see BuildRules), and its TTL is
+// COCKROACH_JUICER_MAX_HOLD_MS. The former COCKROACH_JUICER_HOLD_UNTIL_DONE /
+// COCKROACH_JUICER_MAX_BUSY_MS knobs were removed in the 2026-08-26 merge of
+// the gate into the rules engine; reproduce earlier campaigns from their
+// pinned tags. Historical measurement arms — the damage-scaled window
 // (SCALE_FACTOR), the qlen-gated strategy, the random-delay control, and the
-// selectable sorting key — were removed in the 2026-08-13 simplification;
-// reproduce those campaigns from their pinned tags.
+// selectable sorting key — went the same way on 2026-08-13.
 var (
-	// juicerFixedWaitMillis is THE wait-time knob: a constant window imposed
-	// on every sorted message, measured from its arrival, in floating-point
-	// milliseconds so a sweep can go below 1 ms. 0 (the default) means no
-	// window: pure sorting plus the completion gate.
+	// juicerFixedWaitMillis is the uniform-window knob: a constant window
+	// imposed on every sorted message, measured from its arrival, in
+	// floating-point milliseconds so a sweep can go below 1 ms. 0 (the
+	// default) means no window: pure sorting plus whatever relation RULES
+	// selects. Campaign #14 relocated the interesting wait-time axis to the
+	// gate's MAX_HOLD_MS; this knob remains for uniform-window controls.
 	juicerFixedWaitMillis = envutil.EnvOrDefaultFloat64("COCKROACH_JUICER_FIXED_WAIT_MS", 0)
-
-	// juicerHoldUntilDone is ON by default: the completion gate — a key
-	// admits its next message only after the previous one released on that
-	// key has completed (its response was observed, success or failure) — is
-	// the one intervention with a demonstrated win (campaigns #11/#12), so it
-	// is part of the standard configuration and switching it OFF is what has
-	// to be asked for by name. juicerMaxBusyMillis bounds one hold; 0
-	// DISABLES the TTL so the gate waits on the response alone (safe against
-	// queue-layer deadlock under the per-send total order, but a lost
-	// response then closes the key until its next bypass-eligible arrival —
-	// the default 25 keeps that backstop; the busyExpirations counter in the
-	// fork's per-minute "queue counters" log line measures how often the TTL
-	// actually fires).
-	juicerHoldUntilDone = envutil.EnvOrDefaultBool("COCKROACH_JUICER_HOLD_UNTIL_DONE", true)
-	juicerMaxBusyMillis = envutil.EnvOrDefaultFloat64("COCKROACH_JUICER_MAX_BUSY_MS", 25)
 )
 
 // millisToDuration converts a floating-point millisecond knob to a Duration.
@@ -129,30 +127,36 @@ var (
 type juicerRules string
 
 const (
+	juicerRulesGate juicerRules = "gate"
 	juicerRulesFull juicerRules = "full"
 	juicerRulesSFU  juicerRules = "sfu"
 	juicerRulesOff  juicerRules = "off"
 )
 
-// The default is OFF as of the 2026-08-13 simplification: on one-shot
-// workloads there are no locking reads (sfu is vacuous) and write-write
-// exclusion is provided by the completion gate at the queue itself, so the
-// enforcer adds machinery without adding a relation. full/sfu remain
-// selectable for future multi-wave work.
-var juicerRulesEnv = envutil.EnvOrDefaultString("COCKROACH_JUICER_RULES", string(juicerRulesOff))
+// The default is GATE as of the 2026-08-26 merge: the completion gate — the
+// one relation with a demonstrated win (campaigns #11/#12/#14) — is the
+// standard configuration, expressed as a dependency relation instead of the
+// former HOLD_UNTIL_DONE switch. off/sfu/full remain selectable; RMW and
+// other multi-wave workloads MUST select off (campaign #13: the gate is pure
+// harm there, −73% throughput at the measured workpoint).
+var juicerRulesEnv = envutil.EnvOrDefaultString("COCKROACH_JUICER_RULES", string(juicerRulesGate))
 
-// juicerRulesMode parses COCKROACH_JUICER_RULES, falling back to off on an
-// unrecognized value: a typo must not silently ENABLE an exclusion relation.
-// The mode is logged once at injection so the fallback is visible in the node
-// log.
+// juicerRulesMode parses COCKROACH_JUICER_RULES. An unrecognized value
+// resolves to the DEFAULT (gate): with the standard relation on by default, a
+// typo can no longer be allowed to silently disable it either — whichever way
+// the fallback points, some typo is mis-served, and the injection banner (and
+// the smoke gate asserting it) is the actual guard. "off" must therefore be
+// spelled exactly; verify the banner, not the environment.
 func juicerRulesMode() juicerRules {
 	switch juicerRules(strings.ToLower(strings.TrimSpace(juicerRulesEnv))) {
 	case juicerRulesFull:
 		return juicerRulesFull
 	case juicerRulesSFU:
 		return juicerRulesSFU
-	default:
+	case juicerRulesOff:
 		return juicerRulesOff
+	default:
+		return juicerRulesGate
 	}
 }
 
@@ -290,8 +294,8 @@ func startJuicerHitReporter(ctx context.Context) {
 		// The banner makes the run interpretable after the fact: it names the
 		// (now fixed) sorting key source and the resolved core knobs.
 		log.Dev.Infof(ctx,
-			"juicer: sorting key source = batch-now (per-send gateway clock; empty Now falls back to MinTimestamp); fixed wait = %v ms; hold-until-done = %t (maxBusy %v ms)",
-			juicerFixedWaitMillis, juicerHoldUntilDone, juicerMaxBusyMillis)
+			"juicer: sorting key source = batch-now (per-send gateway clock; empty Now falls back to MinTimestamp); fixed wait = %v ms; rules = %s (maxHold %d ms)",
+			juicerFixedWaitMillis, juicerRulesMode(), juicerMaxHoldMillis)
 		go func() {
 			var lastSplit, lastResp uint64
 			var lastFail kvFailureSnapshot
@@ -343,11 +347,6 @@ func juicerServerOptions() []grpc.ServerOption {
 	opts = append(opts,
 		grpc.JuicerWaitStrategy(juicer.WaitStrategyFixed),
 		grpc.JuicerFixedWait(millisToDuration(juicerFixedWaitMillis)))
-	if juicerHoldUntilDone {
-		opts = append(opts,
-			grpc.JuicerHoldUntilDone(true),
-			grpc.JuicerMaxBusy(millisToDuration(juicerMaxBusyMillis)))
-	}
 	return opts
 }
 
@@ -655,14 +654,21 @@ func (crdbJuicerSPI) ExecutePrepareRequest(req interface{}) (interface{}, error)
 func (crdbJuicerSPI) ExecuteAbortRequest(req interface{}) (interface{}, error)   { return nil, nil }
 func (crdbJuicerSPI) AbortCurrentRequest(req interface{}) (interface{}, error)   { return nil, nil }
 
-// BuildRules declares CRDB's dependency semantics to the enforcer, in one of
-// three strengths selected by COCKROACH_JUICER_RULES. The switch exists because
-// Juicer does two separable things — it sorts requests into per-key arrival
-// order, and it enforces a dependency relation between them — and a single
-// on/off flag cannot tell you which one produced an effect. Measuring "on"
-// against "off" with only juicerRulesFull available conflates the value of the
-// sorting with the cost of the enforcer.
+// BuildRules declares CRDB's dependency relation to the enforcer, selected by
+// COCKROACH_JUICER_RULES. The switch exists because Juicer does two separable
+// things — it sorts requests into per-key arrival order, and it holds them
+// against a dependency relation — and a single on/off flag cannot tell you
+// which one produced an effect.
 //
+//	gate (default)  The completion gate, juicer.GateRules: after a message is
+//	                released on a key, the next message on that key — whatever
+//	                its operation type or transaction — waits for the released
+//	                message's response (success or failure) or the MaxHold
+//	                TTL. The standard configuration (campaigns #11/#12/#14);
+//	                effective behaviour is ≤MaxHold-quantized serialization of
+//	                each hot key, which pre-empts deadlock formation. ONLY safe
+//	                on single-wave one-shot traffic: RMW / multi-wave workloads
+//	                must select off (campaign #13 measured −73% throughput).
 //	full            Locking operations (SFU reads and writes) of different
 //	                transactions mutually exclude. This is the relation as
 //	                originally written, and the one that cost 85-98% of
@@ -673,23 +679,34 @@ func (crdbJuicerSPI) AbortCurrentRequest(req interface{}) (interface{}, error)  
 //	                ordering guarantee CRDB does not provide, namely that a
 //	                reader intending to write is not overtaken. Same release
 //	                relation and MaxHold as full.
-//	off (default)   The zero-value DependencyRules. Enabled() is false, so
+//	off             The zero-value DependencyRules. Enabled() is false, so
 //	                QueueManager builds no enforcer and the per-key queues do
-//	                pure timestamp sorting with no blocking (plus the
-//	                completion gate, which is the queue's own and needs no
-//	                relation here).
+//	                pure timestamp sorting with no holds at all.
 //
-// In every mode a holder releases when its EndTxn or ResolveIntent is observed
-// on the key, when its own write batch response returns (1PC hot path: response
-// return == committed), or on any failed response. Note an OpGetForPut response
-// deliberately does NOT release: the SFU lock must be held through commit — that
-// is what kills the aborts.
+// Release relation for full/sfu, split by held-entry type (the 2026-08-13
+// audit's self-release fix): a held WRITE releases when a same-txn write
+// response returns — event delivery is key-scoped, so that means "this
+// transaction's write covering THIS key landed" (1PC hot path: response
+// return == committed) — or on commit/abort arrival, or on any failed
+// response. A held LOCKING READ releases only on commit/abort arrival, a
+// failed response, or the TTL — never on the transaction's own write
+// response: the SFU claim is "a reader intending to write is not overtaken
+// until the claim resolves", and the removed write-response arm released it
+// mid-transaction (a multi-wave txn's write wave responds long before it
+// commits), contradicting the hold-through-commit intent documented beside
+// it. An OpGetForPut response also deliberately does NOT release its own
+// hold: returning from the locking read is the beginning of the claim, not
+// its resolution.
 func (crdbJuicerSPI) BuildRules() juicer.DependencyRules {
 	mode := juicerRulesMode()
-	if mode == juicerRulesOff {
+	maxHold := time.Duration(juicerMaxHoldMillis) * time.Millisecond
+	switch mode {
+	case juicerRulesOff:
 		// Zero value: DependencyRules.Enabled() is false and the fork's
 		// enforcerFactory returns nil, leaving the queues in sorting-only mode.
 		return juicer.DependencyRules{}
+	case juicerRulesGate:
+		return juicer.GateRules(maxHold)
 	}
 
 	locking := func(o juicer.OperationType) bool {
@@ -713,8 +730,17 @@ func (crdbJuicerSPI) BuildRules() juicer.DependencyRules {
 			if juicer.ReleasedOnCommitAbort(h, ev) {
 				return true
 			}
-			return ev.Kind == juicer.RespReturned && (ev.Failed || ev.OpType == juicer.OpSet)
+			if ev.Kind != juicer.RespReturned {
+				return false
+			}
+			if ev.Failed {
+				return true
+			}
+			// A write response ends a held write (its own batch, by key-scoped
+			// delivery) but never a held locking read — see the relation note
+			// above.
+			return ev.OpType == juicer.OpSet && h.OpType == juicer.OpSet
 		},
-		MaxHold: time.Duration(juicerMaxHoldMillis) * time.Millisecond,
+		MaxHold: maxHold,
 	}
 }
