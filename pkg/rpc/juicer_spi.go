@@ -127,10 +127,11 @@ var (
 type juicerRules string
 
 const (
-	juicerRulesGate juicerRules = "gate"
-	juicerRulesFull juicerRules = "full"
-	juicerRulesSFU  juicerRules = "sfu"
-	juicerRulesOff  juicerRules = "off"
+	juicerRulesGate   juicerRules = "gate"
+	juicerRulesWrites juicerRules = "writes"
+	juicerRulesFull   juicerRules = "full"
+	juicerRulesSFU    juicerRules = "sfu"
+	juicerRulesOff    juicerRules = "off"
 )
 
 // The default is GATE as of the 2026-08-26 merge: the completion gate — the
@@ -149,6 +150,8 @@ var juicerRulesEnv = envutil.EnvOrDefaultString("COCKROACH_JUICER_RULES", string
 // spelled exactly; verify the banner, not the environment.
 func juicerRulesMode() juicerRules {
 	switch juicerRules(strings.ToLower(strings.TrimSpace(juicerRulesEnv))) {
+	case juicerRulesWrites:
+		return juicerRulesWrites
 	case juicerRulesFull:
 		return juicerRulesFull
 	case juicerRulesSFU:
@@ -669,6 +672,14 @@ func (crdbJuicerSPI) AbortCurrentRequest(req interface{}) (interface{}, error)  
 //	                each hot key, which pre-empts deadlock formation. ONLY safe
 //	                on single-wave one-shot traffic: RMW / multi-wave workloads
 //	                must select off (campaign #13 measured −73% throughput).
+//	writes          The unified-rule CANDIDATE (validation pending): only
+//	                cross-txn write-write pairs exclude; plain reads and
+//	                locking reads pass untouched and arm nothing. Designed to
+//	                keep the gate's single-wave wins (on pure-write traffic it
+//	                is literally the gate), delete the read tax, and be
+//	                neutral on RMW — one always-on relation with no
+//	                workload-class caveat. See the case below for the
+//	                fact-by-fact derivation.
 //	full            Locking operations (SFU reads and writes) of different
 //	                transactions mutually exclude. This is the relation as
 //	                originally written, and the one that cost 85-98% of
@@ -707,6 +718,40 @@ func (crdbJuicerSPI) BuildRules() juicer.DependencyRules {
 		return juicer.DependencyRules{}
 	case juicerRulesGate:
 		return juicer.GateRules(maxHold)
+	case juicerRulesWrites:
+		// The unified-rule candidate: space concurrent WRITERS per hot key and
+		// touch nothing else. Every clause is pinned to a measured fact —
+		// cross-txn write-write spacing is where the single-wave wins came
+		// from (campaigns #11/#12/#14); plain reads are exempt because holding
+		// them was the one in-class cost (m50 read p50 +40%) and non-locking
+		// reads cannot deadlock; locking reads are exempt because holding that
+		// wave is where the RMW harm came from (campaign #13: the lock table
+		// already owns that serialization; stacking a quantized hold on it was
+		// −73%). If the do-no-harm prediction on RMW validates, this relation
+		// replaces the gate as the single always-on rule and the
+		// workload-class warning dies with the mode switch.
+		return juicer.DependencyRules{
+			Blocks: func(h, hd juicer.OpRef) bool {
+				return h.TxnID != hd.TxnID &&
+					h.OpType == juicer.OpSet && hd.OpType == juicer.OpSet
+			},
+			// Held entries are only ever writes here, so the release relation
+			// is the write arm alone: own write response (key-scoped delivery;
+			// 1PC hot path: response return == committed), commit/abort
+			// arrival, or any failed response.
+			Releases: func(h juicer.OpRef, ev juicer.Event) bool {
+				if ev.TxnID != h.TxnID {
+					return false
+				}
+				if juicer.ReleasedOnCommitAbort(h, ev) {
+					return true
+				}
+				return ev.Kind == juicer.RespReturned &&
+					(ev.Failed || ev.OpType == juicer.OpSet)
+			},
+			MaxHold:      maxHold,
+			AdmitUnbound: true,
+		}
 	}
 
 	locking := func(o juicer.OperationType) bool {

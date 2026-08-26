@@ -432,6 +432,65 @@ func TestJuicerGateRules(t *testing.T) {
 	}
 }
 
+// The unified-rule candidate: only concurrent cross-txn WRITERS are spaced;
+// everything the campaigns identified as tax or harm — plain reads (m50 read
+// p50 +40%), locking-read waves (campaign #13's RMW collapse) — passes
+// untouched. On pure-write traffic the relation must coincide with the gate.
+func TestJuicerWritesRules(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer func(saved string) { juicerRulesEnv = saved }(juicerRulesEnv)
+	juicerRulesEnv = "writes"
+
+	rules := newCRDBJuicerSPI().BuildRules()
+	if !rules.Enabled() {
+		t.Fatal("writes rules disabled")
+	}
+	if !rules.AdmitUnbound {
+		t.Fatal("writes relation must admit unbound heads untracked")
+	}
+
+	writeA := juicer.OpRef{TxnID: 1, OpType: juicer.OpSet}
+	writeB := juicer.OpRef{TxnID: 2, OpType: juicer.OpSet}
+	sfuB := juicer.OpRef{TxnID: 2, OpType: juicer.OpGetForPut}
+	readB := juicer.OpRef{TxnID: 2, OpType: juicer.OpGet}
+
+	if !rules.Blocks(writeA, writeB) {
+		t.Fatal("cross-txn write-write pair did not block (the winning ingredient)")
+	}
+	// The RMW exemption, both directions: a locking-read wave neither waits
+	// behind a held write nor (as a hold, which it can never become) blocks
+	// one — stacking holds on lock-table-owned serialization was campaign
+	// #13's collapse.
+	if rules.Blocks(writeA, sfuB) || rules.Blocks(sfuB, writeA) {
+		t.Fatal("locking read participated in blocking under the writes relation")
+	}
+	if rules.Blocks(writeA, readB) || rules.Blocks(readB, writeA) {
+		t.Fatal("plain read participated in blocking under the writes relation")
+	}
+	if rules.Blocks(writeA, juicer.OpRef{TxnID: 1, OpType: juicer.OpSet}) {
+		t.Fatal("same-txn write pair blocked itself")
+	}
+
+	// Release relation of a held write: own write response, commit/abort
+	// arrival, or a failed response — the gate's completion semantics on the
+	// write population.
+	if !rules.Releases(writeA, juicer.Event{Kind: juicer.RespReturned, OpType: juicer.OpSet, TxnID: 1}) {
+		t.Fatal("own write response did not release the write hold")
+	}
+	if !rules.Releases(writeA, juicer.Event{Kind: juicer.ReqArrived, OpType: juicer.OpCommit, TxnID: 1}) {
+		t.Fatal("commit arrival did not release the write hold")
+	}
+	if !rules.Releases(writeA, juicer.Event{Kind: juicer.RespReturned, OpType: juicer.OpGetForPut, TxnID: 1, Failed: true}) {
+		t.Fatal("failed response did not release the write hold")
+	}
+	if rules.Releases(writeA, juicer.Event{Kind: juicer.RespReturned, OpType: juicer.OpSet, TxnID: 9}) {
+		t.Fatal("another txn's response released the write hold")
+	}
+	if rules.Releases(writeA, juicer.Event{Kind: juicer.RespReturned, OpType: juicer.OpGetForPut, TxnID: 1}) {
+		t.Fatal("a non-write same-txn response released the write hold")
+	}
+}
+
 // TestJuicerRulesModes covers the COCKROACH_JUICER_RULES axis: each mode must
 // produce the blocking relation it advertises, because the whole point of the
 // switch is to attribute an observed effect to sorting or to enforcement. It
@@ -451,8 +510,9 @@ func TestJuicerRulesModes(t *testing.T) {
 		expectedMode        juicerRules
 		expectedEnabled     bool
 		expectedTypeBlind   bool // gate: everything blocks everything
-		expectedBlocksSFU   bool
-		expectedBlocksWrite bool
+		expectedBlocksSFU   bool // Blocks(sfu held, sfu head)
+		expectedBlocksWrite bool // Blocks(sfu held, write head)
+		expectedBlocksWW    bool // Blocks(write held, write head), cross-txn
 	}{
 		{
 			name: "default is the gate", env: "", expectedMode: juicerRulesGate,
@@ -463,12 +523,19 @@ func TestJuicerRulesModes(t *testing.T) {
 			expectedEnabled: true, expectedTypeBlind: true,
 		},
 		{
+			name: "writes spaces concurrent writers only", env: "writes", expectedMode: juicerRulesWrites,
+			expectedEnabled: true, expectedBlocksSFU: false, expectedBlocksWrite: false,
+			expectedBlocksWW: true,
+		},
+		{
 			name: "full blocks every locking pair", env: "full", expectedMode: juicerRulesFull,
 			expectedEnabled: true, expectedBlocksSFU: true, expectedBlocksWrite: true,
+			expectedBlocksWW: true,
 		},
 		{
 			name: "sfu leaves write-write to the lock table", env: "sfu", expectedMode: juicerRulesSFU,
 			expectedEnabled: true, expectedBlocksSFU: true, expectedBlocksWrite: false,
+			expectedBlocksWW: false,
 		},
 		{
 			name: "off disables the enforcer entirely", env: "off", expectedMode: juicerRulesOff,
@@ -477,6 +544,7 @@ func TestJuicerRulesModes(t *testing.T) {
 		{
 			name: "case and space tolerated", env: "  SFU ", expectedMode: juicerRulesSFU,
 			expectedEnabled: true, expectedBlocksSFU: true, expectedBlocksWrite: false,
+			expectedBlocksWW: false,
 		},
 		{
 			name: "unrecognized value resolves to the default gate", env: "bogus", expectedMode: juicerRulesGate,
@@ -517,13 +585,19 @@ func TestJuicerRulesModes(t *testing.T) {
 			if got := rules.Blocks(sfuA, writeB); got != tc.expectedBlocksWrite {
 				t.Errorf("Blocks(sfu, write) = %v, want %v", got, tc.expectedBlocksWrite)
 			}
-			// Same-txn pairs never block in sfu/full: the enforcer evaluates the
-			// head against the whole in-flight set, including the txn's own ops.
-			if rules.Blocks(sfuA, juicer.OpRef{TxnID: 1, OpType: juicer.OpSet}) {
-				t.Error("same-txn write upgrade blocked itself")
+			writeA := juicer.OpRef{TxnID: 1, OpType: juicer.OpSet}
+			if got := rules.Blocks(writeA, writeB); got != tc.expectedBlocksWW {
+				t.Errorf("Blocks(write, write) = %v, want %v", got, tc.expectedBlocksWW)
 			}
-			// Plain reads never wait in sfu/full.
-			if rules.Blocks(sfuA, readB) || rules.Blocks(readB, sfuA) {
+			// Same-txn pairs never block in the typed relations: the enforcer
+			// evaluates the head against the whole in-flight set, including
+			// the txn's own ops.
+			if rules.Blocks(sfuA, writeA) || rules.Blocks(writeA, juicer.OpRef{TxnID: 1, OpType: juicer.OpSet}) {
+				t.Error("same-txn pair blocked itself")
+			}
+			// Plain reads never wait in the typed relations.
+			if rules.Blocks(sfuA, readB) || rules.Blocks(readB, sfuA) ||
+				rules.Blocks(writeA, readB) || rules.Blocks(readB, writeA) {
 				t.Error("plain read participated in blocking")
 			}
 		})
