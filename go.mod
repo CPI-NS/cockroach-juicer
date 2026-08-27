@@ -575,4 +575,4 @@ replace github.com/snowflakedb/gosnowflake => github.com/cockroachdb/gosnowflake
 
 replace github.com/knz/strtime => github.com/cockroachdb/strtime v0.0.0-20250401230151-b9140bbb29b5
 
-replace google.golang.org/grpc => github.com/CPI-NS/juicer-grpc-go v1.57.2-juicer-20
+replace google.golang.org/grpc => github.com/CPI-NS/juicer-grpc-go v1.57.2-juicer-21
