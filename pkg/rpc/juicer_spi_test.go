@@ -502,6 +502,74 @@ func TestJuicerWritesRules(t *testing.T) {
 	}
 }
 
+// TestJuicerWriteGateRules pins the campaign #16 ablation probe: the writes
+// relation with Blocks widened to every head type. The single intended
+// difference from writes — reads and locking reads wait behind a live
+// cross-txn write hold — is asserted positively, and everything that must
+// stay identical to writes (who holds, what releases, same-txn exemption) is
+// asserted unchanged, because the ablation is only interpretable if exactly
+// one clause moved.
+func TestJuicerWriteGateRules(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer func(saved string) { juicerRulesEnv = saved }(juicerRulesEnv)
+	juicerRulesEnv = "writegate"
+
+	rules := newCRDBJuicerSPI().BuildRules()
+	if !rules.Enabled() {
+		t.Fatal("writegate rules disabled")
+	}
+	if !rules.AdmitUnbound {
+		t.Fatal("writegate relation must admit unbound heads untracked")
+	}
+
+	writeA := juicer.OpRef{TxnID: 1, OpType: juicer.OpSet}
+	writeB := juicer.OpRef{TxnID: 2, OpType: juicer.OpSet}
+	sfuB := juicer.OpRef{TxnID: 2, OpType: juicer.OpGetForPut}
+	readB := juicer.OpRef{TxnID: 2, OpType: juicer.OpGet}
+
+	// The widened half: every cross-txn head type waits behind a write hold.
+	for _, head := range []juicer.OpRef{writeB, sfuB, readB} {
+		if !rules.Blocks(writeA, head) {
+			t.Fatalf("head %+v did not wait behind a cross-txn write hold", head)
+		}
+	}
+	// The unchanged halves. Same-txn heads stay exempt (an RMW transaction is
+	// never parked behind its own write) ...
+	for _, head := range []juicer.OpRef{
+		{TxnID: 1, OpType: juicer.OpSet},
+		{TxnID: 1, OpType: juicer.OpGet},
+		{TxnID: 1, OpType: juicer.OpGetForPut},
+	} {
+		if rules.Blocks(writeA, head) {
+			t.Fatalf("same-txn head %+v parked behind its own write hold", head)
+		}
+	}
+	// ... non-write held entries block nothing (and can never exist: only
+	// writes hold) ...
+	if rules.Blocks(readB, writeA) || rules.Blocks(sfuB, writeA) {
+		t.Fatal("a non-write held entry blocked under writegate")
+	}
+	if rules.Holds == nil || !rules.Holds(writeA) || rules.Holds(readB) || rules.Holds(sfuB) {
+		t.Fatal("writegate hold population is not writes-only")
+	}
+	// ... and the release relation is the writes relation verbatim.
+	if !rules.Releases(writeA, juicer.Event{Kind: juicer.RespReturned, OpType: juicer.OpSet, TxnID: 1}) {
+		t.Fatal("own write response did not release the write hold")
+	}
+	if !rules.Releases(writeA, juicer.Event{Kind: juicer.ReqArrived, OpType: juicer.OpCommit, TxnID: 1}) {
+		t.Fatal("commit arrival did not release the write hold")
+	}
+	if !rules.Releases(writeA, juicer.Event{Kind: juicer.RespReturned, OpType: juicer.OpGetForPut, TxnID: 1, Failed: true}) {
+		t.Fatal("failed response did not release the write hold")
+	}
+	if rules.Releases(writeA, juicer.Event{Kind: juicer.RespReturned, OpType: juicer.OpSet, TxnID: 9}) {
+		t.Fatal("another txn's response released the write hold")
+	}
+	if rules.Releases(writeA, juicer.Event{Kind: juicer.RespReturned, OpType: juicer.OpGetForPut, TxnID: 1}) {
+		t.Fatal("a non-write same-txn response released the write hold")
+	}
+}
+
 // TestJuicerRulesModes covers the COCKROACH_JUICER_RULES axis: each mode must
 // produce the blocking relation it advertises, because the whole point of the
 // switch is to attribute an observed effect to sorting or to enforcement. It
@@ -524,6 +592,7 @@ func TestJuicerRulesModes(t *testing.T) {
 		expectedBlocksSFU   bool // Blocks(sfu held, sfu head)
 		expectedBlocksWrite bool // Blocks(sfu held, write head)
 		expectedBlocksWW    bool // Blocks(write held, write head), cross-txn
+		expectedBlocksRead  bool // Blocks(write held, read head), cross-txn
 	}{
 		{
 			name: "default is the gate", env: "", expectedMode: juicerRulesGate,
@@ -537,6 +606,12 @@ func TestJuicerRulesModes(t *testing.T) {
 			name: "writes spaces concurrent writers only", env: "writes", expectedMode: juicerRulesWrites,
 			expectedEnabled: true, expectedBlocksSFU: false, expectedBlocksWrite: false,
 			expectedBlocksWW: true,
+		},
+		{
+			name: "writegate parks every head behind a live write hold", env: "writegate",
+			expectedMode:    juicerRulesWriteGate,
+			expectedEnabled: true, expectedBlocksSFU: false, expectedBlocksWrite: false,
+			expectedBlocksWW: true, expectedBlocksRead: true,
 		},
 		{
 			name: "full blocks every locking pair", env: "full", expectedMode: juicerRulesFull,
@@ -606,10 +681,16 @@ func TestJuicerRulesModes(t *testing.T) {
 			if rules.Blocks(sfuA, writeA) || rules.Blocks(writeA, juicer.OpRef{TxnID: 1, OpType: juicer.OpSet}) {
 				t.Error("same-txn pair blocked itself")
 			}
-			// Plain reads never wait in the typed relations.
-			if rules.Blocks(sfuA, readB) || rules.Blocks(readB, sfuA) ||
-				rules.Blocks(writeA, readB) || rules.Blocks(readB, writeA) {
-				t.Error("plain read participated in blocking")
+			// Whether a read head waits behind a write hold is the one clause
+			// the writegate ablation moves; everywhere else it is false.
+			if got := rules.Blocks(writeA, readB); got != tc.expectedBlocksRead {
+				t.Errorf("Blocks(write, read) = %v, want %v", got, tc.expectedBlocksRead)
+			}
+			// A read never blocks anything as a held entry in any typed
+			// relation (none of them hold reads, and the relation functions
+			// agree), and no typed relation parks a read behind an sfu hold.
+			if rules.Blocks(sfuA, readB) || rules.Blocks(readB, sfuA) || rules.Blocks(readB, writeA) {
+				t.Error("plain read participated in blocking where no relation allows it")
 			}
 		})
 	}

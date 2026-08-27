@@ -127,11 +127,12 @@ var (
 type juicerRules string
 
 const (
-	juicerRulesGate   juicerRules = "gate"
-	juicerRulesWrites juicerRules = "writes"
-	juicerRulesFull   juicerRules = "full"
-	juicerRulesSFU    juicerRules = "sfu"
-	juicerRulesOff    juicerRules = "off"
+	juicerRulesGate      juicerRules = "gate"
+	juicerRulesWrites    juicerRules = "writes"
+	juicerRulesWriteGate juicerRules = "writegate"
+	juicerRulesFull      juicerRules = "full"
+	juicerRulesSFU       juicerRules = "sfu"
+	juicerRulesOff       juicerRules = "off"
 )
 
 // The default is GATE as of the 2026-08-26 merge: the completion gate — the
@@ -152,6 +153,8 @@ func juicerRulesMode() juicerRules {
 	switch juicerRules(strings.ToLower(strings.TrimSpace(juicerRulesEnv))) {
 	case juicerRulesWrites:
 		return juicerRulesWrites
+	case juicerRulesWriteGate:
+		return juicerRulesWriteGate
 	case juicerRulesFull:
 		return juicerRulesFull
 	case juicerRulesSFU:
@@ -680,6 +683,15 @@ func (crdbJuicerSPI) AbortCurrentRequest(req interface{}) (interface{}, error)  
 //	                neutral on RMW — one always-on relation with no
 //	                workload-class caveat. See the case below for the
 //	                fact-by-fact derivation.
+//	writegate       ABLATION PROBE (campaign #16), not a production candidate:
+//	                writes plus one change — EVERY head (reads included) waits
+//	                behind a live cross-txn write hold, but reads still hold
+//	                nothing. Campaign #15 measured that the gate's mixed-load
+//	                advantage over writes comes from read participation; this
+//	                relation keeps only the read-waits-behind-writes half and
+//	                drops the read-holds half, so the outcome attributes that
+//	                advantage to ordering (≈gate) or to the admission throttle
+//	                the read holds themselves imposed (≈writes).
 //	full            Locking operations (SFU reads and writes) of different
 //	                transactions mutually exclude. This is the relation as
 //	                originally written, and the one that cost 85-98% of
@@ -753,6 +765,32 @@ func (crdbJuicerSPI) BuildRules() juicer.DependencyRules {
 			// a held read could block nothing, would be released by no
 			// response (Releases wants OpSet), and its TTL expiry would
 			// pollute the E/W numerator.
+			Holds:        func(h juicer.OpRef) bool { return h.OpType == juicer.OpSet },
+			MaxHold:      maxHold,
+			AdmitUnbound: true,
+		}
+	case juicerRulesWriteGate:
+		// The campaign #16 ablation probe: identical to writes except that
+		// Blocks drops its head-type condition, so reads and locking reads
+		// wait behind a live cross-txn write hold instead of passing. Holds
+		// and Releases are the writes relation verbatim — the held population
+		// is still writes only, which is exactly the point: read-waiting
+		// without read-holding. Same-txn heads stay exempt so an RMW
+		// transaction is never parked behind its own write.
+		return juicer.DependencyRules{
+			Blocks: func(h, hd juicer.OpRef) bool {
+				return h.TxnID != hd.TxnID && h.OpType == juicer.OpSet
+			},
+			Releases: func(h juicer.OpRef, ev juicer.Event) bool {
+				if ev.TxnID != h.TxnID {
+					return false
+				}
+				if juicer.ReleasedOnCommitAbort(h, ev) {
+					return true
+				}
+				return ev.Kind == juicer.RespReturned &&
+					(ev.Failed || ev.OpType == juicer.OpSet)
+			},
 			Holds:        func(h juicer.OpRef) bool { return h.OpType == juicer.OpSet },
 			MaxHold:      maxHold,
 			AdmitUnbound: true,
