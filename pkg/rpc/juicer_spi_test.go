@@ -401,10 +401,11 @@ func TestJuicerGateRules(t *testing.T) {
 	if rules.MaxHold != 25*time.Millisecond {
 		t.Fatalf("gate MaxHold = %v, want 25ms (the standard TTL)", rules.MaxHold)
 	}
-	if rules.Holds != nil {
-		t.Fatal("the gate holds every dispatched head (its blocking is type-blind)")
+	for _, ty := range []juicer.OperationType{juicer.OpGet, juicer.OpGetForPut, juicer.OpSet, juicer.OpCommit} {
+		if !rules.Holdable(ty) {
+			t.Fatalf("gate must derive every type holdable; Holdable(%d) = false", ty)
+		}
 	}
-
 	held := juicer.OpRef{TxnID: 1, OpType: juicer.OpSet}
 	// Type-blind and txn-blind blocking: one in-flight message closes the key
 	// to everyone, plain reads and the holder's own transaction included.
@@ -460,12 +461,12 @@ func TestJuicerWritesRules(t *testing.T) {
 	if !rules.Blocks(writeA, writeB) {
 		t.Fatal("cross-txn write-write pair did not block (the winning ingredient)")
 	}
-	// Only writes hold: a tracked read/locking-read entry could block nothing
-	// and its TTL expiry would pollute the E/W numerator.
-	if rules.Holds == nil || !rules.Holds(writeA) {
+	// Only writes hold (derived from Blocks): a tracked read/locking-read
+	// entry could block nothing there.
+	if !rules.Holdable(juicer.OpSet) {
 		t.Fatal("write head does not hold under the writes relation")
 	}
-	if rules.Holds(readB) || rules.Holds(sfuB) {
+	if rules.Holdable(juicer.OpGet) || rules.Holdable(juicer.OpGetForPut) {
 		t.Fatal("non-write head holds under the writes relation")
 	}
 	// The RMW exemption, both directions: a locking-read wave neither waits
@@ -549,7 +550,7 @@ func TestJuicerWriteGateRules(t *testing.T) {
 	if rules.Blocks(readB, writeA) || rules.Blocks(sfuB, writeA) {
 		t.Fatal("a non-write held entry blocked under writegate")
 	}
-	if rules.Holds == nil || !rules.Holds(writeA) || rules.Holds(readB) || rules.Holds(sfuB) {
+	if !rules.Holdable(juicer.OpSet) || rules.Holdable(juicer.OpGet) || rules.Holdable(juicer.OpGetForPut) {
 		t.Fatal("writegate hold population is not writes-only")
 	}
 	// ... and the release relation is the writes relation verbatim.
@@ -567,6 +568,79 @@ func TestJuicerWriteGateRules(t *testing.T) {
 	}
 	if rules.Releases(writeA, juicer.Event{Kind: juicer.RespReturned, OpType: juicer.OpGetForPut, TxnID: 1}) {
 		t.Fatal("a non-write same-txn response released the write hold")
+	}
+}
+
+// TestJuicerReadHoldRules pins the campaign #17 ablation probe: reads and
+// writes hold, only write heads wait. The one widened clause (reads enter the
+// held population) and the one narrowed clause (read heads never wait) are
+// asserted positively; the RMW exemption (locking reads unholdable) must fall
+// out of the derivation.
+func TestJuicerReadHoldRules(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer func(saved string) { juicerRulesEnv = saved }(juicerRulesEnv)
+	juicerRulesEnv = "readhold"
+
+	rules := newCRDBJuicerSPI().BuildRules()
+	if !rules.Enabled() {
+		t.Fatal("readhold rules disabled")
+	}
+	if !rules.AdmitUnbound {
+		t.Fatal("readhold relation must admit unbound heads untracked")
+	}
+
+	writeA := juicer.OpRef{TxnID: 1, OpType: juicer.OpSet}
+	readA := juicer.OpRef{TxnID: 1, OpType: juicer.OpGet}
+	writeB := juicer.OpRef{TxnID: 2, OpType: juicer.OpSet}
+	readB := juicer.OpRef{TxnID: 2, OpType: juicer.OpGet}
+	sfuB := juicer.OpRef{TxnID: 2, OpType: juicer.OpGetForPut}
+
+	// Write heads wait behind cross-txn writes AND cross-txn plain reads.
+	if !rules.Blocks(writeA, writeB) {
+		t.Fatal("cross-txn write-write pair did not block")
+	}
+	if !rules.Blocks(readA, writeB) {
+		t.Fatal("write head did not wait behind a cross-txn read hold (the probe's point)")
+	}
+	// Nothing else waits: reads pass everything, and same-txn stays exempt.
+	if rules.Blocks(writeA, readB) || rules.Blocks(readA, readB) {
+		t.Fatal("a read head waited under readhold")
+	}
+	if rules.Blocks(writeA, sfuB) || rules.Blocks(sfuB, writeB) {
+		t.Fatal("locking read participated in blocking under readhold")
+	}
+	if rules.Blocks(writeA, juicer.OpRef{TxnID: 1, OpType: juicer.OpSet}) ||
+		rules.Blocks(readA, juicer.OpRef{TxnID: 1, OpType: juicer.OpSet}) {
+		t.Fatal("same-txn head parked behind its own transaction's hold")
+	}
+
+	// Derived held population: writes and plain reads, nothing else.
+	if !rules.Holdable(juicer.OpSet) || !rules.Holdable(juicer.OpGet) {
+		t.Fatal("readhold must hold writes and plain reads")
+	}
+	if rules.Holdable(juicer.OpGetForPut) || rules.Holdable(juicer.OpCommit) {
+		t.Fatal("readhold held population wider than writes+reads")
+	}
+
+	// Releases: each hold ends at its own kind of response; commit/abort and
+	// failed responses end both kinds; nothing crosses transactions.
+	if !rules.Releases(writeA, juicer.Event{Kind: juicer.RespReturned, OpType: juicer.OpSet, TxnID: 1}) {
+		t.Fatal("own write response did not release the write hold")
+	}
+	if !rules.Releases(readA, juicer.Event{Kind: juicer.RespReturned, OpType: juicer.OpGet, TxnID: 1}) {
+		t.Fatal("own read response did not release the read hold")
+	}
+	if rules.Releases(readA, juicer.Event{Kind: juicer.RespReturned, OpType: juicer.OpSet, TxnID: 1}) {
+		t.Fatal("a same-txn write response released a read hold")
+	}
+	if !rules.Releases(readA, juicer.Event{Kind: juicer.ReqArrived, OpType: juicer.OpCommit, TxnID: 1}) {
+		t.Fatal("commit arrival did not release the read hold")
+	}
+	if !rules.Releases(readA, juicer.Event{Kind: juicer.RespReturned, OpType: juicer.OpSet, TxnID: 1, Failed: true}) {
+		t.Fatal("failed response did not release the read hold")
+	}
+	if rules.Releases(readA, juicer.Event{Kind: juicer.RespReturned, OpType: juicer.OpGet, TxnID: 9}) {
+		t.Fatal("another txn's read response released the read hold")
 	}
 }
 
@@ -593,6 +667,7 @@ func TestJuicerRulesModes(t *testing.T) {
 		expectedBlocksWrite bool // Blocks(sfu held, write head)
 		expectedBlocksWW    bool // Blocks(write held, write head), cross-txn
 		expectedBlocksRead  bool // Blocks(write held, read head), cross-txn
+		expectedReadBlocks  bool // Blocks(read held, write head), cross-txn
 	}{
 		{
 			name: "default is the gate", env: "", expectedMode: juicerRulesGate,
@@ -612,6 +687,12 @@ func TestJuicerRulesModes(t *testing.T) {
 			expectedMode:    juicerRulesWriteGate,
 			expectedEnabled: true, expectedBlocksSFU: false, expectedBlocksWrite: false,
 			expectedBlocksWW: true, expectedBlocksRead: true,
+		},
+		{
+			name: "readhold parks writes behind reads and writes", env: "readhold",
+			expectedMode:    juicerRulesReadHold,
+			expectedEnabled: true, expectedBlocksSFU: false, expectedBlocksWrite: false,
+			expectedBlocksWW: true, expectedBlocksRead: false, expectedReadBlocks: true,
 		},
 		{
 			name: "full blocks every locking pair", env: "full", expectedMode: juicerRulesFull,
@@ -686,10 +767,14 @@ func TestJuicerRulesModes(t *testing.T) {
 			if got := rules.Blocks(writeA, readB); got != tc.expectedBlocksRead {
 				t.Errorf("Blocks(write, read) = %v, want %v", got, tc.expectedBlocksRead)
 			}
-			// A read never blocks anything as a held entry in any typed
-			// relation (none of them hold reads, and the relation functions
-			// agree), and no typed relation parks a read behind an sfu hold.
-			if rules.Blocks(sfuA, readB) || rules.Blocks(readB, sfuA) || rules.Blocks(readB, writeA) {
+			// Whether a held read blocks a write head is the clause the
+			// readhold ablation widens; everywhere else it is false.
+			if got := rules.Blocks(readB, writeA); got != tc.expectedReadBlocks {
+				t.Errorf("Blocks(read, write) = %v, want %v", got, tc.expectedReadBlocks)
+			}
+			// No typed relation parks a read behind an sfu hold, or lets a
+			// held read block another read.
+			if rules.Blocks(sfuA, readB) || rules.Blocks(readB, sfuA) {
 				t.Error("plain read participated in blocking where no relation allows it")
 			}
 		})
@@ -753,12 +838,12 @@ func TestJuicerCRDBRules(t *testing.T) {
 		t.Fatal("observed commit message did not release the write hold")
 	}
 
-	// Only locking operations hold under full: a tracked plain read could
-	// block nothing and would only pollute the E/W numerator at its TTL.
-	if rules.Holds == nil || !rules.Holds(sfuA) || !rules.Holds(writeA) {
+	// Only locking operations hold under full (derived from Blocks): a
+	// tracked plain read could block nothing there.
+	if !rules.Holdable(juicer.OpGetForPut) || !rules.Holdable(juicer.OpSet) {
 		t.Fatal("locking head does not hold under full")
 	}
-	if rules.Holds(readB) {
+	if rules.Holdable(juicer.OpGet) {
 		t.Fatal("plain read holds under full")
 	}
 }

@@ -130,6 +130,7 @@ const (
 	juicerRulesGate      juicerRules = "gate"
 	juicerRulesWrites    juicerRules = "writes"
 	juicerRulesWriteGate juicerRules = "writegate"
+	juicerRulesReadHold  juicerRules = "readhold"
 	juicerRulesFull      juicerRules = "full"
 	juicerRulesSFU       juicerRules = "sfu"
 	juicerRulesOff       juicerRules = "off"
@@ -155,6 +156,8 @@ func juicerRulesMode() juicerRules {
 		return juicerRulesWrites
 	case juicerRulesWriteGate:
 		return juicerRulesWriteGate
+	case juicerRulesReadHold:
+		return juicerRulesReadHold
 	case juicerRulesFull:
 		return juicerRulesFull
 	case juicerRulesSFU:
@@ -692,6 +695,18 @@ func (crdbJuicerSPI) AbortCurrentRequest(req interface{}) (interface{}, error)  
 //	                drops the read-holds half, so the outcome attributes that
 //	                advantage to ordering (≈gate) or to the admission throttle
 //	                the read holds themselves imposed (≈writes).
+//	readhold        ABLATION PROBE (campaign #17), decomposing the read-HOLD
+//	                half that campaigns #16/#16b measured as owning the gate's
+//	                mixed-load advantage: plain reads and writes both hold,
+//	                but only WRITE heads wait (behind any cross-txn hold);
+//	                reads pass everything. Splits read-holding into its two
+//	                sub-components — this keeps "reads block later writes"
+//	                (write-anchored micro-batching: reads flow until a write
+//	                arrives, the write drains the in-flight reads, reads pile
+//	                behind it) and drops "reads block later reads" (pure
+//	                pacing of the read flood). Locking reads hold nothing —
+//	                the derivation gets that from Blocks — so the RMW hazard
+//	                stays out by construction.
 //	full            Locking operations (SFU reads and writes) of different
 //	                transactions mutually exclude. This is the relation as
 //	                originally written, and the one that cost 85-98% of
@@ -761,22 +776,20 @@ func (crdbJuicerSPI) BuildRules() juicer.DependencyRules {
 				return ev.Kind == juicer.RespReturned &&
 					(ev.Failed || ev.OpType == juicer.OpSet)
 			},
-			// Only writes can hold, so only writes enter the in-flight set:
-			// a held read could block nothing, would be released by no
-			// response (Releases wants OpSet), and its TTL expiry would
-			// pollute the E/W numerator.
-			Holds:        func(h juicer.OpRef) bool { return h.OpType == juicer.OpSet },
+			// Hold membership is derived from Blocks (fork -21): only writes
+			// can block here, so only writes enter the in-flight set.
 			MaxHold:      maxHold,
 			AdmitUnbound: true,
 		}
 	case juicerRulesWriteGate:
 		// The campaign #16 ablation probe: identical to writes except that
 		// Blocks drops its head-type condition, so reads and locking reads
-		// wait behind a live cross-txn write hold instead of passing. Holds
-		// and Releases are the writes relation verbatim — the held population
-		// is still writes only, which is exactly the point: read-waiting
-		// without read-holding. Same-txn heads stay exempt so an RMW
-		// transaction is never parked behind its own write.
+		// wait behind a live cross-txn write hold instead of passing.
+		// Releases is the writes relation verbatim, and the derived held
+		// population is still writes only (only a held write can block) —
+		// which is exactly the point: read-waiting without read-holding.
+		// Same-txn heads stay exempt so an RMW transaction is never parked
+		// behind its own write.
 		return juicer.DependencyRules{
 			Blocks: func(h, hd juicer.OpRef) bool {
 				return h.TxnID != hd.TxnID && h.OpType == juicer.OpSet
@@ -791,7 +804,38 @@ func (crdbJuicerSPI) BuildRules() juicer.DependencyRules {
 				return ev.Kind == juicer.RespReturned &&
 					(ev.Failed || ev.OpType == juicer.OpSet)
 			},
-			Holds:        func(h juicer.OpRef) bool { return h.OpType == juicer.OpSet },
+			MaxHold:      maxHold,
+			AdmitUnbound: true,
+		}
+	case juicerRulesReadHold:
+		// The campaign #17 ablation probe: writes plus one change on the
+		// OTHER side of the relation than writegate moved — the held
+		// population widens from writes to writes-and-plain-reads, while
+		// the waiting population narrows back to write heads only. Reads
+		// never wait; a write waits behind any cross-txn in-flight read or
+		// write. Held entries end at their own kind of response (a write
+		// hold at the txn's write response, a read hold at the txn's read
+		// response — key-scoped delivery as always), at commit/abort
+		// arrival, at any failed response, or at the TTL. Locking reads
+		// are not holdable (Blocks never matches them as held), keeping
+		// the campaign #13 RMW hazard out by construction.
+		return juicer.DependencyRules{
+			Blocks: func(h, hd juicer.OpRef) bool {
+				return h.TxnID != hd.TxnID && hd.OpType == juicer.OpSet &&
+					(h.OpType == juicer.OpSet || h.OpType == juicer.OpGet)
+			},
+			Releases: func(h juicer.OpRef, ev juicer.Event) bool {
+				if ev.TxnID != h.TxnID {
+					return false
+				}
+				if juicer.ReleasedOnCommitAbort(h, ev) {
+					return true
+				}
+				if ev.Kind != juicer.RespReturned {
+					return false
+				}
+				return ev.Failed || ev.OpType == h.OpType
+			},
 			MaxHold:      maxHold,
 			AdmitUnbound: true,
 		}
@@ -829,10 +873,11 @@ func (crdbJuicerSPI) BuildRules() juicer.DependencyRules {
 			// above.
 			return ev.OpType == juicer.OpSet && h.OpType == juicer.OpSet
 		},
-		// Only locking operations can hold under full/sfu, so only they enter
-		// the in-flight set — a tracked plain read could block nothing and
-		// its TTL expiry would pollute the E/W numerator.
-		Holds:   func(h juicer.OpRef) bool { return locking(h.OpType) },
+		// Hold membership is derived from Blocks (fork -21). Under full both
+		// locking types hold; under sfu the derivation sheds the write dead
+		// weight the old explicit declaration carried — a held write blocks
+		// nothing there, so it no longer enters the set (sfu counter values
+		// are not comparable with pre--21 rounds).
 		MaxHold: maxHold,
 	}
 }
