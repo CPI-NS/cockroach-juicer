@@ -644,6 +644,77 @@ func TestJuicerReadHoldRules(t *testing.T) {
 	}
 }
 
+// TestJuicerReadOnlyRules pins the campaign #19 ablation probe: only plain
+// reads hold and only plain read heads wait — the read-read pairing in
+// isolation, the one cell of the pairing grid campaigns #15-#17 never ran.
+// Writes and locking reads must neither hold nor wait, so the RMW hazard is
+// out by construction and every conflict-channel effect measured under this
+// rule is attributable to read-read pacing alone.
+func TestJuicerReadOnlyRules(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer func(saved string) { juicerRulesEnv = saved }(juicerRulesEnv)
+	juicerRulesEnv = "readonly"
+
+	rules := newCRDBJuicerSPI().BuildRules()
+	if !rules.Enabled() {
+		t.Fatal("readonly rules disabled")
+	}
+	if !rules.AdmitUnbound {
+		t.Fatal("readonly relation must admit unbound heads untracked")
+	}
+
+	writeA := juicer.OpRef{TxnID: 1, OpType: juicer.OpSet}
+	readA := juicer.OpRef{TxnID: 1, OpType: juicer.OpGet}
+	writeB := juicer.OpRef{TxnID: 2, OpType: juicer.OpSet}
+	readB := juicer.OpRef{TxnID: 2, OpType: juicer.OpGet}
+	sfuB := juicer.OpRef{TxnID: 2, OpType: juicer.OpGetForPut}
+
+	// The one live clause: a cross-txn read head waits behind a read hold.
+	if !rules.Blocks(readA, readB) {
+		t.Fatal("cross-txn read-read pair did not block (the probe's point)")
+	}
+	// Nothing else waits: writes pass everything, reads pass non-read holds,
+	// locking reads pass everything, and same-txn stays exempt.
+	if rules.Blocks(writeA, writeB) || rules.Blocks(readA, writeB) ||
+		rules.Blocks(writeA, readB) {
+		t.Fatal("a non-read-read pair blocked under readonly")
+	}
+	if rules.Blocks(readA, sfuB) || rules.Blocks(sfuB, readB) {
+		t.Fatal("locking read participated in blocking under readonly")
+	}
+	if rules.Blocks(readA, juicer.OpRef{TxnID: 1, OpType: juicer.OpGet}) {
+		t.Fatal("same-txn read head parked behind its own transaction's hold")
+	}
+
+	// Derived held population: plain reads only.
+	if !rules.Holdable(juicer.OpGet) {
+		t.Fatal("readonly must hold plain reads")
+	}
+	if rules.Holdable(juicer.OpSet) || rules.Holdable(juicer.OpGetForPut) ||
+		rules.Holdable(juicer.OpCommit) {
+		t.Fatal("readonly held population wider than plain reads")
+	}
+
+	// Releases: the read arm verbatim — own read response, commit/abort
+	// arrival, failed response; nothing crosses transactions, and a same-txn
+	// write response does not end a read hold.
+	if !rules.Releases(readA, juicer.Event{Kind: juicer.RespReturned, OpType: juicer.OpGet, TxnID: 1}) {
+		t.Fatal("own read response did not release the read hold")
+	}
+	if rules.Releases(readA, juicer.Event{Kind: juicer.RespReturned, OpType: juicer.OpSet, TxnID: 1}) {
+		t.Fatal("a same-txn write response released a read hold")
+	}
+	if !rules.Releases(readA, juicer.Event{Kind: juicer.ReqArrived, OpType: juicer.OpCommit, TxnID: 1}) {
+		t.Fatal("commit arrival did not release the read hold")
+	}
+	if !rules.Releases(readA, juicer.Event{Kind: juicer.RespReturned, OpType: juicer.OpSet, TxnID: 1, Failed: true}) {
+		t.Fatal("failed response did not release the read hold")
+	}
+	if rules.Releases(readA, juicer.Event{Kind: juicer.RespReturned, OpType: juicer.OpGet, TxnID: 9}) {
+		t.Fatal("another txn's read response released the read hold")
+	}
+}
+
 // TestJuicerRulesModes covers the COCKROACH_JUICER_RULES axis: each mode must
 // produce the blocking relation it advertises, because the whole point of the
 // switch is to attribute an observed effect to sorting or to enforcement. It
@@ -693,6 +764,14 @@ func TestJuicerRulesModes(t *testing.T) {
 			expectedMode:    juicerRulesReadHold,
 			expectedEnabled: true, expectedBlocksSFU: false, expectedBlocksWrite: false,
 			expectedBlocksWW: true, expectedBlocksRead: false, expectedReadBlocks: true,
+		},
+		{
+			// The read-read clause itself is pinned by TestJuicerReadOnlyRules;
+			// this row asserts every other pairing stays dark.
+			name: "readonly leaves every non-read-read pair alone", env: "readonly",
+			expectedMode:    juicerRulesReadOnly,
+			expectedEnabled: true, expectedBlocksSFU: false, expectedBlocksWrite: false,
+			expectedBlocksWW: false, expectedBlocksRead: false, expectedReadBlocks: false,
 		},
 		{
 			name: "full blocks every locking pair", env: "full", expectedMode: juicerRulesFull,

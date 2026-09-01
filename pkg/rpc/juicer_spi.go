@@ -131,6 +131,7 @@ const (
 	juicerRulesWrites    juicerRules = "writes"
 	juicerRulesWriteGate juicerRules = "writegate"
 	juicerRulesReadHold  juicerRules = "readhold"
+	juicerRulesReadOnly  juicerRules = "readonly"
 	juicerRulesFull      juicerRules = "full"
 	juicerRulesSFU       juicerRules = "sfu"
 	juicerRulesOff       juicerRules = "off"
@@ -158,6 +159,8 @@ func juicerRulesMode() juicerRules {
 		return juicerRulesWriteGate
 	case juicerRulesReadHold:
 		return juicerRulesReadHold
+	case juicerRulesReadOnly:
+		return juicerRulesReadOnly
 	case juicerRulesFull:
 		return juicerRulesFull
 	case juicerRulesSFU:
@@ -707,6 +710,20 @@ func (crdbJuicerSPI) AbortCurrentRequest(req interface{}) (interface{}, error)  
 //	                pacing of the read flood). Locking reads hold nothing —
 //	                the derivation gets that from Blocks — so the RMW hazard
 //	                stays out by construction.
+//	readonly        ABLATION PROBE (campaign #19): the complement none of the
+//	                #15-#17 probes ran — ONLY plain reads hold and ONLY plain
+//	                read heads wait (cross-txn read-read pairs exclude;
+//	                writes and locking reads pass untouched and hold
+//	                nothing). The eight-round consensus review found that
+//	                read-read pairs carry ~73% of the gate's injected wait
+//	                yet were the common factor of every ablation, never the
+//	                manipulated one; this relation makes them the manipulated
+//	                variable. If read-read waves alone carry the gate's
+//	                mixed-load gain, this rule keeps most of it; if the gain
+//	                needs write participation (the superadditivity reading),
+//	                this rule is pure read pacing with no conflict-channel
+//	                benefit. RMW hazard is out by construction: writes and
+//	                locking reads neither hold nor wait.
 //	full            Locking operations (SFU reads and writes) of different
 //	                transactions mutually exclude. This is the relation as
 //	                originally written, and the one that cost 85-98% of
@@ -835,6 +852,34 @@ func (crdbJuicerSPI) BuildRules() juicer.DependencyRules {
 					return false
 				}
 				return ev.Failed || ev.OpType == h.OpType
+			},
+			MaxHold:      maxHold,
+			AdmitUnbound: true,
+		}
+	case juicerRulesReadOnly:
+		// The campaign #19 ablation probe: the exact complement of the
+		// pairing grid's tested rows — cross-txn read-read pairs exclude and
+		// nothing else does. Only plain reads can block, so the derived held
+		// population is plain reads only; writes and locking reads neither
+		// hold nor wait, which keeps the campaign #13 RMW hazard out by
+		// construction. A read hold ends at its own transaction's read
+		// response (key-scoped delivery), at commit/abort arrival, at any
+		// failed response, or at the TTL — the read arm of the readhold
+		// release relation verbatim.
+		return juicer.DependencyRules{
+			Blocks: func(h, hd juicer.OpRef) bool {
+				return h.TxnID != hd.TxnID &&
+					h.OpType == juicer.OpGet && hd.OpType == juicer.OpGet
+			},
+			Releases: func(h juicer.OpRef, ev juicer.Event) bool {
+				if ev.TxnID != h.TxnID {
+					return false
+				}
+				if juicer.ReleasedOnCommitAbort(h, ev) {
+					return true
+				}
+				return ev.Kind == juicer.RespReturned &&
+					(ev.Failed || ev.OpType == juicer.OpGet)
 			},
 			MaxHold:      maxHold,
 			AdmitUnbound: true,
