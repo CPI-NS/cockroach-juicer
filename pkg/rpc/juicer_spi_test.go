@@ -765,6 +765,83 @@ func TestJuicerNoReadReadRules(t *testing.T) {
 	}
 }
 
+// TestJuicerCampaign20PairRules pins the campaign #20 trio: read-read plus
+// exactly one write-involving coupling each, cross-txn only, locking reads
+// exempt on both sides. Each case states the full plain-type Blocks grid
+// (held type -> head type) and the derived held population it expects.
+func TestJuicerCampaign20PairRules(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer func(saved string) { juicerRulesEnv = saved }(juicerRulesEnv)
+
+	writeA := juicer.OpRef{TxnID: 1, OpType: juicer.OpSet}
+	readA := juicer.OpRef{TxnID: 1, OpType: juicer.OpGet}
+	writeB := juicer.OpRef{TxnID: 2, OpType: juicer.OpSet}
+	readB := juicer.OpRef{TxnID: 2, OpType: juicer.OpGet}
+	sfuB := juicer.OpRef{TxnID: 2, OpType: juicer.OpGetForPut}
+
+	for _, tc := range []struct {
+		env string
+		// Blocks(held, head), cross-txn plain types. Read-read is true in
+		// every case; exactly one write-involving entry joins it.
+		expectedReadHoldsRead  bool // Blocks(read, read)
+		expectedWriteHoldsRead bool // Blocks(write, read)  = read waits behind write
+		expectedReadHoldsWrite bool // Blocks(read, write)  = write waits behind read
+		expectedWriteHoldsWrite bool // Blocks(write, write)
+		expectedHoldGet, expectedHoldSet bool
+	}{
+		{
+			env: "typegate", expectedReadHoldsRead: true, expectedWriteHoldsWrite: true,
+			expectedHoldGet: true, expectedHoldSet: true,
+		},
+		{
+			env: "readwait", expectedReadHoldsRead: true, expectedWriteHoldsRead: true,
+			expectedHoldGet: true, expectedHoldSet: true,
+		},
+		{
+			env: "readgate", expectedReadHoldsRead: true, expectedReadHoldsWrite: true,
+			expectedHoldGet: true, expectedHoldSet: false,
+		},
+	} {
+		t.Run(tc.env, func(t *testing.T) {
+			juicerRulesEnv = tc.env
+			rules := newCRDBJuicerSPI().BuildRules()
+			if !rules.Enabled() || !rules.AdmitUnbound {
+				t.Fatal("campaign #20 relation disabled or not admitting unbound heads")
+			}
+			if got := rules.Blocks(readA, readB); got != tc.expectedReadHoldsRead {
+				t.Errorf("Blocks(read, read) = %v, want %v", got, tc.expectedReadHoldsRead)
+			}
+			if got := rules.Blocks(writeA, readB); got != tc.expectedWriteHoldsRead {
+				t.Errorf("Blocks(write, read) = %v, want %v", got, tc.expectedWriteHoldsRead)
+			}
+			if got := rules.Blocks(readA, writeB); got != tc.expectedReadHoldsWrite {
+				t.Errorf("Blocks(read, write) = %v, want %v", got, tc.expectedReadHoldsWrite)
+			}
+			if got := rules.Blocks(writeA, writeB); got != tc.expectedWriteHoldsWrite {
+				t.Errorf("Blocks(write, write) = %v, want %v", got, tc.expectedWriteHoldsWrite)
+			}
+			// Locking reads exempt on both sides; same-txn exempt.
+			if rules.Blocks(readA, sfuB) || rules.Blocks(sfuB, readB) ||
+				rules.Blocks(writeA, sfuB) || rules.Blocks(sfuB, writeB) {
+				t.Error("locking read participated in blocking")
+			}
+			if rules.Blocks(readA, juicer.OpRef{TxnID: 1, OpType: juicer.OpGet}) ||
+				rules.Blocks(writeA, juicer.OpRef{TxnID: 1, OpType: juicer.OpSet}) {
+				t.Error("same-txn pair blocked itself")
+			}
+			if got := rules.Holdable(juicer.OpGet); got != tc.expectedHoldGet {
+				t.Errorf("Holdable(Get) = %v, want %v", got, tc.expectedHoldGet)
+			}
+			if got := rules.Holdable(juicer.OpSet); got != tc.expectedHoldSet {
+				t.Errorf("Holdable(Set) = %v, want %v", got, tc.expectedHoldSet)
+			}
+			if rules.Holdable(juicer.OpGetForPut) {
+				t.Error("locking read entered the held population")
+			}
+		})
+	}
+}
+
 // TestJuicerRulesModes covers the COCKROACH_JUICER_RULES axis: each mode must
 // produce the blocking relation it advertises, because the whole point of the
 // switch is to attribute an observed effect to sorting or to enforcement. It
@@ -830,6 +907,24 @@ func TestJuicerRulesModes(t *testing.T) {
 			name: "noreadread gates like the gate outside read-read", env: "noreadread",
 			expectedMode:    juicerRulesNoReadRead,
 			expectedEnabled: true, expectedTypeBlind: true,
+		},
+		{
+			// Read-read clauses of the campaign #20 trio are pinned by
+			// TestJuicerCampaign20PairRules; these rows assert the one
+			// write-involving coupling each keeps.
+			name: "typegate keeps write-write only among write pairs", env: "typegate",
+			expectedMode:    juicerRulesTypeGate,
+			expectedEnabled: true, expectedBlocksWW: true,
+		},
+		{
+			name: "readwait parks reads behind writes, writes never wait", env: "readwait",
+			expectedMode:    juicerRulesReadWait,
+			expectedEnabled: true, expectedBlocksRead: true,
+		},
+		{
+			name: "readgate parks writes behind reads, the writegate mirror", env: "readgate",
+			expectedMode:    juicerRulesReadGate,
+			expectedEnabled: true, expectedReadBlocks: true,
 		},
 		{
 			name: "full blocks every locking pair", env: "full", expectedMode: juicerRulesFull,

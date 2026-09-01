@@ -133,6 +133,9 @@ const (
 	juicerRulesReadHold   juicerRules = "readhold"
 	juicerRulesReadOnly   juicerRules = "readonly"
 	juicerRulesNoReadRead juicerRules = "noreadread"
+	juicerRulesTypeGate   juicerRules = "typegate"
+	juicerRulesReadWait   juicerRules = "readwait"
+	juicerRulesReadGate   juicerRules = "readgate"
 	juicerRulesFull       juicerRules = "full"
 	juicerRulesSFU        juicerRules = "sfu"
 	juicerRulesOff        juicerRules = "off"
@@ -164,6 +167,12 @@ func juicerRulesMode() juicerRules {
 		return juicerRulesReadOnly
 	case juicerRulesNoReadRead:
 		return juicerRulesNoReadRead
+	case juicerRulesTypeGate:
+		return juicerRulesTypeGate
+	case juicerRulesReadWait:
+		return juicerRulesReadWait
+	case juicerRulesReadGate:
+		return juicerRulesReadGate
 	case juicerRulesFull:
 		return juicerRulesFull
 	case juicerRulesSFU:
@@ -738,6 +747,21 @@ func (crdbJuicerSPI) AbortCurrentRequest(req interface{}) (interface{}, error)  
 //	                gate's m90 gain (sufficiency); this relation measures
 //	                what the OTHER pairings are worth without read-read
 //	                (the marginal / necessity direction).
+//	typegate        ABLATION PROBE (campaign #20): read-read plus write-write
+//	                only — each plain type gates itself, cross-type pairs
+//	                pass, locking reads exempt. With #19 (read-read alone,
+//	                +65%) and #19c (everything-but-read-read, -44%) in hand,
+//	                the #20 trio decomposes the gate's margin over readonly
+//	                one coupling at a time, each in the presence of the
+//	                read-read pacing that #19c showed is the precondition.
+//	readwait        ABLATION PROBE (campaign #20): read-read plus
+//	                read-behind-write — only plain-read heads wait (behind
+//	                cross-txn plain reads and writes); writes never wait;
+//	                plain reads and writes both hold, locking reads exempt.
+//	readgate        ABLATION PROBE (campaign #20): read-read plus
+//	                write-behind-read — only plain-read holds block, and both
+//	                plain types wait behind them; nothing waits behind a
+//	                write; the writegate probe's mirror image.
 //	full            Locking operations (SFU reads and writes) of different
 //	                transactions mutually exclude. This is the relation as
 //	                originally written, and the one that cost 85-98% of
@@ -791,6 +815,46 @@ func (crdbJuicerSPI) BuildRules() juicer.DependencyRules {
 			return gateBlocks(h, hd)
 		}
 		return rules
+	case juicerRulesTypeGate, juicerRulesReadWait, juicerRulesReadGate:
+		// The campaign #20 trio: read-read plus exactly one write-involving
+		// coupling each, cross-txn only, locking reads exempt throughout.
+		// The three Blocks relations share the release arm of the readhold
+		// probe verbatim (each hold ends at its own kind of response,
+		// commit/abort arrival, a failed response, or the TTL); the held
+		// population falls out of Blocks per relation.
+		blocks := func(h, hd juicer.OpRef) bool { // typegate: same plain type
+			return h.TxnID != hd.TxnID && h.OpType == hd.OpType &&
+				(h.OpType == juicer.OpGet || h.OpType == juicer.OpSet)
+		}
+		switch mode {
+		case juicerRulesReadWait: // read heads wait behind plain reads+writes
+			blocks = func(h, hd juicer.OpRef) bool {
+				return h.TxnID != hd.TxnID && hd.OpType == juicer.OpGet &&
+					(h.OpType == juicer.OpGet || h.OpType == juicer.OpSet)
+			}
+		case juicerRulesReadGate: // both plain types wait behind read holds
+			blocks = func(h, hd juicer.OpRef) bool {
+				return h.TxnID != hd.TxnID && h.OpType == juicer.OpGet &&
+					(hd.OpType == juicer.OpGet || hd.OpType == juicer.OpSet)
+			}
+		}
+		return juicer.DependencyRules{
+			Blocks: blocks,
+			Releases: func(h juicer.OpRef, ev juicer.Event) bool {
+				if ev.TxnID != h.TxnID {
+					return false
+				}
+				if juicer.ReleasedOnCommitAbort(h, ev) {
+					return true
+				}
+				if ev.Kind != juicer.RespReturned {
+					return false
+				}
+				return ev.Failed || ev.OpType == h.OpType
+			},
+			MaxHold:      maxHold,
+			AdmitUnbound: true,
+		}
 	case juicerRulesWrites:
 		// The unified-rule candidate: space concurrent WRITERS per hot key and
 		// touch nothing else. Every clause is pinned to a measured fact —
