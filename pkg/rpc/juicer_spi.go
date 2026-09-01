@@ -127,14 +127,15 @@ var (
 type juicerRules string
 
 const (
-	juicerRulesGate      juicerRules = "gate"
-	juicerRulesWrites    juicerRules = "writes"
-	juicerRulesWriteGate juicerRules = "writegate"
-	juicerRulesReadHold  juicerRules = "readhold"
-	juicerRulesReadOnly  juicerRules = "readonly"
-	juicerRulesFull      juicerRules = "full"
-	juicerRulesSFU       juicerRules = "sfu"
-	juicerRulesOff       juicerRules = "off"
+	juicerRulesGate       juicerRules = "gate"
+	juicerRulesWrites     juicerRules = "writes"
+	juicerRulesWriteGate  juicerRules = "writegate"
+	juicerRulesReadHold   juicerRules = "readhold"
+	juicerRulesReadOnly   juicerRules = "readonly"
+	juicerRulesNoReadRead juicerRules = "noreadread"
+	juicerRulesFull       juicerRules = "full"
+	juicerRulesSFU        juicerRules = "sfu"
+	juicerRulesOff        juicerRules = "off"
 )
 
 // The default is GATE as of the 2026-08-26 merge: the completion gate — the
@@ -161,6 +162,8 @@ func juicerRulesMode() juicerRules {
 		return juicerRulesReadHold
 	case juicerRulesReadOnly:
 		return juicerRulesReadOnly
+	case juicerRulesNoReadRead:
+		return juicerRulesNoReadRead
 	case juicerRulesFull:
 		return juicerRulesFull
 	case juicerRulesSFU:
@@ -724,6 +727,17 @@ func (crdbJuicerSPI) AbortCurrentRequest(req interface{}) (interface{}, error)  
 //	                this rule is pure read pacing with no conflict-channel
 //	                benefit. RMW hazard is out by construction: writes and
 //	                locking reads neither hold nor wait.
+//	noreadread      ABLATION PROBE (campaign #19c): the readonly probe's
+//	                complement — the gate verbatim with exactly one pair
+//	                deleted. A plain-read head never waits behind a
+//	                plain-read hold; every other (type, transaction) pair,
+//	                same-transaction included, gates exactly as the
+//	                completion gate does, and the hold population and
+//	                release relation are the gate's unchanged. Campaign #19
+//	                measured the isolated read-read pairing at 3/4 of the
+//	                gate's m90 gain (sufficiency); this relation measures
+//	                what the OTHER pairings are worth without read-read
+//	                (the marginal / necessity direction).
 //	full            Locking operations (SFU reads and writes) of different
 //	                transactions mutually exclude. This is the relation as
 //	                originally written, and the one that cost 85-98% of
@@ -762,6 +776,21 @@ func (crdbJuicerSPI) BuildRules() juicer.DependencyRules {
 		return juicer.DependencyRules{}
 	case juicerRulesGate:
 		return juicer.GateRules(maxHold)
+	case juicerRulesNoReadRead:
+		// The campaign #19c probe: gate minus the read-read pair. Blocks is
+		// wrapped rather than rewritten so the derived hold population and
+		// the release relation stay the gate's verbatim — reads still hold
+		// (writes must still wait behind them); only the read-behind-read
+		// wait is deleted, for any transaction pair.
+		rules := juicer.GateRules(maxHold)
+		gateBlocks := rules.Blocks
+		rules.Blocks = func(h, hd juicer.OpRef) bool {
+			if h.OpType == juicer.OpGet && hd.OpType == juicer.OpGet {
+				return false
+			}
+			return gateBlocks(h, hd)
+		}
+		return rules
 	case juicerRulesWrites:
 		// The unified-rule candidate: space concurrent WRITERS per hot key and
 		// touch nothing else. Every clause is pinned to a measured fact —

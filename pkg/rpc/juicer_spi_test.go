@@ -715,6 +715,56 @@ func TestJuicerReadOnlyRules(t *testing.T) {
 	}
 }
 
+// TestJuicerNoReadReadRules pins the campaign #19c ablation probe: the gate
+// with exactly one pair deleted. A plain-read head must never wait behind a
+// plain-read hold (any transaction pair), while every other pair — writes,
+// locking reads, and the gate's same-transaction gating — behaves exactly as
+// the gate does, and the held population stays the gate's (reads still hold,
+// so writes still wait behind them).
+func TestJuicerNoReadReadRules(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer func(saved string) { juicerRulesEnv = saved }(juicerRulesEnv)
+	juicerRulesEnv = "noreadread"
+
+	rules := newCRDBJuicerSPI().BuildRules()
+	if !rules.Enabled() {
+		t.Fatal("noreadread rules disabled")
+	}
+
+	writeA := juicer.OpRef{TxnID: 1, OpType: juicer.OpSet}
+	readA := juicer.OpRef{TxnID: 1, OpType: juicer.OpGet}
+	writeB := juicer.OpRef{TxnID: 2, OpType: juicer.OpSet}
+	readB := juicer.OpRef{TxnID: 2, OpType: juicer.OpGet}
+	sfuB := juicer.OpRef{TxnID: 2, OpType: juicer.OpGetForPut}
+
+	// The one deleted pair: read-read passes, cross-txn and same-txn alike.
+	if rules.Blocks(readA, readB) {
+		t.Fatal("cross-txn read-read blocked under noreadread (the probe's point)")
+	}
+	if rules.Blocks(readA, juicer.OpRef{TxnID: 1, OpType: juicer.OpGet}) {
+		t.Fatal("same-txn read-read blocked under noreadread")
+	}
+
+	// Everything else gates exactly like the gate, same-txn included.
+	if !rules.Blocks(writeA, writeB) || !rules.Blocks(writeA, readB) ||
+		!rules.Blocks(readA, writeB) {
+		t.Fatal("a non-read-read cross-txn pair did not gate")
+	}
+	if !rules.Blocks(readA, sfuB) || !rules.Blocks(sfuB, readB) {
+		t.Fatal("a locking-read pair did not gate")
+	}
+	if !rules.Blocks(writeA, juicer.OpRef{TxnID: 1, OpType: juicer.OpSet}) {
+		t.Fatal("the gate's same-txn gating was lost by the wrap")
+	}
+
+	// Held population unchanged from the gate: reads, writes, and locking
+	// reads all hold (a read hold is what makes a write head wait).
+	if !rules.Holdable(juicer.OpGet) || !rules.Holdable(juicer.OpSet) ||
+		!rules.Holdable(juicer.OpGetForPut) {
+		t.Fatal("noreadread narrowed the gate's held population")
+	}
+}
+
 // TestJuicerRulesModes covers the COCKROACH_JUICER_RULES axis: each mode must
 // produce the blocking relation it advertises, because the whole point of the
 // switch is to attribute an observed effect to sorting or to enforcement. It
@@ -772,6 +822,14 @@ func TestJuicerRulesModes(t *testing.T) {
 			expectedMode:    juicerRulesReadOnly,
 			expectedEnabled: true, expectedBlocksSFU: false, expectedBlocksWrite: false,
 			expectedBlocksWW: false, expectedBlocksRead: false, expectedReadBlocks: false,
+		},
+		{
+			// Blind for every pair the type-blind branch probes (it holds an
+			// sfu, never a plain read); the deleted read-read pair is pinned
+			// by TestJuicerNoReadReadRules.
+			name: "noreadread gates like the gate outside read-read", env: "noreadread",
+			expectedMode:    juicerRulesNoReadRead,
+			expectedEnabled: true, expectedTypeBlind: true,
 		},
 		{
 			name: "full blocks every locking pair", env: "full", expectedMode: juicerRulesFull,
