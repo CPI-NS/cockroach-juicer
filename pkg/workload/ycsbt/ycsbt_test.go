@@ -261,19 +261,216 @@ func TestDrawKeysIsSkewed(t *testing.T) {
 
 func newTestOp(t *testing.T, keys, opsPerTxn int, theta float64) *ycsbtOp {
 	t.Helper()
+	return newTestOpScramble(t, keys, opsPerTxn, theta, false)
+}
+
+// newTestOpScramble builds a worker whose random streams depend only on its
+// arguments, so two ops built with the same arguments draw the same ranks in
+// the same order and shuffle them the same way. That is what lets the scramble
+// tests below compare a scrambled op against an unscrambled one position by
+// position.
+func newTestOpScramble(t *testing.T, keys, opsPerTxn int, theta float64, scramble bool) *ycsbtOp {
+	t.Helper()
 	zipf, err := workloadimpl.NewZipfGenerator(
 		rand.New(rand.NewPCG(1, 2)), 0 /* iMin */, uint64(keys-1), theta, false /* verbose */)
 	require.NoError(t, err)
 	reads, writes := splitCounts(opsPerTxn, 90)
-	return &ycsbtOp{
-		reads:    reads,
-		writes:   writes,
-		keySpace: int64(keys),
-		zipf:     zipf,
-		rng:      rand.New(rand.NewPCG(3, 4)),
-		keys:     make([]int64, opsPerTxn),
-		args:     make([]interface{}, opsPerTxn),
+	var mul int64
+	if scramble {
+		mul = scrambleMultiplier(int64(keys))
 	}
+	return &ycsbtOp{
+		reads:       reads,
+		writes:      writes,
+		keySpace:    int64(keys),
+		scrambleMul: mul,
+		zipf:        zipf,
+		rng:         rand.New(rand.NewPCG(3, 4)),
+		keys:        make([]int64, opsPerTxn),
+		args:        make([]interface{}, opsPerTxn),
+	}
+}
+
+// The multiplier is the entire contract of --key-scramble: it must be the
+// largest integer within the 0.733 ceiling that is coprime with the key space,
+// and it must be that same integer every time the workload starts, on every
+// worker and every client, or the workers would not contend on the same keys.
+func TestScrambleMultiplier(t *testing.T) {
+	for _, tc := range []struct {
+		keys int64
+		want int64
+	}{
+		// 733 is prime, so it is coprime with 1000 and the ceiling is met exactly.
+		{keys: 1000, want: 733},
+		// floor(0.733 * 100000) = 73300 = 2^2 * 5^2 * 733 shares factors with
+		// 100000 = 2^5 * 5^5, so the search walks down to the first coprime.
+		{keys: 100000, want: 73299},
+		{keys: 7, want: 5},
+		// Key spaces too small for a non-trivial stride fall back to identity.
+		{keys: 2, want: 1},
+		{keys: 1, want: 1},
+	} {
+		t.Run(strconv.FormatInt(tc.keys, 10), func(t *testing.T) {
+			got := scrambleMultiplier(tc.keys)
+			require.Equal(t, tc.want, got)
+			require.Equal(t, got, scrambleMultiplier(tc.keys), "must be deterministic")
+			require.EqualValues(t, 1, gcd(got, tc.keys), "A must be coprime with the key space")
+			if tc.keys > 2 {
+				ceiling := tc.keys * 733 / 1000
+				require.LessOrEqual(t, got, ceiling, "A must not exceed floor(0.733*keys)")
+				// Nothing between A and the ceiling may be coprime, or A was
+				// not the largest candidate.
+				for a := got + 1; a <= ceiling; a++ {
+					require.NotEqualValues(t, 1, gcd(a, tc.keys),
+						"a=%d is coprime with keys=%d and larger than A=%d", a, tc.keys, got)
+				}
+			}
+		})
+	}
+}
+
+// Bijectivity is what makes the scramble a pure relabelling: every key is the
+// image of exactly one rank, so each key inherits exactly one rank's Zipf
+// weight and the distribution's shape is untouched. It is also what guarantees
+// drawKeys still returns distinct keys — ten distinct ranks cannot collide.
+func TestScrambleIsABijection(t *testing.T) {
+	for _, keys := range []int64{1, 2, 7, 1000, 100000} {
+		t.Run(strconv.FormatInt(keys, 10), func(t *testing.T) {
+			a := scrambleMultiplier(keys)
+			seen := make(map[int64]int64, keys)
+			for r := int64(0); r < keys; r++ {
+				k := (r * a) % keys
+				require.GreaterOrEqual(t, k, int64(0))
+				require.Less(t, k, keys)
+				prev, dup := seen[k]
+				require.Falsef(t, dup, "keys=%d: ranks %d and %d both map to key %d", keys, prev, r, k)
+				seen[k] = r
+			}
+			require.Len(t, seen, int(keys), "the image must cover the whole key space")
+			if keys == 1 {
+				require.EqualValues(t, 0, (int64(0)*a)%keys, "a single-key space must map identically")
+			}
+		})
+	}
+}
+
+// The point of the round the flag was written for: the hottest ranks must stop
+// sharing a range. With --keys 1000 and --splits 30 the ranges are 32 keys
+// wide, so the range a key lives in is k/32.
+func TestScrambleScattersTheHottestRanks(t *testing.T) {
+	const keys = 1000
+	a := scrambleMultiplier(keys)
+	want := []int64{0, 733, 466, 199, 932, 665, 398, 131, 864, 597, 330, 63, 796, 529, 262, 995}
+	got := make([]int64, 0, len(want))
+	ranges := make(map[int64]int64, len(want))
+	for r := int64(0); r < int64(len(want)); r++ {
+		k := (r * a) % keys
+		got = append(got, k)
+		prev, dup := ranges[k/32]
+		require.Falsef(t, dup, "ranks %d and %d share the 32-key range %d", prev, r, k/32)
+		ranges[k/32] = r
+	}
+	// Pinned rather than recomputed: this exact sequence is what the flag's
+	// help text promises, so a change to the multiplier is a visible change to
+	// the documented layout.
+	require.Equal(t, want, got)
+	require.Len(t, ranges, len(want), "the sixteen hottest ranks must occupy sixteen distinct ranges")
+
+	// Contrast: unscrambled, the same sixteen ranks are the sixteen lowest
+	// keys, which is half of a single range.
+	unscrambled := make(map[int64]struct{})
+	for r := int64(0); r < int64(len(want)); r++ {
+		unscrambled[r/32] = struct{}{}
+	}
+	require.Len(t, unscrambled, 1)
+}
+
+// The flag must change nothing except which key a rank names. Both ops here
+// draw from identical random streams, so with the scramble off they must agree
+// key for key (the pre-flag behaviour), and with it on the scrambled op's keys
+// must be exactly the unscrambled op's keys pushed through the bijection —
+// same positions, same shuffle, same everything else.
+func TestDrawKeysScrambleIsExactlyTheBijection(t *testing.T) {
+	for _, keys := range []int{7, 1000, 100000} {
+		t.Run(strconv.Itoa(keys), func(t *testing.T) {
+			opsPerTxn := 10
+			if keys < opsPerTxn {
+				opsPerTxn = keys
+			}
+			a := scrambleMultiplier(int64(keys))
+			plain := newTestOpScramble(t, keys, opsPerTxn, 0.99, false)
+			plainAgain := newTestOpScramble(t, keys, opsPerTxn, 0.99, false)
+			scrambled := newTestOpScramble(t, keys, opsPerTxn, 0.99, true)
+			scrambledAgain := newTestOpScramble(t, keys, opsPerTxn, 0.99, true)
+			for iter := 0; iter < 500; iter++ {
+				plain.drawKeys()
+				plainAgain.drawKeys()
+				scrambled.drawKeys()
+				scrambledAgain.drawKeys()
+
+				// Determinism, on both sides of the flag.
+				require.Equal(t, plain.keys, plainAgain.keys, "iter %d: unscrambled draw is not deterministic", iter)
+				require.Equal(t, scrambled.keys, scrambledAgain.keys, "iter %d: scrambled draw is not deterministic", iter)
+
+				// The scramble-off path must be byte-for-byte the old one, and
+				// the scramble-on path must be it composed with the bijection.
+				want := make([]int64, len(plain.keys))
+				for i, r := range plain.keys {
+					want[i] = (r * a) % int64(keys)
+				}
+				require.Equalf(t, want, scrambled.keys, "iter %d: scrambled keys are not the bijection of the plain draw", iter)
+
+				// Still a well-formed transaction: distinct, in range.
+				seen := make(map[int64]struct{}, opsPerTxn)
+				for _, k := range scrambled.keys {
+					require.GreaterOrEqual(t, k, int64(0))
+					require.Less(t, k, int64(keys))
+					_, dup := seen[k]
+					require.Falsef(t, dup, "iter %d: key %d drawn twice under the scramble", iter, k)
+					seen[k] = struct{}{}
+				}
+			}
+		})
+	}
+}
+
+// The scramble moves the hot keys; it must not cool them down. The ten hottest
+// RANKS still have to take the same share of the traffic they took before,
+// under their new names.
+func TestDrawKeysStaysSkewedUnderTheScramble(t *testing.T) {
+	const keys = 1000
+	const iters = 2000
+	a := scrambleMultiplier(keys)
+	op := newTestOpScramble(t, keys, 10, 0.99, true)
+	hits := make(map[int64]int)
+	for i := 0; i < iters; i++ {
+		op.drawKeys()
+		for _, k := range op.keys {
+			hits[k]++
+		}
+	}
+	var topTen int
+	for r := int64(0); r < 10; r++ {
+		topTen += hits[(r*a)%keys]
+	}
+	require.Greaterf(t, float64(topTen)/float64(iters*10), 0.10,
+		"the ten hottest ranks took %d of %d draws after the scramble; the skew did not survive", topTen, iters*10)
+}
+
+// The flag is run-time only: it decides which keys the load draws, never which
+// rows are loaded. A scrambled run and an unscrambled one must be able to share
+// one initialised table, which is also what lets the harness flip it per cell.
+func TestKeyScrambleIsRuntimeOnly(t *testing.T) {
+	gen := ycsbtMeta.New().(*ycsbt)
+	require.False(t, gen.keyScramble, "the scramble must be off unless asked for")
+	require.True(t, gen.Flags().Meta[`key-scramble`].RuntimeOnly,
+		"--key-scramble must be RuntimeOnly: it must not change the loaded data")
+
+	on := workload.FromFlags(ycsbtMeta, `--keys=1000`, `--key-scramble`).(*ycsbt)
+	require.True(t, on.keyScramble)
+	off := workload.FromFlags(ycsbtMeta, `--keys=1000`).(*ycsbt)
+	require.Equal(t, off.Tables()[0].InitialRows.NumBatches, on.Tables()[0].InitialRows.NumBatches)
+	require.Equal(t, 1000, on.Tables()[0].InitialRows.NumBatches)
 }
 
 // The read side of the mixed mode is one plain SELECT: pinned text, exact

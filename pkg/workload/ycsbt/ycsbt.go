@@ -52,6 +52,20 @@
 // with a writer's intent, never with another read. This is the workload for
 // measuring the reordering layer's read/write interaction inside the
 // one-shot class.
+//
+// --key-scramble changes where the hot keys LIVE without changing how hot they
+// are. By default a key IS its Zipf rank, so the hottest keys are 0, 1, 2, ...
+// — adjacent integers, which CockroachDB stores in one range served by one
+// leaseholder, so every contended transaction meets every other one on a
+// single node. With --key-scramble the rank r drawn from the distribution is
+// mapped to the key (r * A) mod --keys, a multiplicative bijection whose
+// multiplier A is fixed by --keys alone. Each key keeps exactly the Zipf weight
+// of its rank — the distribution's shape is untouched — but consecutive ranks
+// land a stride of A apart, so the hottest keys spread over as many ranges (and
+// therefore as many leaseholders) as there are hot keys. This is YCSB's
+// scrambled-Zipfian idea made bijective: stock YCSB hashes the rank, which
+// collides and so perturbs the weights; a multiplication modulo the key space
+// cannot collide.
 package ycsbt
 
 import (
@@ -116,13 +130,14 @@ type ycsbt struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
-	keys       int
-	opsPerTxn  int
-	readPct    int
-	zipfTheta  float64
-	splits     int
-	blind      bool
-	readTxnPct int
+	keys        int
+	opsPerTxn   int
+	readPct     int
+	zipfTheta   float64
+	splits      int
+	blind       bool
+	readTxnPct  int
+	keyScramble bool
 }
 
 func init() {
@@ -150,6 +165,20 @@ var ycsbtMeta = workload.Meta{
 	a single wave of writes. Adding --read-txn-pct N makes N percent of the
 	transactions one-wave read-only SELECTs instead, drawn per transaction:
 	a read-only/write-only one-shot mix over the same Zipf key space.
+
+	--key-scramble decouples "how hot a key is" from "where a key lives". Without
+	it a key is its own Zipf rank, so the hottest keys are the consecutive
+	integers 0, 1, 2, ... and CockroachDB keeps all of them in one range behind
+	one leaseholder. With it the drawn rank r becomes the key (r * A) mod --keys,
+	where A is the largest integer no greater than floor(0.733 * --keys) that is
+	coprime with --keys (A = 733 at the default --keys 1000; A = 1, the identity,
+	at --keys 1). The mapping is a bijection, so every key still carries exactly
+	its rank's Zipf weight and the skew is unchanged; only the layout moves. At
+	--keys 1000 with --splits 30 (ranges of 32 keys) the sixteen hottest ranks
+	0-15 land on keys 0, 733, 466, 199, 932, 665, 398, 131, 864, 597, 330, 63,
+	796, 529, 262, 995 - sixteen distinct ranges, hence up to three leaseholders
+	instead of one. Init is unaffected: the table still holds every key in
+	[0, --keys).
 	`,
 	Version:    `1.0.0`,
 	RandomSeed: RandomSeed,
@@ -164,6 +193,9 @@ var ycsbtMeta = workload.Meta{
 			`zipf-theta`:   {RuntimeOnly: true},
 			`blind`:        {RuntimeOnly: true},
 			`read-txn-pct`: {RuntimeOnly: true},
+			// The scramble permutes which key a rank draws, not which keys
+			// exist: the table is still loaded with every key in [0, --keys).
+			`key-scramble`: {RuntimeOnly: true},
 		}
 		g.flags.IntVar(&g.keys, `keys`, defaultKeys,
 			`Number of rows loaded into usertable, and the support of the Zipf key distribution.`)
@@ -179,6 +211,15 @@ var ycsbtMeta = workload.Meta{
 			`Replace the read-modify-write statement with one blind multi-row UPSERT (requires --read-pct 0).`)
 		g.flags.IntVar(&g.readTxnPct, `read-txn-pct`, 0,
 			`Percent (0-100) of transactions that are one-wave read-only SELECTs instead of blind writes (requires --blind).`)
+		g.flags.BoolVar(&g.keyScramble, `key-scramble`, false,
+			`Scatter the hot keys across the key space: the bijective form of YCSB's scrambled Zipfian. `+
+				`Each drawn Zipf rank r becomes the key (r * A) mod --keys, where A is the largest integer `+
+				`no greater than floor(0.733 * --keys) that is coprime with --keys (733 at --keys 1000; the `+
+				`identity at --keys 1). Being a bijection it cannot collide, so every key keeps exactly its `+
+				`rank's Zipf weight and the skew is unchanged - only the position moves. At --keys 1000 ranks `+
+				`0-15 land on keys 0, 733, 466, 199, 932, 665, 398, 131, 864, 597, 330, 63, 796, 529, 262, 995, `+
+				`i.e. sixteen distinct 32-key ranges under --splits 30 instead of one. Run time only: the table `+
+				`is loaded with every key in [0, --keys) either way.`)
 		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
@@ -401,6 +442,15 @@ func (w *ycsbt) Ops(
 		argsLen = 2 * w.opsPerTxn
 	}
 
+	// Fixed for the whole run and shared by every worker: the scramble has to be
+	// the same permutation on every connection, or the workers would not be
+	// contending on the same hot keys at all. Zero means "no scramble" and makes
+	// drawKeys take the byte-for-byte path it took before the flag existed.
+	var scrambleMul int64
+	if w.keyScramble {
+		scrambleMul = scrambleMultiplier(int64(w.keys))
+	}
+
 	var retryErrors atomic.Int64
 	resultHist := opName
 	if w.blind && w.readTxnPct > 0 {
@@ -428,6 +478,7 @@ func (w *ycsbt) Ops(
 			reads:       reads,
 			writes:      writes,
 			keySpace:    int64(w.keys),
+			scrambleMul: scrambleMul,
 			zipf:        zipf,
 			rng:         rand.New(rand.NewPCG(RandomSeed.Seed(), uint64(i)+uint64(w.connFlags.Concurrency))),
 			keys:        make([]int64, w.opsPerTxn),
@@ -474,8 +525,11 @@ type ycsbtOp struct {
 	// keySpace is --keys: the number of loaded rows, and the modulus of the
 	// linear probe in drawKeys.
 	keySpace int64
-	zipf     *workloadimpl.ZipfGenerator
-	rng      *rand.Rand
+	// scrambleMul is A from --key-scramble, or 0 when the flag is off. See
+	// scrambleMultiplier and drawKeys.
+	scrambleMul int64
+	zipf        *workloadimpl.ZipfGenerator
+	rng         *rand.Rand
 
 	keys        []int64
 	args        []interface{}
@@ -496,6 +550,43 @@ type ycsbtOp struct {
 // into coupon collecting over a heavily skewed distribution.
 const maxDrawAttempts = 32
 
+// scrambleMultiplier returns the multiplier A of the --key-scramble bijection
+// for a key space of the given size: the largest integer no greater than
+// floor(0.733 * keys) that is coprime with keys.
+//
+// Coprimality is the whole requirement — it is exactly what makes r -> (r*A)
+// mod keys a permutation of [0, keys), so no two ranks can share a key and the
+// Zipf weights survive the mapping intact. The 0.733 ceiling is a stride
+// choice, not a correctness one: it is close enough to the key space that
+// consecutive ranks land far apart (and wrap to a different residue each time),
+// and small enough that the multiplier is not itself near keys, where the
+// stride would degenerate into "one step backwards" and put the hot ranks back
+// in adjacent ranges. keys = 1000 gives A = 733, which is prime.
+//
+// The floor is computed as keys*733/1000 rather than through float64: 0.733 is
+// not representable in binary, and 0.733*1000 rounding to 732.999... would
+// silently pick a different multiplier than the one the help text documents.
+func scrambleMultiplier(keys int64) int64 {
+	// The product r*A below stays inside int64 for any key space this workload
+	// can load (it peaks at 0.733*keys^2, i.e. keys up to ~3.5e9).
+	for a := keys * 733 / 1000; a > 1; a-- {
+		if gcd(a, keys) == 1 {
+			return a
+		}
+	}
+	// keys <= 2: the ceiling is 0 or 1 and the identity is the only bijection
+	// available anyway.
+	return 1
+}
+
+// gcd is Euclid's algorithm on non-negative inputs.
+func gcd(a, b int64) int64 {
+	for b != 0 {
+		a, b = b, a%b
+	}
+	return a
+}
+
 // drawKeys fills o.keys with distinct keys drawn from the Zipf distribution,
 // then shuffles them.
 //
@@ -507,6 +598,22 @@ const maxDrawAttempts = 32
 // less likely to be the hottest keys -- which would systematically bias the
 // hot end of the distribution towards the read set, the one thing this
 // workload exists to measure.
+//
+// With --key-scramble the loop below draws RANKS and the bijection turns each
+// into its key afterwards, rather than the two being interleaved. That ordering
+// is deliberate on both sides of the flag:
+//
+//   - Distinctness is preserved for free. Ten distinct ranks map to ten
+//     distinct keys because the map is injective, so o.contains still decides
+//     exactly the same question it did before; deduplicating after the map
+//     would be the same predicate on relabelled values.
+//   - The probe fallback keeps its documented meaning. Walking to the next free
+//     RANK lands on the next-coldest key, which is the small, characterised
+//     distortion the comment above describes. Probing in key space instead
+//     would land on whatever rank happens to own the neighbouring key — an
+//     arbitrary weight, and a distortion nothing here could describe.
+//   - With the flag off, nothing above the mapping loop is touched, so the same
+//     seed draws the same keys it drew before the flag existed.
 func (o *ycsbtOp) drawKeys() {
 	n := len(o.keys)
 	for i := 0; i < n; i++ {
@@ -534,6 +641,11 @@ func (o *ycsbtOp) drawKeys() {
 			}
 		}
 		o.keys[i] = k
+	}
+	if o.scrambleMul != 0 {
+		for i, r := range o.keys {
+			o.keys[i] = (r * o.scrambleMul) % o.keySpace
+		}
 	}
 	o.rng.Shuffle(n, func(i, j int) { o.keys[i], o.keys[j] = o.keys[j], o.keys[i] })
 }
