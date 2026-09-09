@@ -32,6 +32,15 @@ import (
 var (
 	juicerEnabled      = envutil.EnvOrDefaultBool("COCKROACH_JUICER", false)
 	juicerSkipQueueing = envutil.EnvOrDefaultBool("COCKROACH_JUICER_SKIP_QUEUEING", false)
+	// juicerFifo degrades every per-key queue from sorting-key order to
+	// arrival order (grpc.JuicerFifoQueue -> JuicerInterceptorConfig.FifoMode
+	// -> PerKeyQueue appends and pops instead of using its min-heap). It is
+	// ORTHOGONAL to COCKROACH_JUICER_RULES: which messages hold, what
+	// releases a hold, and the MaxHold TTL are all unchanged; only the order
+	// in which a key's queued messages are offered to the enforcer changes.
+	// That is the point — it is the control arm that isolates Juicer's
+	// reordering from its holding (campaign #22).
+	juicerFifo = envutil.EnvOrDefaultBool("COCKROACH_JUICER_FIFO", false)
 	// juicerMaxHoldMillis is the hold engine's single TTL: the gate
 	// relation's quantization clock (campaign #14: E/W ≈ 80% on the winning
 	// workpoint — most holds end by this clock, so its value IS the
@@ -311,6 +320,18 @@ func kvOtherBreakdown(cur, prev kvFailureSnapshot) string {
 	return " other-detail[" + strings.Join(parts, " ") + "]"
 }
 
+// juicerOrderLabel names the release order the per-key queues use, for the
+// startup banner: "fifo" when COCKROACH_JUICER_FIFO degrades them to arrival
+// order, "sorted" for the standard sorting-key order. The banner is what the
+// drivers' banner_verify gate reads, so a mislabelled arm is caught before its
+// numbers are believed.
+func juicerOrderLabel() string {
+	if juicerFifo {
+		return "fifo"
+	}
+	return "sorted"
+}
+
 // startJuicerHitReporter logs the resolved configuration once, then
 // interception-hit deltas every minute.
 func startJuicerHitReporter(ctx context.Context) {
@@ -318,8 +339,8 @@ func startJuicerHitReporter(ctx context.Context) {
 		// The banner makes the run interpretable after the fact: it names the
 		// (now fixed) sorting key source and the resolved core knobs.
 		log.Dev.Infof(ctx,
-			"juicer: sorting key source = batch-now (per-send gateway clock; empty Now falls back to MinTimestamp); fixed wait = %v ms; rules = %s (maxHold %d ms)",
-			juicerFixedWaitMillis, juicerRulesMode(), juicerMaxHoldMillis)
+			"juicer: sorting key source = batch-now (per-send gateway clock; empty Now falls back to MinTimestamp); fixed wait = %v ms; rules = %s (maxHold %d ms); order = %s",
+			juicerFixedWaitMillis, juicerRulesMode(), juicerMaxHoldMillis, juicerOrderLabel())
 		go func() {
 			var lastSplit, lastResp uint64
 			var lastFail kvFailureSnapshot
@@ -364,6 +385,12 @@ func juicerServerOptions() []grpc.ServerOption {
 	}
 	if juicerSkipQueueing {
 		opts = append(opts, grpc.JuicerSkipQueueing(true))
+	}
+	// FIFO release order: the queues, the holds and the TTL all stay, only the
+	// min-heap goes away. Appended only when asked so that the default arm's
+	// option list is byte-for-byte what earlier campaigns ran.
+	if juicerFifo {
+		opts = append(opts, grpc.JuicerFifoQueue(true))
 	}
 	// The fixed strategy is always selected: with a zero window it is the
 	// pure-sorting behaviour, so one code path serves both "no wait" and
@@ -775,6 +802,18 @@ func (crdbJuicerSPI) AbortCurrentRequest(req interface{}) (interface{}, error)  
 //	off             The zero-value DependencyRules. Enabled() is false, so
 //	                QueueManager builds no enforcer and the per-key queues do
 //	                pure timestamp sorting with no holds at all.
+//
+// COCKROACH_JUICER_FIFO is an axis of its own, ORTHOGONAL to every relation
+// above. Juicer does two separable things; the relations decompose the
+// holding, and this switch turns off the other one. With it set, each per-key
+// queue releases in arrival order instead of sorting-key order — the hold
+// population, the blocking relation, the release events and the MaxHold TTL
+// are all exactly what the selected relation says they are, and only the order
+// in which a key's queued messages reach the enforcer changes. So RULES=gate
+// with FIFO on is "same holding, no reordering": the control arm that says how
+// much of the gate's effect is the reordering, which no RULES value can
+// isolate because every one of them holds in sorted order. The startup banner
+// reports it as "order = fifo" / "order = sorted".
 //
 // Release relation for full/sfu, split by held-entry type (the 2026-08-13
 // audit's self-release fix): a held WRITE releases when a same-txn write

@@ -382,6 +382,60 @@ func TestJuicerStandardConfigDefaults(t *testing.T) {
 	}
 }
 
+// COCKROACH_JUICER_FIFO is campaign #22's control arm: the per-key queues
+// release in arrival order while the selected relation keeps holding exactly
+// as it did. It must (a) default to the sorted order every earlier campaign
+// ran, (b) add the fork's JuicerFifoQueue option and nothing else, (c) not
+// enable Juicer on its own, and (d) show up in the startup banner, which is
+// what the driver's banner gate reads to tell the two arms apart.
+//
+// grpc.ServerOption is an opaque closure, so "contains the FIFO option" is
+// asserted as the option list being strictly one longer with the switch on:
+// the appended option is the only difference between the two calls.
+func TestJuicerFifoQueueOption(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer func(savedEnabled, savedFifo bool) {
+		juicerEnabled, juicerFifo = savedEnabled, savedFifo
+	}(juicerEnabled, juicerFifo)
+
+	if juicerFifo {
+		t.Errorf("COCKROACH_JUICER_FIFO default = true, want false (sorted release is the standard configuration)")
+	}
+	if got := juicerOrderLabel(); got != "sorted" {
+		t.Errorf("banner order label with FIFO off = %q, want %q", got, "sorted")
+	}
+
+	juicerEnabled = true
+	juicerFifo = false
+	sorted := juicerServerOptions()
+	if len(sorted) == 0 {
+		t.Fatal("juicer enabled but no server options were returned")
+	}
+
+	juicerFifo = true
+	fifo := juicerServerOptions()
+	if len(fifo) != len(sorted)+1 {
+		t.Fatalf("COCKROACH_JUICER_FIFO=true returned %d server options, want %d (exactly the sorted list plus JuicerFifoQueue)",
+			len(fifo), len(sorted)+1)
+	}
+	for i, o := range fifo {
+		if o == nil {
+			t.Fatalf("server option %d is nil with FIFO on", i)
+		}
+	}
+	if got := juicerOrderLabel(); got != "fifo" {
+		t.Errorf("banner order label with FIFO on = %q, want %q", got, "fifo")
+	}
+
+	// The switch selects an order; it must never be a second way to turn
+	// Juicer on, or a FIFO arm run with COCKROACH_JUICER unset would silently
+	// intercept traffic.
+	juicerEnabled = false
+	if opts := juicerServerOptions(); opts != nil {
+		t.Fatalf("COCKROACH_JUICER_FIFO=true enabled juicer by itself: %d server options", len(opts))
+	}
+}
+
 // The default relation is the completion gate: type-blind blocking, released
 // by any same-txn response (success or failure), 25 ms MaxHold, and unbound
 // (txn id 0) heads admitted untracked. These properties carried campaigns
