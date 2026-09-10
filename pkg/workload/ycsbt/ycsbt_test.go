@@ -259,9 +259,14 @@ func TestDrawKeysIsSkewed(t *testing.T) {
 		"the ten hottest keys took %d of %d draws; the distribution is not skewed", topTen, total)
 }
 
+// newTestOp builds a --key-scramble=false worker, i.e. one whose keys ARE the
+// Zipf ranks. The draw tests above are about the draw itself -- distinctness,
+// range, skew -- and reading them is easier when "key 0" and "the hottest rank"
+// are the same thing. The scramble's own effect on the draw is the subject of
+// the tests below.
 func newTestOp(t *testing.T, keys, opsPerTxn int, theta float64) *ycsbtOp {
 	t.Helper()
-	return newTestOpScramble(t, keys, opsPerTxn, theta, false)
+	return newTestOpScramble(t, keys, opsPerTxn, theta, false /* scramble */)
 }
 
 // newTestOpScramble builds a worker whose random streams depend only on its
@@ -386,10 +391,12 @@ func TestScrambleScattersTheHottestRanks(t *testing.T) {
 }
 
 // The flag must change nothing except which key a rank names. Both ops here
-// draw from identical random streams, so with the scramble off they must agree
-// key for key (the pre-flag behaviour), and with it on the scrambled op's keys
-// must be exactly the unscrambled op's keys pushed through the bijection —
-// same positions, same shuffle, same everything else.
+// draw from identical random streams, so under --key-scramble=false they must
+// agree key for key -- that is the layout campaigns #11-#22 measured, and it
+// has to stay bit-for-bit reproducible now that it is no longer the default --
+// and under the default scramble the scrambled op's keys must be exactly the
+// unscrambled op's keys pushed through the bijection: same positions, same
+// shuffle, same everything else.
 func TestDrawKeysScrambleIsExactlyTheBijection(t *testing.T) {
 	for _, keys := range []int{7, 1000, 100000} {
 		t.Run(strconv.Itoa(keys), func(t *testing.T) {
@@ -398,10 +405,10 @@ func TestDrawKeysScrambleIsExactlyTheBijection(t *testing.T) {
 				opsPerTxn = keys
 			}
 			a := scrambleMultiplier(int64(keys))
-			plain := newTestOpScramble(t, keys, opsPerTxn, 0.99, false)
-			plainAgain := newTestOpScramble(t, keys, opsPerTxn, 0.99, false)
-			scrambled := newTestOpScramble(t, keys, opsPerTxn, 0.99, true)
-			scrambledAgain := newTestOpScramble(t, keys, opsPerTxn, 0.99, true)
+			plain := newTestOpScramble(t, keys, opsPerTxn, 0.99, false /* scramble */)
+			plainAgain := newTestOpScramble(t, keys, opsPerTxn, 0.99, false /* scramble */)
+			scrambled := newTestOpScramble(t, keys, opsPerTxn, 0.99, true /* scramble */)
+			scrambledAgain := newTestOpScramble(t, keys, opsPerTxn, 0.99, true /* scramble */)
 			for iter := 0; iter < 500; iter++ {
 				plain.drawKeys()
 				plainAgain.drawKeys()
@@ -441,7 +448,7 @@ func TestDrawKeysStaysSkewedUnderTheScramble(t *testing.T) {
 	const keys = 1000
 	const iters = 2000
 	a := scrambleMultiplier(keys)
-	op := newTestOpScramble(t, keys, 10, 0.99, true)
+	op := newTestOpScramble(t, keys, 10, 0.99, true /* scramble */)
 	hits := make(map[int64]int)
 	for i := 0; i < iters; i++ {
 		op.drawKeys()
@@ -457,18 +464,44 @@ func TestDrawKeysStaysSkewedUnderTheScramble(t *testing.T) {
 		"the ten hottest ranks took %d of %d draws after the scramble; the skew did not survive", topTen, iters*10)
 }
 
+// Scattering the hot keys is the default, and a run that does not say
+// otherwise must get it. A key that is its own Zipf rank puts the whole hot
+// end of the distribution in the first range behind one leaseholder, which is
+// an antipattern to be requested explicitly -- and the ranks-as-keys layout
+// silently in force is exactly what invalidated campaigns #11-#22 as
+// measurements of anything but that antipattern.
+func TestKeyScrambleDefaultsOn(t *testing.T) {
+	require.True(t, defaultKeyScramble)
+	fresh := ycsbtMeta.New().(*ycsbt)
+	require.True(t, fresh.keyScramble, "a fresh generator must scatter the hot keys")
+	unmentioned := workload.FromFlags(ycsbtMeta, `--keys=1000`).(*ycsbt)
+	require.True(t, unmentioned.keyScramble,
+		"a run that does not mention --key-scramble must scatter the hot keys")
+
+	// --help is how an operator finds out which layout a run measured, so the
+	// advertised default has to say so too.
+	require.Equal(t, `true`, fresh.Flags().Lookup(`key-scramble`).DefValue)
+
+	// The old layout stays reachable, explicitly and only explicitly.
+	off := workload.FromFlags(ycsbtMeta, `--keys=1000`, `--key-scramble=false`).(*ycsbt)
+	require.False(t, off.keyScramble,
+		"--key-scramble=false must restore the ranks-as-keys layout")
+	on := workload.FromFlags(ycsbtMeta, `--keys=1000`, `--key-scramble`).(*ycsbt)
+	require.True(t, on.keyScramble)
+}
+
 // The flag is run-time only: it decides which keys the load draws, never which
 // rows are loaded. A scrambled run and an unscrambled one must be able to share
 // one initialised table, which is also what lets the harness flip it per cell.
 func TestKeyScrambleIsRuntimeOnly(t *testing.T) {
 	gen := ycsbtMeta.New().(*ycsbt)
-	require.False(t, gen.keyScramble, "the scramble must be off unless asked for")
 	require.True(t, gen.Flags().Meta[`key-scramble`].RuntimeOnly,
 		"--key-scramble must be RuntimeOnly: it must not change the loaded data")
 
-	on := workload.FromFlags(ycsbtMeta, `--keys=1000`, `--key-scramble`).(*ycsbt)
+	on := workload.FromFlags(ycsbtMeta, `--keys=1000`).(*ycsbt)
 	require.True(t, on.keyScramble)
-	off := workload.FromFlags(ycsbtMeta, `--keys=1000`).(*ycsbt)
+	off := workload.FromFlags(ycsbtMeta, `--keys=1000`, `--key-scramble=false`).(*ycsbt)
+	require.False(t, off.keyScramble)
 	require.Equal(t, off.Tables()[0].InitialRows.NumBatches, on.Tables()[0].InitialRows.NumBatches)
 	require.Equal(t, 1000, on.Tables()[0].InitialRows.NumBatches)
 }

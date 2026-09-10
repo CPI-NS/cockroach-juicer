@@ -53,11 +53,8 @@
 // measuring the reordering layer's read/write interaction inside the
 // one-shot class.
 //
-// --key-scramble changes where the hot keys LIVE without changing how hot they
-// are. By default a key IS its Zipf rank, so the hottest keys are 0, 1, 2, ...
-// — adjacent integers, which CockroachDB stores in one range served by one
-// leaseholder, so every contended transaction meets every other one on a
-// single node. With --key-scramble the rank r drawn from the distribution is
+// --key-scramble decides where the hot keys LIVE without changing how hot they
+// are, and it is ON by default. The rank r drawn from the distribution is
 // mapped to the key (r * A) mod --keys, a multiplicative bijection whose
 // multiplier A is fixed by --keys alone. Each key keeps exactly the Zipf weight
 // of its rank — the distribution's shape is untouched — but consecutive ranks
@@ -65,7 +62,18 @@
 // therefore as many leaseholders) as there are hot keys. This is YCSB's
 // scrambled-Zipfian idea made bijective: stock YCSB hashes the rank, which
 // collides and so perturbs the weights; a multiplication modulo the key space
-// cannot collide.
+// cannot collide. Scattering is what everyone else does too — YCSB's default
+// request distribution is the scrambled Zipfian, and CockroachDB's own
+// workload ycsb draws a rank and hashes it into a key
+// (pkg/workload/ycsb/ycsb.go:703-720).
+//
+// --key-scramble=false restores the original layout, in which a key IS its Zipf
+// rank: the hottest keys are then 0, 1, 2, ... — adjacent integers, which
+// CockroachDB stores in one range served by one leaseholder, so every contended
+// transaction meets every other one on a single node. That is the sequential-
+// primary-key antipattern rather than a neutral default, which is why it is no
+// longer the default here; it is kept for reproducing campaigns #11-#22, all of
+// which were measured on it, and for studying the antipattern on purpose.
 package ycsbt
 
 import (
@@ -98,11 +106,16 @@ const usertableSchema = `(
 )`
 
 const (
-	defaultKeys       = 1000
-	defaultOpsPerTxn  = 5
-	defaultReadPct    = 50
-	defaultZipfTheta  = 0.99
-	initialFieldValue = 0
+	defaultKeys      = 1000
+	defaultOpsPerTxn = 5
+	defaultReadPct   = 50
+	defaultZipfTheta = 0.99
+	// The hot keys are scattered by default. A key that is its own Zipf rank
+	// puts the entire hot end of the distribution in the first range, behind a
+	// single leaseholder; that is an antipattern to be asked for explicitly,
+	// not the shape a contention workload should have by accident.
+	defaultKeyScramble = true
+	initialFieldValue  = 0
 )
 
 // Histogram names. A run reports one line per name, so they double as the
@@ -166,10 +179,8 @@ var ycsbtMeta = workload.Meta{
 	transactions one-wave read-only SELECTs instead, drawn per transaction:
 	a read-only/write-only one-shot mix over the same Zipf key space.
 
-	--key-scramble decouples "how hot a key is" from "where a key lives". Without
-	it a key is its own Zipf rank, so the hottest keys are the consecutive
-	integers 0, 1, 2, ... and CockroachDB keeps all of them in one range behind
-	one leaseholder. With it the drawn rank r becomes the key (r * A) mod --keys,
+	--key-scramble, which is ON by default, decouples "how hot a key is" from
+	"where a key lives": the drawn rank r becomes the key (r * A) mod --keys,
 	where A is the largest integer no greater than floor(0.733 * --keys) that is
 	coprime with --keys (A = 733 at the default --keys 1000; A = 1, the identity,
 	at --keys 1). The mapping is a bijection, so every key still carries exactly
@@ -177,8 +188,17 @@ var ycsbtMeta = workload.Meta{
 	--keys 1000 with --splits 30 (ranges of 32 keys) the sixteen hottest ranks
 	0-15 land on keys 0, 733, 466, 199, 932, 665, 398, 131, 864, 597, 330, 63,
 	796, 529, 262, 995 - sixteen distinct ranges, hence up to three leaseholders
-	instead of one. Init is unaffected: the table still holds every key in
-	[0, --keys).
+	instead of one. This is the layout every other YCSB has: stock YCSB draws
+	its keys from a scrambled Zipfian, and CockroachDB's own "workload ycsb"
+	draws a rank and hashes it into a key (pkg/workload/ycsb/ycsb.go:703-720).
+
+	--key-scramble=false restores the original layout, in which a key is its own
+	Zipf rank, so the hottest keys are the consecutive integers 0, 1, 2, ... and
+	CockroachDB keeps all of them in one range behind one leaseholder. That is
+	the sequential-primary-key antipattern; ask for it only to reproduce
+	campaigns #11-#22, which were all measured on it, or to study the
+	antipattern deliberately. Init is unaffected either way: the table still
+	holds every key in [0, --keys).
 	`,
 	Version:    `1.0.0`,
 	RandomSeed: RandomSeed,
@@ -211,15 +231,19 @@ var ycsbtMeta = workload.Meta{
 			`Replace the read-modify-write statement with one blind multi-row UPSERT (requires --read-pct 0).`)
 		g.flags.IntVar(&g.readTxnPct, `read-txn-pct`, 0,
 			`Percent (0-100) of transactions that are one-wave read-only SELECTs instead of blind writes (requires --blind).`)
-		g.flags.BoolVar(&g.keyScramble, `key-scramble`, false,
-			`Scatter the hot keys across the key space: the bijective form of YCSB's scrambled Zipfian. `+
-				`Each drawn Zipf rank r becomes the key (r * A) mod --keys, where A is the largest integer `+
-				`no greater than floor(0.733 * --keys) that is coprime with --keys (733 at --keys 1000; the `+
-				`identity at --keys 1). Being a bijection it cannot collide, so every key keeps exactly its `+
-				`rank's Zipf weight and the skew is unchanged - only the position moves. At --keys 1000 ranks `+
-				`0-15 land on keys 0, 733, 466, 199, 932, 665, 398, 131, 864, 597, 330, 63, 796, 529, 262, 995, `+
-				`i.e. sixteen distinct 32-key ranges under --splits 30 instead of one. Run time only: the table `+
-				`is loaded with every key in [0, --keys) either way.`)
+		g.flags.BoolVar(&g.keyScramble, `key-scramble`, defaultKeyScramble,
+			`Scatter the hot keys across the key space (on by default): the bijective form of YCSB's `+
+				`scrambled Zipfian, and the same choice CockroachDB's own workload ycsb makes. Each drawn `+
+				`Zipf rank r becomes the key (r * A) mod --keys, where A is the largest integer no greater `+
+				`than floor(0.733 * --keys) that is coprime with --keys (733 at --keys 1000; the identity at `+
+				`--keys 1). Being a bijection it cannot collide, so every key keeps exactly its rank's Zipf `+
+				`weight and the skew is unchanged - only the position moves. At --keys 1000 ranks 0-15 land `+
+				`on keys 0, 733, 466, 199, 932, 665, 398, 131, 864, 597, 330, 63, 796, 529, 262, 995, i.e. `+
+				`sixteen distinct 32-key ranges under --splits 30 instead of one. --key-scramble=false makes `+
+				`a key its own Zipf rank again, putting the hottest keys in the first range behind one `+
+				`leaseholder: the sequential-primary-key antipattern, kept for reproducing campaigns #11-#22 `+
+				`and for studying that antipattern. Run time only: the table is loaded with every key in `+
+				`[0, --keys) either way.`)
 		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
@@ -310,9 +334,11 @@ func (w *ycsbt) Tables() []workload.Table {
 	usertable := workload.Table{
 		Name:   `usertable`,
 		Schema: usertableSchema,
-		// Keys are the Zipf ranks themselves, so the hot end of the
-		// distribution is the low end of the key space and the split points
-		// are evenly spaced over it.
+		// Split points are evenly spaced over the key space, which is the
+		// whole support of the key distribution. Which of those ranges the
+		// hot keys land in is --key-scramble's business, not init's: the
+		// table holds every key in [0, --keys) on both sides of the flag, so
+		// one loaded table serves scrambled and unscrambled runs alike.
 		Splits: workload.Tuples(w.splits, func(splitIdx int) []interface{} {
 			return []interface{}{int64((splitIdx + 1) * (w.keys / (w.splits + 1)))}
 		}),
@@ -444,8 +470,9 @@ func (w *ycsbt) Ops(
 
 	// Fixed for the whole run and shared by every worker: the scramble has to be
 	// the same permutation on every connection, or the workers would not be
-	// contending on the same hot keys at all. Zero means "no scramble" and makes
-	// drawKeys take the byte-for-byte path it took before the flag existed.
+	// contending on the same hot keys at all. Zero means "no scramble", which
+	// only --key-scramble=false asks for, and makes drawKeys take the
+	// byte-for-byte path it took before the flag existed.
 	var scrambleMul int64
 	if w.keyScramble {
 		scrambleMul = scrambleMultiplier(int64(w.keys))
@@ -612,8 +639,8 @@ func gcd(a, b int64) int64 {
 //     distortion the comment above describes. Probing in key space instead
 //     would land on whatever rank happens to own the neighbouring key — an
 //     arbitrary weight, and a distortion nothing here could describe.
-//   - With the flag off, nothing above the mapping loop is touched, so the same
-//     seed draws the same keys it drew before the flag existed.
+//   - With --key-scramble=false, nothing above the mapping loop is touched, so
+//     the same seed draws the same keys it drew before the flag existed.
 func (o *ycsbtOp) drawKeys() {
 	n := len(o.keys)
 	for i := 0; i < n; i++ {
