@@ -9,6 +9,7 @@ import (
 	"math/rand/v2"
 	"regexp"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -164,6 +165,18 @@ func TestValidateConfig(t *testing.T) {
 		{name: "transaction mix above 100",
 			flags:       []string{`--blind`, `--read-pct=0`, `--read-txn-pct=101`},
 			expectedErr: "between 0 and 100"},
+		{name: "read-as-of unset", flags: []string{`--blind`, `--read-pct=0`, `--read-txn-pct=90`}},
+		{name: "read-as-of two seconds back",
+			flags: []string{`--blind`, `--read-pct=0`, `--read-txn-pct=90`, `--read-as-of=-2s`}},
+		{name: "read-as-of must be negative",
+			flags:       []string{`--read-as-of=2s`},
+			expectedErr: "must be a negative relative interval"},
+		{name: "read-as-of must not carry a space",
+			flags:       []string{`--read-as-of=-2 s`},
+			expectedErr: "must be a negative relative interval"},
+		{name: "read-as-of must not carry SQL",
+			flags:       []string{`--read-as-of='; DROP TABLE usertable; --`},
+			expectedErr: "must be a negative relative interval"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -512,11 +525,11 @@ func TestKeyScrambleIsRuntimeOnly(t *testing.T) {
 func TestBuildReadStmt(t *testing.T) {
 	require.Equal(t,
 		`SELECT count(*) FROM usertable WHERE ycsb_key IN ($1, $2)`,
-		buildReadStmt(2))
+		buildReadStmt(2, ``))
 
 	placeholderRE := regexp.MustCompile(`\$(\d+)`)
 	for _, reads := range []int{1, 5, 10} {
-		stmt := buildReadStmt(reads)
+		stmt := buildReadStmt(reads, ``)
 		var got []int
 		for _, m := range placeholderRE.FindAllStringSubmatch(stmt, -1) {
 			n, err := strconv.Atoi(m[1])
@@ -533,4 +546,137 @@ func TestBuildReadStmt(t *testing.T) {
 		require.NotContains(t, stmt, "UPSERT")
 		require.NotContains(t, stmt, "FOR UPDATE")
 	}
+}
+
+// --read-as-of is a diagnostic that changes what the read side MEASURES, so
+// the rendered text is pinned as tightly as every other statement here: the
+// clause has to land after the table and before the WHERE, with the interval
+// as a quoted literal, and the placeholders must stay exactly where runMixed
+// fills them.
+func TestBuildReadStmtAsOf(t *testing.T) {
+	require.Equal(t,
+		`SELECT count(*) FROM usertable AS OF SYSTEM TIME '-2s' WHERE ycsb_key IN ($1, $2)`,
+		buildReadStmt(2, `-2s`))
+	require.Equal(t,
+		`SELECT count(*) FROM usertable AS OF SYSTEM TIME '-500ms' WHERE ycsb_key IN ($1)`,
+		buildReadStmt(1, `-500ms`))
+
+	placeholderRE := regexp.MustCompile(`\$(\d+)`)
+	for _, reads := range []int{1, 5, 10} {
+		stmt := buildReadStmt(reads, `-2s`)
+		require.Contains(t, stmt, `AS OF SYSTEM TIME '-2s'`)
+		var got []int
+		for _, m := range placeholderRE.FindAllStringSubmatch(stmt, -1) {
+			n, err := strconv.Atoi(m[1])
+			require.NoError(t, err)
+			got = append(got, n)
+		}
+		want := make([]int, 0, reads)
+		for i := 1; i <= reads; i++ {
+			want = append(want, i)
+		}
+		require.Equalf(t, want, got, "%d reads: placeholder sequence", reads)
+
+		// Still a plain non-locking read: the clause moves the timestamp, not
+		// the transaction's shape.
+		require.NotContains(t, stmt, "UPDATE")
+		require.NotContains(t, stmt, "UPSERT")
+		require.NotContains(t, stmt, "FOR UPDATE")
+	}
+}
+
+// The default has to be inert, and "inert" here means byte-for-byte identical
+// to what the workload rendered before the flag existed -- a cell that does
+// not ask for the diagnostic must not be measuring a different statement from
+// the campaigns it is compared against.
+func TestReadAsOfDefaultsToTheUnchangedStatement(t *testing.T) {
+	fresh := ycsbtMeta.New().(*ycsbt)
+	require.Equal(t, ``, fresh.readAsOf, "a fresh generator must read at the present")
+	require.Equal(t, ``, fresh.Flags().Lookup(`read-as-of`).DefValue)
+
+	unmentioned := workload.FromFlags(ycsbtMeta,
+		`--keys=1000`, `--blind`, `--read-pct=0`, `--read-txn-pct=90`).(*ycsbt)
+	require.Equal(t, ``, unmentioned.readAsOf)
+
+	for _, reads := range []int{1, 2, 5, 10} {
+		require.Equalf(t,
+			`SELECT count(*) FROM usertable WHERE ycsb_key IN (`+placeholderList(reads)+`)`,
+			buildReadStmt(reads, unmentioned.readAsOf),
+			"%d reads: the default must render the pre-flag statement verbatim", reads)
+		require.NotContains(t, buildReadStmt(reads, unmentioned.readAsOf), "AS OF SYSTEM TIME")
+	}
+}
+
+// placeholderList spells out `$1, $2, ...` independently of writePlaceholders,
+// so the byte-for-byte test above is not checking the renderer against itself.
+func placeholderList(n int) string {
+	parts := make([]string, 0, n)
+	for i := 1; i <= n; i++ {
+		parts = append(parts, "$"+strconv.Itoa(i))
+	}
+	return strings.Join(parts, ", ")
+}
+
+// The value is interpolated into SQL rather than bound as a placeholder --
+// AS OF SYSTEM TIME takes no parameter -- so the accepted shape is a
+// whitelist, and this is the test that says so. Anything but a negative
+// relative interval is a flag error, injection attempts included.
+func TestReadAsOfRejectsAnythingButANegativeInterval(t *testing.T) {
+	valid := []string{`-2s`, `-500ms`, `-1m`, `-10s`, `-0s`}
+	for _, v := range valid {
+		t.Run("ok "+v, func(t *testing.T) {
+			gen := ycsbtMeta.New().(*ycsbt)
+			require.NoError(t, gen.flags.Parse([]string{`--read-as-of=` + v}))
+			require.NoError(t, gen.validateConfig())
+			require.Contains(t, buildReadStmt(2, gen.readAsOf), `AS OF SYSTEM TIME '`+v+`'`)
+		})
+	}
+	// In order: a positive interval (reads the future), a space inside the
+	// value, two injection attempts, a missing unit, a unit outside the
+	// accepted set, a leading space, a statement separator, an absolute
+	// timestamp, a SQL function, a wrong-case unit, and a double sign.
+	invalid := []string{
+		`2s`,
+		`-2 s`,
+		`'; DROP TABLE usertable; --`,
+		`-2s' OR '1'='1`,
+		`-2`,
+		`-2h`,
+		`- 2s`,
+		`-2s;`,
+		`2026-01-01`,
+		`follower_read_timestamp()`,
+		`-2S`,
+		`--2s`,
+	}
+	for _, v := range invalid {
+		t.Run("rejected "+v, func(t *testing.T) {
+			gen := ycsbtMeta.New().(*ycsbt)
+			require.NoError(t, gen.flags.Parse([]string{`--read-as-of=` + v}))
+			require.ErrorContains(t, gen.validateConfig(), "must be a negative relative interval")
+		})
+	}
+}
+
+// Run-time only, for the same reason --key-scramble is: the read timestamp
+// decides how a read executes, never which rows exist, so one initialised
+// table has to serve both an as-of cell and a present-time one.
+func TestReadAsOfIsRuntimeOnly(t *testing.T) {
+	gen := ycsbtMeta.New().(*ycsbt)
+	require.True(t, gen.Flags().Meta[`read-as-of`].RuntimeOnly,
+		"--read-as-of must be RuntimeOnly: it must not change the loaded data")
+
+	asof := workload.FromFlags(ycsbtMeta, `--keys=1000`, `--read-as-of=-2s`).(*ycsbt)
+	require.Equal(t, `-2s`, asof.readAsOf)
+	now := workload.FromFlags(ycsbtMeta, `--keys=1000`).(*ycsbt)
+	require.Equal(t, asof.Tables()[0].InitialRows.NumBatches, now.Tables()[0].InitialRows.NumBatches)
+	require.Equal(t, 1000, asof.Tables()[0].InitialRows.NumBatches)
+}
+
+// The write side is what the diagnostic must NOT touch: if the blind UPSERT
+// moved too, the difference between the two runs would no longer be the read
+// side's cost alone.
+func TestReadAsOfLeavesTheWriteStatementsAlone(t *testing.T) {
+	require.NotContains(t, buildBlindStmt(5), "AS OF SYSTEM TIME")
+	require.NotContains(t, buildStmt(9, 1), "AS OF SYSTEM TIME")
 }

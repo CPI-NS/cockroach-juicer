@@ -74,12 +74,28 @@
 // primary-key antipattern rather than a neutral default, which is why it is no
 // longer the default here; it is kept for reproducing campaigns #11-#22, all of
 // which were measured on it, and for studying the antipattern on purpose.
+//
+// --read-as-of is a DIAGNOSTIC, not a configuration. It appends AS OF SYSTEM
+// TIME to the read-only transaction of the mixed mode, so those reads run at a
+// timestamp already in the past and therefore cannot interact with any write:
+// a historical read never blocks on an intent (the intent's transaction is
+// newer than the read timestamp, so MVCC just reads the value underneath it)
+// and never lands in the uncertainty interval (that window is around the
+// present, not two seconds ago). Everything else stays exactly as it was —
+// same keys, same Zipf skew, same write side, same client concurrency. The
+// difference between a run with it and a run without it is therefore the
+// entire cost the read side pays for meeting writers at all, which is the
+// ceiling on what any read-side scheduling — the Juicer layer included — could
+// ever recover. It is an upper-bound measurement to compare against, never a
+// setting to ship: a workload whose reads are all seconds stale is a different
+// workload.
 package ycsbt
 
 import (
 	"context"
 	"fmt"
 	"math/rand/v2"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -151,7 +167,16 @@ type ycsbt struct {
 	blind       bool
 	readTxnPct  int
 	keyScramble bool
+	readAsOf    string
 }
+
+// readAsOfRE is what --read-as-of accepts. The value is interpolated into a
+// SQL statement, so it is not merely validated for sense: only a NEGATIVE
+// relative interval gets through, which is a closed enough shape that nothing
+// else can be smuggled in with it. Positive or absolute timestamps are
+// rejected as well as malformed ones — a future or wall-clock AS OF SYSTEM
+// TIME is not the diagnostic this flag exists for.
+var readAsOfRE = regexp.MustCompile(`^-[0-9]+(ms|s|m)$`)
 
 func init() {
 	workload.Register(ycsbtMeta)
@@ -199,6 +224,17 @@ var ycsbtMeta = workload.Meta{
 	campaigns #11-#22, which were all measured on it, or to study the
 	antipattern deliberately. Init is unaffected either way: the table still
 	holds every key in [0, --keys).
+
+	--read-as-of is a diagnostic: given a negative relative interval such as
+	-2s it runs the read-only transactions AS OF SYSTEM TIME '-2s'. A read at a
+	timestamp already in the past cannot interact with a write -- it does not
+	block on an intent, and the uncertainty interval is around the present, not
+	around two seconds ago -- while the keys, the skew, the write side and the
+	concurrency all stay put. The difference from a run without it is therefore
+	the entire cost the read side pays for meeting writers, which is the
+	ceiling on what any read-side scheduling could recover. Use it to bound a
+	result, never to configure a workload: reads that are seconds stale answer
+	a different question.
 	`,
 	Version:    `1.0.0`,
 	RandomSeed: RandomSeed,
@@ -216,6 +252,10 @@ var ycsbtMeta = workload.Meta{
 			// The scramble permutes which key a rank draws, not which keys
 			// exist: the table is still loaded with every key in [0, --keys).
 			`key-scramble`: {RuntimeOnly: true},
+			// A read timestamp changes how the read-only transaction is
+			// executed, never what the table holds. It must also be settable
+			// per cell on an already-initialised cluster.
+			`read-as-of`: {RuntimeOnly: true},
 		}
 		g.flags.IntVar(&g.keys, `keys`, defaultKeys,
 			`Number of rows loaded into usertable, and the support of the Zipf key distribution.`)
@@ -244,6 +284,17 @@ var ycsbtMeta = workload.Meta{
 				`leaseholder: the sequential-primary-key antipattern, kept for reproducing campaigns #11-#22 `+
 				`and for studying that antipattern. Run time only: the table is loaded with every key in `+
 				`[0, --keys) either way.`)
+		g.flags.StringVar(&g.readAsOf, `read-as-of`, ``,
+			`Diagnostic: run the read-only transactions AS OF SYSTEM TIME '<value>', a negative `+
+				`relative interval such as -2s (accepted forms: -<digits> followed by ms, s or m; empty, `+
+				`the default, leaves the reads at the present). A read at a timestamp already in the past `+
+				`cannot interact with a write at all: it neither blocks on an intent nor falls inside the `+
+				`uncertainty interval. Nothing else about the run changes, so the gap between a run with `+
+				`this and one without it is the whole price the read side pays for meeting writers - i.e. `+
+				`the CEILING on what read-side scheduling could recover. It is a diagnostic upper bound to `+
+				`measure against, not a production configuration: reads that are seconds stale are a `+
+				`different workload. Applies only to the read-only transactions of --read-txn-pct; blind `+
+				`writes are untouched. Run time only.`)
 		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
@@ -304,6 +355,15 @@ func (w *ycsbt) validateConfig() error {
 	}
 	if w.splits >= w.keys {
 		return errors.Errorf("--splits (%d) must be less than --keys (%d)", w.splits, w.keys)
+	}
+	// The value is pasted into SQL, so the check is a whitelist of one shape
+	// rather than a sanity test: a negative relative interval and nothing
+	// else. That rules out injection along with the values that would not be
+	// the diagnostic anyway (a positive interval reads the future; an absolute
+	// timestamp pins the run to a wall clock).
+	if w.readAsOf != "" && !readAsOfRE.MatchString(w.readAsOf) {
+		return errors.Errorf(
+			"--read-as-of (%q) must be a negative relative interval like -2s, -500ms or -1m", w.readAsOf)
 	}
 	return nil
 }
@@ -421,9 +481,21 @@ func buildBlindStmt(writes int) string {
 // row count. Non-locking on purpose — the read side must conflict with
 // writers only through their intents, the way any MVCC read does, and never
 // with other reads.
-func buildReadStmt(reads int) string {
+//
+// asOf is --read-as-of. Empty (the normal case) renders exactly the statement
+// this function rendered before the flag existed, byte for byte. Non-empty
+// inserts AS OF SYSTEM TIME '<asOf>' after the table, which takes the reads
+// out of the present entirely — see the package comment. The value reaches
+// SQL as a literal, which is safe only because validateConfig has already
+// restricted it to a negative relative interval; do not call this with an
+// unvalidated string.
+func buildReadStmt(reads int, asOf string) string {
 	var b strings.Builder
-	b.WriteString("SELECT count(*) FROM usertable WHERE ycsb_key IN (")
+	b.WriteString("SELECT count(*) FROM usertable")
+	if asOf != "" {
+		fmt.Fprintf(&b, " AS OF SYSTEM TIME '%s'", asOf)
+	}
+	b.WriteString(" WHERE ycsb_key IN (")
 	writePlaceholders(&b, 1, reads)
 	b.WriteString(")")
 	return b.String()
@@ -516,7 +588,7 @@ func (w *ycsbt) Ops(
 		if w.blind && w.readTxnPct > 0 {
 			op.readTxnPct = w.readTxnPct
 			op.readArgs = make([]interface{}, w.opsPerTxn)
-			op.readStmt = op.sr.Define(buildReadStmt(w.opsPerTxn))
+			op.readStmt = op.sr.Define(buildReadStmt(w.opsPerTxn, w.readAsOf))
 		}
 		if err := op.sr.Init(ctx, "ycsbt", mcp); err != nil {
 			return workload.QueryLoad{}, err
