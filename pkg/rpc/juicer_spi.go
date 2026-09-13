@@ -145,6 +145,7 @@ const (
 	juicerRulesTypeGate   juicerRules = "typegate"
 	juicerRulesReadWait   juicerRules = "readwait"
 	juicerRulesReadGate   juicerRules = "readgate"
+	juicerRulesReadFirst  juicerRules = "readfirst"
 	juicerRulesFull       juicerRules = "full"
 	juicerRulesSFU        juicerRules = "sfu"
 	juicerRulesOff        juicerRules = "off"
@@ -182,6 +183,8 @@ func juicerRulesMode() juicerRules {
 		return juicerRulesReadWait
 	case juicerRulesReadGate:
 		return juicerRulesReadGate
+	case juicerRulesReadFirst:
+		return juicerRulesReadFirst
 	case juicerRulesFull:
 		return juicerRulesFull
 	case juicerRulesSFU:
@@ -789,6 +792,16 @@ func (crdbJuicerSPI) AbortCurrentRequest(req interface{}) (interface{}, error)  
 //	                write-behind-read — only plain-read holds block, and both
 //	                plain types wait behind them; nothing waits behind a
 //	                write; the writegate probe's mirror image.
+//	readfirst       CAMPAIGN #29 PROBE: readhold minus the write-write pair.
+//	                Only plain reads hold; only WRITE heads wait, and only
+//	                behind cross-txn in-flight plain reads. Isolates "writes
+//	                wait behind in-flight reads" — the MVCC intuition that a
+//	                CockroachDB read conflicts only with a live intent at or
+//	                below its timestamp, so putting in-flight reads ahead of a
+//	                write keeps them off its intent and moves the cost to the
+//	                writer's timestamp bump. Writes hold nothing (derived from
+//	                Blocks); locking reads are excluded, keeping the campaign
+//	                #13 RMW hazard out by construction.
 //	full            Locking operations (SFU reads and writes) of different
 //	                transactions mutually exclude. This is the relation as
 //	                originally written, and the one that cost 85-98% of
@@ -1012,6 +1025,43 @@ func (crdbJuicerSPI) BuildRules() juicer.DependencyRules {
 				}
 				return ev.Kind == juicer.RespReturned &&
 					(ev.Failed || ev.OpType == juicer.OpGet)
+			},
+			MaxHold:      maxHold,
+			AdmitUnbound: true,
+		}
+	case juicerRulesReadFirst:
+		// The campaign #29 probe: readhold with the write-write pair deleted,
+		// leaving exactly one live clause — a WRITE head waits behind a
+		// cross-txn in-flight PLAIN READ. Everything else passes: read heads
+		// never wait, a write no longer waits behind another transaction's
+		// write, and same-txn pairs stay exempt. Because only a held read can
+		// block, the derived hold population narrows to plain reads — writes
+		// hold nothing, and locking reads neither hold nor wait, which keeps
+		// the campaign #13 RMW hazard out by construction. This isolates
+		// "writes wait behind in-flight reads" from the write-write spacing
+		// the readhold probe bundled with it: a CRDB read conflicts only with
+		// a live intent at or below its timestamp, so letting the in-flight
+		// reads land before the write keeps them off its intent and moves the
+		// cost onto the writer's timestamp bump. The release relation is the
+		// READ arm of the readhold release relation verbatim — a read hold
+		// ends at its own transaction's read response (key-scoped delivery),
+		// at commit/abort arrival, at any failed response, or at the TTL.
+		return juicer.DependencyRules{
+			Blocks: func(h, hd juicer.OpRef) bool {
+				return h.TxnID != hd.TxnID &&
+					h.OpType == juicer.OpGet && hd.OpType == juicer.OpSet
+			},
+			Releases: func(h juicer.OpRef, ev juicer.Event) bool {
+				if ev.TxnID != h.TxnID {
+					return false
+				}
+				if juicer.ReleasedOnCommitAbort(h, ev) {
+					return true
+				}
+				if ev.Kind != juicer.RespReturned {
+					return false
+				}
+				return ev.Failed || ev.OpType == h.OpType
 			},
 			MaxHold:      maxHold,
 			AdmitUnbound: true,

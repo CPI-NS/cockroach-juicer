@@ -769,6 +769,91 @@ func TestJuicerReadOnlyRules(t *testing.T) {
 	}
 }
 
+// TestJuicerReadFirstRules pins the campaign #29 probe: readhold minus the
+// write-write pair, leaving one live clause — a WRITE head waits behind a
+// cross-txn in-flight PLAIN READ and nothing else waits. The narrowed hold
+// population (plain reads only; writes hold nothing now that no head can wait
+// on them) is derived from Blocks, not declared, so it is asserted here; the
+// locking-read exemption falls out of the same derivation.
+func TestJuicerReadFirstRules(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer func(saved string) { juicerRulesEnv = saved }(juicerRulesEnv)
+	juicerRulesEnv = "readfirst"
+
+	rules := newCRDBJuicerSPI().BuildRules()
+	if !rules.Enabled() {
+		t.Fatal("readfirst rules disabled")
+	}
+	if !rules.AdmitUnbound {
+		t.Fatal("readfirst relation must admit unbound heads untracked")
+	}
+
+	writeA := juicer.OpRef{TxnID: 1, OpType: juicer.OpSet}
+	readA := juicer.OpRef{TxnID: 1, OpType: juicer.OpGet}
+	writeB := juicer.OpRef{TxnID: 2, OpType: juicer.OpSet}
+	readB := juicer.OpRef{TxnID: 2, OpType: juicer.OpGet}
+	sfuB := juicer.OpRef{TxnID: 2, OpType: juicer.OpGetForPut}
+
+	// The one live clause: a write head waits behind a cross-txn read hold.
+	if !rules.Blocks(readA, writeB) {
+		t.Fatal("write head did not wait behind a cross-txn read hold (the probe's point)")
+	}
+	// The pair this probe deletes from readhold: write behind write.
+	if rules.Blocks(writeA, writeB) {
+		t.Fatal("cross-txn write-write pair blocked under readfirst")
+	}
+	// Read heads never wait — behind reads, writes or locking reads.
+	if rules.Blocks(readA, readB) || rules.Blocks(writeA, readB) || rules.Blocks(sfuB, readA) {
+		t.Fatal("a read head waited under readfirst")
+	}
+	// Locking reads neither hold nor wait.
+	if rules.Blocks(sfuB, writeA) || rules.Blocks(readA, sfuB) || rules.Blocks(writeA, sfuB) {
+		t.Fatal("locking read participated in blocking under readfirst")
+	}
+	// Same-txn stays exempt: a transaction's own read never parks its write.
+	if rules.Blocks(readA, juicer.OpRef{TxnID: 1, OpType: juicer.OpSet}) {
+		t.Fatal("write head parked behind its own transaction's read hold")
+	}
+
+	// Derived held population: plain reads only. Writes drop out of it here —
+	// no head can wait on a held write any more, which is the whole delta
+	// from readhold.
+	if !rules.Holdable(juicer.OpGet) {
+		t.Fatal("readfirst must hold plain reads")
+	}
+	if rules.Holdable(juicer.OpSet) {
+		t.Fatal("readfirst still holds writes; the write-write pair was not deleted")
+	}
+	if rules.Holdable(juicer.OpGetForPut) || rules.Holdable(juicer.OpCommit) {
+		t.Fatal("readfirst held population wider than plain reads")
+	}
+
+	// Releases: the read arm of readhold verbatim — own read response,
+	// commit/abort arrival, any failed response; a same-txn write response
+	// does not end a read hold, and nothing crosses transactions.
+	if !rules.Releases(readA, juicer.Event{Kind: juicer.RespReturned, OpType: juicer.OpGet, TxnID: 1}) {
+		t.Fatal("own read response did not release the read hold")
+	}
+	if rules.Releases(readA, juicer.Event{Kind: juicer.RespReturned, OpType: juicer.OpSet, TxnID: 1}) {
+		t.Fatal("a same-txn write response released a read hold")
+	}
+	if !rules.Releases(readA, juicer.Event{Kind: juicer.ReqArrived, OpType: juicer.OpCommit, TxnID: 1}) {
+		t.Fatal("commit arrival did not release the read hold")
+	}
+	if !rules.Releases(readA, juicer.Event{Kind: juicer.ReqArrived, OpType: juicer.OpAbort, TxnID: 1}) {
+		t.Fatal("abort arrival did not release the read hold")
+	}
+	if !rules.Releases(readA, juicer.Event{Kind: juicer.RespReturned, OpType: juicer.OpSet, TxnID: 1, Failed: true}) {
+		t.Fatal("failed response did not release the read hold")
+	}
+	if rules.Releases(readA, juicer.Event{Kind: juicer.RespReturned, OpType: juicer.OpGet, TxnID: 9}) {
+		t.Fatal("another txn's read response released the read hold")
+	}
+	if rules.Releases(readA, juicer.Event{Kind: juicer.ReqArrived, OpType: juicer.OpCommit, TxnID: 9}) {
+		t.Fatal("another txn's commit released the read hold")
+	}
+}
+
 // TestJuicerNoReadReadRules pins the campaign #19c ablation probe: the gate
 // with exactly one pair deleted. A plain-read head must never wait behind a
 // plain-read hold (any transaction pair), while every other pair — writes,
@@ -979,6 +1064,15 @@ func TestJuicerRulesModes(t *testing.T) {
 			name: "readgate parks writes behind reads, the writegate mirror", env: "readgate",
 			expectedMode:    juicerRulesReadGate,
 			expectedEnabled: true, expectedReadBlocks: true,
+		},
+		{
+			// readhold's row with the write-write pair switched off: the held
+			// read blocking a write head is the only expectation left true.
+			// The clause itself is pinned by TestJuicerReadFirstRules.
+			name: "readfirst parks writes behind reads only", env: "readfirst",
+			expectedMode:    juicerRulesReadFirst,
+			expectedEnabled: true, expectedBlocksSFU: false, expectedBlocksWrite: false,
+			expectedBlocksWW: false, expectedBlocksRead: false, expectedReadBlocks: true,
 		},
 		{
 			name: "full blocks every locking pair", env: "full", expectedMode: juicerRulesFull,
