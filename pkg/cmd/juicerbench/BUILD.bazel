@@ -1,0 +1,42 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "juicerbench_lib",
+    srcs = ["client.go", "generator.go", "main.go", "window.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/juicerbench",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/base", "//pkg/gossip", "//pkg/kv", "//pkg/kv/kvclient/kvcoord",
+        "//pkg/kv/kvpb", "//pkg/roachpb", "//pkg/rpc", "//pkg/rpc/nodedialer",
+        "//pkg/security/username", "//pkg/settings/cluster", "//pkg/util",
+        "//pkg/util/admission/admissionpb", "//pkg/util/hlc", "//pkg/util/log",
+        "//pkg/util/metric", "//pkg/util/stop", "//pkg/util/tracing",
+        "//pkg/workload/workloadimpl", "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_binary(name = "juicerbench", embed = [":juicerbench_lib"], visibility = ["//visibility:public"])
+
+go_test(
+    name = "juicerbench_test",
+    srcs = [
+        "generator_test.go",
+        "main_test.go",
+        "retry_integration_test.go",
+    ],
+    embed = [":juicerbench_lib"],
+    deps = [
+        "//pkg/base",
+        "//pkg/kv",
+        "//pkg/kv/kvpb",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils/serverutils",
+        "//pkg/util/admission/admissionpb",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)
