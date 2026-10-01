@@ -32,6 +32,9 @@ import (
 var (
 	juicerEnabled      = envutil.EnvOrDefaultBool("COCKROACH_JUICER", false)
 	juicerSkipQueueing = envutil.EnvOrDefaultBool("COCKROACH_JUICER_SKIP_QUEUEING", false)
+	// Matched direct-path diagnostics retain classification and association,
+	// but never create queues or holds. Full Juicer off is a separate reference.
+	juicerFilterDiagnostic = envutil.EnvOrDefaultString("COCKROACH_JUICER_FILTER_DIAGNOSTIC", "off")
 	// juicerFifo degrades every per-key queue from sorting-key order to
 	// arrival order (grpc.JuicerFifoQueue -> JuicerInterceptorConfig.FifoMode
 	// -> PerKeyQueue appends and pops instead of using its min-heap). It is
@@ -159,14 +162,12 @@ const (
 // harm there, −73% throughput at the measured workpoint).
 var juicerRulesEnv = envutil.EnvOrDefaultString("COCKROACH_JUICER_RULES", string(juicerRulesGate))
 
-// juicerRulesMode parses COCKROACH_JUICER_RULES. An unrecognized value
-// resolves to the DEFAULT (gate): with the standard relation on by default, a
-// typo can no longer be allowed to silently disable it either — whichever way
-// the fallback points, some typo is mis-served, and the injection banner (and
-// the smoke gate asserting it) is the actual guard. "off" must therefore be
-// spelled exactly; verify the banner, not the environment.
+// juicerRulesMode parses COCKROACH_JUICER_RULES. Empty means the default gate;
+// an unrecognized nonempty value is an error, never a silent rule substitution.
 func juicerRulesMode() juicerRules {
 	switch juicerRules(strings.ToLower(strings.TrimSpace(juicerRulesEnv))) {
+	case "", juicerRulesGate:
+		return juicerRulesGate
 	case juicerRulesWrites:
 		return juicerRulesWrites
 	case juicerRulesWriteGate:
@@ -192,7 +193,7 @@ func juicerRulesMode() juicerRules {
 	case juicerRulesOff:
 		return juicerRulesOff
 	default:
-		return juicerRulesGate
+		panic("invalid COCKROACH_JUICER_RULES: " + juicerRulesEnv)
 	}
 }
 
@@ -203,6 +204,7 @@ func juicerRulesMode() juicerRules {
 var (
 	juicerSplitCalls    atomic.Uint64
 	juicerResponseCalls atomic.Uint64
+	juicerSpanSkipped   atomic.Uint64
 	juicerReporterOnce  sync.Once
 )
 
@@ -354,6 +356,7 @@ func startJuicerHitReporter(ctx context.Context) {
 				log.Dev.Infof(ctx, "juicer: interception hits: +%d batches split, +%d responses observed (totals %d/%d)",
 					s-lastSplit, r-lastResp, s, r)
 				lastSplit, lastResp = s, r
+				log.Dev.Infof(ctx, "juicer: span requests without point markers (cumulative) = %d", juicerSpanSkipped.Load())
 
 				f := juicerFailures.snapshot()
 				log.Dev.Infof(ctx,
@@ -376,15 +379,31 @@ func startJuicerHitReporter(ctx context.Context) {
 // juicerServerOptions returns the fork ServerOptions that enable Juicer
 // interception of Batch/BatchStream, or nil when disabled.
 func juicerServerOptions() []grpc.ServerOption {
+	startJuicerTraceReporter()
 	if !juicerEnabled {
 		return nil
 	}
+	switch juicerFilterDiagnostic {
+	case "off", "none", "l1", "l1l2":
+	default:
+		panic("invalid COCKROACH_JUICER_FILTER_DIAGNOSTIC: " + juicerFilterDiagnostic)
+	}
+	if juicerFilterK <= 0 || juicerFilterS <= 0 || juicerFilterS > juicerFilterK {
+		panic("Juicer requires 0 < FILTER_S <= FILTER_K")
+	}
+	log.Dev.Infof(context.Background(), "juicer: filter diagnostic = %s; filter K = %d; filter S = %d; typed markers = true",
+		juicerFilterDiagnostic, juicerFilterK, juicerFilterS)
 	opts := []grpc.ServerOption{
 		grpc.JuicerSPIImpl(newCRDBJuicerSPI()),
 		grpc.JuicerUnaryMethods(juicerUnaryBatchPaths),
 		grpc.JuicerStreamMethods(juicerStreamBatchPaths),
 		grpc.JuicerFilterK(juicerFilterK),
 		grpc.JuicerFilterS(juicerFilterS),
+	}
+	// The fork uses an empty diagnostic option for normal queue/hold mode.
+	// Passing the environment label "off" would select its direct path.
+	if juicerFilterDiagnostic != "off" {
+		opts = append(opts, grpc.JuicerFilterDiagnostic(juicerFilterDiagnostic))
 	}
 	if juicerSkipQueueing {
 		opts = append(opts, grpc.JuicerSkipQueueing(true))
@@ -407,9 +426,9 @@ func juicerServerOptions() []grpc.ServerOption {
 // crdbJuicerSPI adapts kvpb batch traffic to the Juicer SPI. Keys are hashed
 // to int64 (fnv-64a over the roachpb.Key bytes); a hash collision merges two
 // keys onto one sorting queue, which over-blocks conservatively but never
-// under-blocks. Classification is batch-granular: the strongest operation in
-// the batch names the whole batch, mirroring how the interceptor emits one
-// event per BatchRequest.
+// under-blocks. The batch type is a routing hint; each data marker carries its
+// own typed operation. Range operations have no exact point-key representation
+// and are explicitly counted as uncovered instead of queuing a fabricated key.
 type crdbJuicerSPI struct{}
 
 var _ juicer.JuicerSPI[int64] = crdbJuicerSPI{}
@@ -451,7 +470,7 @@ func asBatchRequest(req interface{}) *kvpb.BatchRequest {
 //     is deliberately NOT OpCommit: its commit-ness reaches the dependency
 //     rules through the RespReturned release arm (crdbRules), because
 //     participants never observe a separate commit message.
-//   - Write-free EndTxn -> OpCommit / OpAbort by its Commit flag.
+//   - Data-free EndTxn -> OpCommit / OpAbort by its Commit flag.
 //   - ResolveIntent{,Range} -> OpCommit / OpAbort by intent status (async
 //     resolution is the only commit signal non-anchor participants see).
 //   - Locking Get (implicit SFU) -> OpGetForPut; plain Get -> OpGet.
@@ -491,16 +510,16 @@ func classifyBatch(ba *kvpb.BatchRequest) juicer.OperationType {
 	switch {
 	case hasWrite:
 		return juicer.OpSet
+	case hasLockingGet:
+		return juicer.OpGetForPut
+	case hasGet || hasRefresh:
+		return juicer.OpGet
 	case endTxn != nil && !endTxn.Commit:
 		return juicer.OpAbort
 	case endTxn != nil:
 		return juicer.OpCommit
 	case resolve != juicer.OpUnknown:
 		return resolve
-	case hasLockingGet:
-		return juicer.OpGetForPut
-	case hasGet || hasRefresh:
-		return juicer.OpGet
 	default:
 		return juicer.OpUnknown
 	}
@@ -546,16 +565,19 @@ func juicerSortKey(ba *kvpb.BatchRequest) juicerTxnSortKey {
 // batch. Non-transactional batches return nil: they are never sorted, which
 // also keeps txn id 0 (the enforcer's "unbound" sentinel) out of the queues.
 //
-// A RefreshRange contributes a marker for its start key only. The sorting
-// queues are per point key, so a span cannot be represented exactly; the start
-// key is the span's position in the same key space and puts the refresh on a
-// queue the transaction's own reads are likely to be on. This under-covers a
-// wide refresh rather than over-blocking one.
+// Span requests are counted but do not produce point markers. In particular,
+// a span's start boundary does not stand for every data key in that span.
 func (crdbJuicerSPI) SplitMarker(req interface{}) []juicer.Marker[int64] {
 	juicerSplitCalls.Add(1)
 	ba := asBatchRequest(req)
 	if ba == nil || ba.Txn == nil {
 		return nil
+	}
+	for _, ru := range ba.Requests {
+		switch ru.GetInner().(type) {
+		case *kvpb.ScanRequest, *kvpb.ReverseScanRequest, *kvpb.DeleteRangeRequest, *kvpb.RefreshRangeRequest:
+			juicerSpanSkipped.Add(1)
+		}
 	}
 	if !sortableJuicerOp(classifyBatch(ba)) {
 		return nil
@@ -566,36 +588,43 @@ func (crdbJuicerSPI) SplitMarker(req interface{}) []juicer.Marker[int64] {
 	for i := range ba.Requests {
 		var key []byte
 		var opName string
+		var typed juicer.OperationType
 		switch r := ba.Requests[i].GetInner().(type) {
 		case *kvpb.GetRequest:
 			key = r.Key
 			if r.KeyLockingStrength != lock.None {
 				opName = "GetForUpdate"
+				typed = juicer.OpGetForPut
 			} else {
 				opName = "Get"
+				typed = juicer.OpGet
 			}
 		case *kvpb.PutRequest:
 			key, opName = r.Key, "Put"
+			typed = juicer.OpSet
 		case *kvpb.ConditionalPutRequest:
 			key, opName = r.Key, "CPut"
+			typed = juicer.OpSet
 		case *kvpb.IncrementRequest:
 			key, opName = r.Key, "Increment"
+			typed = juicer.OpSet
 		case *kvpb.DeleteRequest:
 			key, opName = r.Key, "Delete"
+			typed = juicer.OpSet
 		case *kvpb.RefreshRequest:
 			key, opName = r.Key, "Refresh"
-		case *kvpb.RefreshRangeRequest:
-			key, opName = r.Key, "RefreshRange"
+			typed = juicer.OpGet
 		default:
 			continue
 		}
 		markers = append(markers, juicer.Marker[int64]{
-			Timestamp: sortKey.wallTime,
-			Logical:   int64(sortKey.logical),
-			TxnId:     txnID,
-			Key:       juicerKeyHash(key),
-			OpIndex:   int64(i),
-			OpType:    opName,
+			Timestamp:   sortKey.wallTime,
+			Logical:     int64(sortKey.logical),
+			TxnId:       txnID,
+			Key:         juicerKeyHash(key),
+			OpIndex:     int64(i),
+			OpType:      opName,
+			TypedOpType: typed,
 		})
 	}
 	return markers

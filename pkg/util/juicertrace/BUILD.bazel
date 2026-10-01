@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "juicertrace",
+    srcs = ["trace.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/juicertrace",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "juicertrace_test",
+    srcs = ["trace_test.go"],
+    embed = [":juicertrace"],
+)

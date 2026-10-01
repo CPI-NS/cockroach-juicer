@@ -163,7 +163,6 @@ func TestJuicerSPIRefreshIsSortable(t *testing.T) {
 		expectedOpName string
 	}{
 		{name: "point refresh", req: refresh("k1"), expectedOpName: "Refresh"},
-		{name: "range refresh", req: refreshRange("k1", "k9"), expectedOpName: "RefreshRange"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			txn := juicerTestTxn(77)
@@ -182,9 +181,6 @@ func TestJuicerSPIRefreshIsSortable(t *testing.T) {
 			if markers[0].OpType != tc.expectedOpName {
 				t.Fatalf("refresh marker op name = %q, want %q", markers[0].OpType, tc.expectedOpName)
 			}
-			// A RefreshRange is placed on the queue of its start key: the
-			// sorting queues are per point key, so a span has no exact
-			// representation.
 			if markers[0].Key != juicerKeyHash([]byte("k1")) {
 				t.Fatalf("refresh marker key = %d, want the hash of the start key", markers[0].Key)
 			}
@@ -192,6 +188,9 @@ func TestJuicerSPIRefreshIsSortable(t *testing.T) {
 				t.Fatalf("refresh marker timestamp = %d, want the MinTimestamp fallback", markers[0].Timestamp)
 			}
 		})
+	}
+	if got := spi.SplitMarker(juicerBatch(juicerTestTxn(77), refreshRange("k1", "k9"))); len(got) != 0 {
+		t.Fatalf("a range must not fabricate a point marker: %+v", got)
 	}
 
 	// A refresh mixed with a write is still a write: the batch-level type is
@@ -922,10 +921,10 @@ func TestJuicerCampaign20PairRules(t *testing.T) {
 		env string
 		// Blocks(held, head), cross-txn plain types. Read-read is true in
 		// every case; exactly one write-involving entry joins it.
-		expectedReadHoldsRead  bool // Blocks(read, read)
-		expectedWriteHoldsRead bool // Blocks(write, read)  = read waits behind write
-		expectedReadHoldsWrite bool // Blocks(read, write)  = write waits behind read
-		expectedWriteHoldsWrite bool // Blocks(write, write)
+		expectedReadHoldsRead            bool // Blocks(read, read)
+		expectedWriteHoldsRead           bool // Blocks(write, read)  = read waits behind write
+		expectedReadHoldsWrite           bool // Blocks(read, write)  = write waits behind read
+		expectedWriteHoldsWrite          bool // Blocks(write, write)
 		expectedHoldGet, expectedHoldSet bool
 	}{
 		{
@@ -1092,10 +1091,6 @@ func TestJuicerRulesModes(t *testing.T) {
 			name: "case and space tolerated", env: "  SFU ", expectedMode: juicerRulesSFU,
 			expectedEnabled: true, expectedBlocksSFU: true, expectedBlocksWrite: false,
 			expectedBlocksWW: false,
-		},
-		{
-			name: "unrecognized value resolves to the default gate", env: "bogus", expectedMode: juicerRulesGate,
-			expectedEnabled: true, expectedTypeBlind: true,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

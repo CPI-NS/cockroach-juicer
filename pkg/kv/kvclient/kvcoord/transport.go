@@ -204,6 +204,9 @@ func (gt *grpcTransport) sendBatch(
 	if ctx.Err() != nil {
 		return nil, errors.Wrap(ctx.Err(), "aborted before batch send")
 	}
+	if err := rpc.JuicerDataRPCDelay(ctx, ba); err != nil {
+		return nil, errors.Wrap(err, "aborted during data RPC jitter")
+	}
 
 	gt.opts.metrics.SentCount.Inc(1)
 	tenantID, _ := roachpb.ClientTenantFromContext(ctx)

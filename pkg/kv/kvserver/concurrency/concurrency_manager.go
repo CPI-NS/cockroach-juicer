@@ -7,8 +7,12 @@ package concurrency
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
+	"hash/fnv"
+	"strconv"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -28,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/juicertrace"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -703,6 +708,37 @@ func (m *managerImpl) OnLockUpdated(ctx context.Context, up *roachpb.LockUpdate)
 	if err := m.lt.UpdateLocks(ctx, up); err != nil {
 		log.KvExec.Fatalf(ctx, "%v", err)
 	}
+	if !juicertrace.Enabled() {
+		return
+	}
+	// This observes the native lock-table update notification after UpdateLocks
+	// returns. It is not a precise physical lock-removal timestamp and its
+	// result is never consulted by concurrency control.
+	if up.Status == roachpb.COMMITTED || up.Status == roachpb.ABORTED {
+		if len(up.EndKey) == 0 {
+			juicertrace.LockUpdated(juicerTraceTxnID(up.Txn.ID), juicerTraceKey(up.Key), up.Status.String(), time.Now())
+		} else {
+			juicertrace.SpanLockUpdated()
+		}
+	}
+}
+
+func juicerTraceTxnID(id uuid.UUID) int64 {
+	v := binary.LittleEndian.Uint64(id[8:])
+	result := int64(v)
+	if result == 0 {
+		result = int64(binary.LittleEndian.Uint64(id[:8]))
+	}
+	if result == 0 {
+		result = 1
+	}
+	return result
+}
+
+func juicerTraceKey(key roachpb.Key) string {
+	h := fnv.New64a()
+	_, _ = h.Write(key)
+	return strconv.FormatInt(int64(h.Sum64()), 10)
 }
 
 // QueryLockTableState implements the LockManager interface.
