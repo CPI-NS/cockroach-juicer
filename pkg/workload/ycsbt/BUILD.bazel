@@ -21,10 +21,14 @@ go_library(
 go_test(
     name = "ycsbt_test",
     size = "small",
-    srcs = ["ycsbt_test.go"],
+    srcs = [
+        "ycsbt_hotkeys_test.go",
+        "ycsbt_test.go",
+    ],
     embed = [":ycsbt"],
     deps = [
         "//pkg/workload",
+        "//pkg/workload/histogram",
         "//pkg/workload/workloadimpl",
         "@com_github_stretchr_testify//require",
     ],

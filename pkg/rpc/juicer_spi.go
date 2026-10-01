@@ -10,6 +10,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"hash/fnv"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/juicer"
 )
@@ -133,6 +135,61 @@ var (
 	juicerFilterK = envutil.EnvOrDefaultInt("COCKROACH_JUICER_FILTER_K", 1000)
 	juicerFilterS = envutil.EnvOrDefaultInt("COCKROACH_JUICER_FILTER_S", 100)
 )
+
+// COCKROACH_JUICER_MANUAL_QUEUE_KEYS pins the set of keys that get a per-key
+// queue instead of letting the two hot-key filters choose them. Its value is a
+// comma-separated list of signed decimal int64 queue keys: the fork's queue
+// key for a request key k is fmt.Sprint(juicerKeyHash(k)), so an entry is the
+// FNV-64a hash of the exact roachpb.Key bytes a point request carries, cast to
+// int64.
+//
+// When the variable is unset nothing below changes the option list: the
+// server is configured exactly as before the variable existed. When it is set,
+// the fork's existing manual mode is selected (grpc.JuicerSkipTracking(true):
+// no abort filter, no reorder filter, no L1/L2 updates) and queue creation is
+// restricted to the listed keys (grpc.JuicerManualQueueKeys). FILTER_K and
+// FILTER_S are still parsed and still validated, but manual mode never
+// consults them; the banner says so.
+//
+// An empty list must never reach the fork: its QueueManager reads an empty
+// manual key set as "create a queue for EVERY key", the opposite of what a
+// short list means. Parsing therefore rejects the empty string, empty
+// elements, anything that is not a base-10 int64, and duplicates after
+// normalization, and juicerServerOptions panics at startup on any of them, the
+// same way it refuses an invalid FILTER_S.
+var juicerManualQueueKeysRaw, juicerManualQueueKeysSet = envutil.EnvString(
+	"COCKROACH_JUICER_MANUAL_QUEUE_KEYS", 0)
+
+// parseJuicerManualQueueKeys turns the environment value into the fork's
+// queue-key strings. Each element is trimmed, parsed as a signed base-10
+// int64, and re-rendered as fmt.Sprint(int64) — the exact string the fork's
+// interceptor builds from a marker key — so "+5", " 5" and "5" all name the
+// same queue. The order of the input is preserved.
+func parseJuicerManualQueueKeys(raw string) ([]string, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, errors.New("empty list (an empty manual key set would queue every key)")
+	}
+	parts := strings.Split(raw, ",")
+	keys := make([]string, 0, len(parts))
+	seen := make(map[string]int, len(parts))
+	for i, part := range parts {
+		s := strings.TrimSpace(part)
+		if s == "" {
+			return nil, errors.Newf("element %d is empty", i)
+		}
+		v, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			return nil, errors.Wrapf(err, "element %d (%q) is not a signed decimal int64", i, s)
+		}
+		key := fmt.Sprint(v)
+		if j, dup := seen[key]; dup {
+			return nil, errors.Newf("element %d (%q) duplicates element %d (queue key %s)", i, s, j, key)
+		}
+		seen[key] = i
+		keys = append(keys, key)
+	}
+	return keys, nil
+}
 
 // juicerRules names the strength of the dependency relation BuildRules hands to
 // the enforcer. See BuildRules for what each one means and why the axis exists.
@@ -391,14 +448,28 @@ func juicerServerOptions() []grpc.ServerOption {
 	if juicerFilterK <= 0 || juicerFilterS <= 0 || juicerFilterS > juicerFilterK {
 		panic("Juicer requires 0 < FILTER_S <= FILTER_K")
 	}
+	manualKeys := juicerManualQueueKeysOrPanic()
 	log.Dev.Infof(context.Background(), "juicer: filter diagnostic = %s; filter K = %d; filter S = %d; typed markers = true",
 		juicerFilterDiagnostic, juicerFilterK, juicerFilterS)
+	if manualKeys != nil {
+		log.Dev.Infof(context.Background(),
+			"juicer: manual queue keys = on; skip tracking = true; manual key count = %d; manual keys = [%s]; filter K = %d and filter S = %d are parsed but unused in manual mode",
+			len(manualKeys), strings.Join(manualKeys, ","), juicerFilterK, juicerFilterS)
+	}
 	opts := []grpc.ServerOption{
 		grpc.JuicerSPIImpl(newCRDBJuicerSPI()),
 		grpc.JuicerUnaryMethods(juicerUnaryBatchPaths),
 		grpc.JuicerStreamMethods(juicerStreamBatchPaths),
 		grpc.JuicerFilterK(juicerFilterK),
 		grpc.JuicerFilterS(juicerFilterS),
+	}
+	// Manual mode: the fork skips both hot-key filters and creates a queue only
+	// for the listed keys. Appended only when the variable is set, so the
+	// option list of every unset run is exactly the one earlier campaigns ran.
+	if manualKeys != nil {
+		opts = append(opts,
+			grpc.JuicerSkipTracking(true),
+			grpc.JuicerManualQueueKeys(manualKeys))
 	}
 	// The fork uses an empty diagnostic option for normal queue/hold mode.
 	// Passing the environment label "off" would select its direct path.
@@ -421,6 +492,28 @@ func juicerServerOptions() []grpc.ServerOption {
 		grpc.JuicerWaitStrategy(juicer.WaitStrategyFixed),
 		grpc.JuicerFixedWait(millisToDuration(juicerFixedWaitMillis)))
 	return opts
+}
+
+// juicerManualQueueKeysOrPanic returns nil when COCKROACH_JUICER_MANUAL_QUEUE_KEYS
+// is unset, and otherwise the validated, normalized, non-empty key list. It
+// panics on a malformed list, and when manual mode is combined with a mode
+// that would bypass the queues it configures (a FILTER_DIAGNOSTIC direct path
+// or SKIP_QUEUEING): the run would then not be the treatment its list claims.
+func juicerManualQueueKeysOrPanic() []string {
+	if !juicerManualQueueKeysSet {
+		return nil
+	}
+	keys, err := parseJuicerManualQueueKeys(juicerManualQueueKeysRaw)
+	if err != nil {
+		panic("invalid COCKROACH_JUICER_MANUAL_QUEUE_KEYS: " + err.Error())
+	}
+	if juicerFilterDiagnostic != "off" {
+		panic("COCKROACH_JUICER_MANUAL_QUEUE_KEYS requires COCKROACH_JUICER_FILTER_DIAGNOSTIC=off, got " + juicerFilterDiagnostic)
+	}
+	if juicerSkipQueueing {
+		panic("COCKROACH_JUICER_MANUAL_QUEUE_KEYS is incompatible with COCKROACH_JUICER_SKIP_QUEUEING")
+	}
+	return keys
 }
 
 // crdbJuicerSPI adapts kvpb batch traffic to the Juicer SPI. Keys are hashed
