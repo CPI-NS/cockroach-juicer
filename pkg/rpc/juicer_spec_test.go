@@ -558,3 +558,41 @@ func TestJuicerHoldCalibrationKnob(t *testing.T) {
 	}()
 	_ = juicerServerOptions()
 }
+
+// Spec 9.4(d): an abort message reports each key with the transaction it
+// speaks for, the batch's own for a rollback and IntentTxn for an intent
+// resolution, which carries none (so the first level can count once per
+// transaction and key).
+func TestJuicerAbortedKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	spi := newCRDBJuicerSPI()
+	txn := juicerTestTxn(10)
+	ba := juicerBatch(txn, endTxn(false))
+	if !spi.IsAbortRequest(ba) {
+		t.Fatal("a rollback should be an abort request")
+	}
+	got := spi.AbortedKeys(ba)
+	if len(got) != 1 || got[0].Key != keyHash("anchor") || got[0].TxnID != juicerTxnID(ba) || got[0].TxnID == 0 {
+		t.Fatalf("rollback: %+v", got)
+	}
+	a, b := juicerTestTxn(1), juicerTestTxn(2)
+	res := &kvpb.BatchRequest{}
+	res.Add(
+		&kvpb.ResolveIntentRequest{RequestHeader: kvpb.RequestHeader{Key: roachpb.Key("k1")},
+			IntentTxn: a.TxnMeta, Status: roachpb.ABORTED},
+		&kvpb.ResolveIntentRequest{RequestHeader: kvpb.RequestHeader{Key: roachpb.Key("k2")},
+			IntentTxn: b.TxnMeta, Status: roachpb.ABORTED},
+	)
+	if !spi.IsAbortRequest(res) {
+		t.Fatal("an ABORTED resolution should be an abort request")
+	}
+	evs := eventsByKey(spi.AbortedKeys(res))
+	if len(evs) != 2 || evs[keyHash("k1")].TxnID != juicerTxnID(juicerBatch(a)) ||
+		evs[keyHash("k2")].TxnID != juicerTxnID(juicerBatch(b)) {
+		t.Fatalf("resolution: %+v", evs)
+	}
+	keys := spi.GetKeysFromRequest(res)
+	if len(keys) != 2 || keys[0] != keyHash("k1") || keys[1] != keyHash("k2") {
+		t.Fatalf("AbortedKeys must name the GetKeysFromRequest keys: %v", keys)
+	}
+}

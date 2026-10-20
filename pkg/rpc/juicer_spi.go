@@ -999,6 +999,40 @@ func (crdbJuicerSPI) GetKeysFromRequest(req interface{}) []int64 {
 	return keys
 }
 
+var _ juicer.AbortSourceSPI[int64] = crdbJuicerSPI{}
+
+// AbortedKeys implements the fork's AbortSourceSPI: the (key, transaction)
+// pairs an abort message reports to the first level, whose keys are those
+// GetKeysFromRequest returns. The transaction is the batch's own (an
+// EndTxn(commit=false)), except for intent resolutions, which carry no
+// transaction of their own and name the aborted one (IntentTxn): the
+// first level counts one abort per transaction and key in an epoch
+// (Juicer spec 9.4(d)), so a resolution must not count as "transaction 0".
+func (crdbJuicerSPI) AbortedKeys(req interface{}) []juicer.ControlEvent[int64] {
+	ba := asBatchRequest(req)
+	if ba == nil {
+		return nil
+	}
+	own := juicerTxnID(ba)
+	out := make([]juicer.ControlEvent[int64], 0, len(ba.Requests))
+	for i := range ba.Requests {
+		inner := ba.Requests[i].GetInner()
+		h := inner.Header()
+		if len(h.Key) == 0 {
+			continue
+		}
+		txn := own
+		switch r := inner.(type) {
+		case *kvpb.ResolveIntentRequest:
+			txn = juicerTxnIDFromUUID(r.IntentTxn.ID)
+		case *kvpb.ResolveIntentRangeRequest:
+			txn = juicerTxnIDFromUUID(r.IntentTxn.ID)
+		}
+		out = append(out, juicer.ControlEvent[int64]{Key: juicerKeyHash(h.Key), TxnID: txn, OpType: juicer.OpAbort})
+	}
+	return out
+}
+
 func (s crdbJuicerSPI) IsGetRequest(req interface{}) bool {
 	op := s.GetOperationType(req)
 	return op == juicer.OpGet || op == juicer.OpGetForPut
