@@ -174,6 +174,108 @@ var juicerLatePolicy = envutil.EnvOrDefaultString("COCKROACH_JUICER_LATE_POLICY"
 // of them feeds a decision. The FILTER_DIAGNOSTIC arms keep their own timers.
 var juicerDiagnostics = envutil.EnvOrDefaultBool("COCKROACH_JUICER_DIAG", false)
 
+// The adaptive buffer time (Juicer spec section 4; the fork's
+// juicer.AdaptiveWaitConfig). OFF by default: the spec leaves its formula's
+// measurement choices open (user decision 2026-10-19), so these knobs select
+// among them and nothing changes unless COCKROACH_JUICER_AW=true.
+//
+//	COCKROACH_JUICER_AW                 false; true turns it on
+//	COCKROACH_JUICER_AW_MAX_US          W_max; unset = H (MAX_HOLD_MS); 0 =
+//	                                    decide and report, never wait
+//	COCKROACH_JUICER_AW_SCALE           s, default 1.0
+//	COCKROACH_JUICER_AW_INVERSIONS      conflicting (default) | all
+//	COCKROACH_JUICER_AW_LA              const (default) | online
+//	COCKROACH_JUICER_AW_LA_US           L_a constant (and online start),
+//	                                    default 1000 us: a placeholder, to be
+//	                                    calibrated
+//	COCKROACH_JUICER_AW_MIN_LA_SAMPLES  online L_a: spans an epoch needs, 10
+//
+// It needs the hot-key filters (its decisions run at their epoch boundary),
+// so manual queues refuse it, as does a FIXED_WAIT_MS above zero (it
+// replaces the fixed wait). Setting any AW_* knob with the feature off also
+// refuses to start: a run must not believe it measured something it did not.
+var (
+	juicerAW                           = envutil.EnvOrDefaultBool("COCKROACH_JUICER_AW", false)
+	juicerAWMaxUsRaw, juicerAWMaxUsSet = envutil.EnvString("COCKROACH_JUICER_AW_MAX_US", 0)
+	juicerAWScaleRaw, juicerAWScaleSet = envutil.EnvString("COCKROACH_JUICER_AW_SCALE", 0)
+	juicerAWInvRaw, juicerAWInvSet     = envutil.EnvString("COCKROACH_JUICER_AW_INVERSIONS", 0)
+	juicerAWLaRaw, juicerAWLaSet       = envutil.EnvString("COCKROACH_JUICER_AW_LA", 0)
+	juicerAWLaUsRaw, juicerAWLaUsSet   = envutil.EnvString("COCKROACH_JUICER_AW_LA_US", 0)
+	juicerAWMinRaw, juicerAWMinSet     = envutil.EnvString("COCKROACH_JUICER_AW_MIN_LA_SAMPLES", 0)
+)
+
+// juicerAdaptiveWaitConfig resolves the AW_* knobs. It returns the disabled
+// zero value when COCKROACH_JUICER_AW is off, and an error for any invalid or
+// inconsistent setting.
+func juicerAdaptiveWaitConfig() (juicer.AdaptiveWaitConfig, error) {
+	anySet := juicerAWMaxUsSet || juicerAWScaleSet || juicerAWInvSet || juicerAWLaSet ||
+		juicerAWLaUsSet || juicerAWMinSet
+	if !juicerAW {
+		if anySet {
+			return juicer.AdaptiveWaitConfig{}, errors.New("COCKROACH_JUICER_AW_* set while COCKROACH_JUICER_AW is off")
+		}
+		return juicer.AdaptiveWaitConfig{}, nil
+	}
+	hold := time.Duration(juicerMaxHoldMillis) * time.Millisecond
+	c := juicer.AdaptiveWaitConfig{
+		Enabled: true, MaxWait: hold, ScaleMilli: 1000, LaMode: juicer.AwLaConst,
+		LaConst: time.Millisecond, MinLaSamples: 10,
+	}
+	if juicerAWMaxUsSet {
+		v, err := strconv.ParseInt(strings.TrimSpace(juicerAWMaxUsRaw), 10, 64)
+		if err != nil || v < 0 {
+			return c, errors.Newf("COCKROACH_JUICER_AW_MAX_US %q is not a non-negative integer", juicerAWMaxUsRaw)
+		}
+		c.MaxWait = time.Duration(v) * time.Microsecond
+	}
+	if c.MaxWait > hold {
+		return c, errors.Newf("COCKROACH_JUICER_AW_MAX_US (%v) exceeds COCKROACH_JUICER_MAX_HOLD_MS (%v) (spec 4.3)", c.MaxWait, hold)
+	}
+	if juicerAWScaleSet {
+		v, err := strconv.ParseFloat(strings.TrimSpace(juicerAWScaleRaw), 64)
+		if err != nil || v <= 0 || v > 1000 {
+			return c, errors.Newf("COCKROACH_JUICER_AW_SCALE %q is not in (0, 1000]", juicerAWScaleRaw)
+		}
+		c.ScaleMilli = uint64(v*1000 + 0.5)
+	}
+	if juicerAWInvSet {
+		switch strings.TrimSpace(juicerAWInvRaw) {
+		case "conflicting":
+		case "all":
+			c.AllInversions = true
+		default:
+			return c, errors.Newf("COCKROACH_JUICER_AW_INVERSIONS %q (want conflicting or all)", juicerAWInvRaw)
+		}
+	}
+	if juicerAWLaSet {
+		c.LaMode = strings.TrimSpace(juicerAWLaRaw)
+	}
+	if juicerAWLaUsSet {
+		v, err := strconv.ParseInt(strings.TrimSpace(juicerAWLaUsRaw), 10, 64)
+		if err != nil || v < 1 {
+			return c, errors.Newf("COCKROACH_JUICER_AW_LA_US %q is not a positive integer", juicerAWLaUsRaw)
+		}
+		c.LaConst = time.Duration(v) * time.Microsecond
+	}
+	if juicerAWMinSet {
+		v, err := strconv.Atoi(strings.TrimSpace(juicerAWMinRaw))
+		if err != nil || v < 1 {
+			return c, errors.Newf("COCKROACH_JUICER_AW_MIN_LA_SAMPLES %q is not a positive integer", juicerAWMinRaw)
+		}
+		c.MinLaSamples = v
+	}
+	if juicerFixedWaitMillis > 0 {
+		return c, errors.New("COCKROACH_JUICER_AW replaces the fixed wait; COCKROACH_JUICER_FIXED_WAIT_MS must be 0")
+	}
+	if juicerManualQueueKeysSet {
+		return c, errors.New("COCKROACH_JUICER_AW needs the hot-key filters' epochs; it cannot run with COCKROACH_JUICER_MANUAL_QUEUE_KEYS")
+	}
+	if err := c.Validate(); err != nil {
+		return c, err
+	}
+	return c, nil
+}
+
 // COCKROACH_JUICER_MANUAL_QUEUE_KEYS pins the set of keys that get a per-key
 // queue instead of letting the two hot-key filters choose them. Its value is a
 // comma-separated list of signed decimal int64 queue keys: the fork's queue
@@ -456,13 +558,17 @@ func juicerSpecBanner() string {
 	if juicerDiagnostics {
 		diag = "on"
 	}
+	buffer := fmt.Sprintf("fixed(%vms)", juicerFixedWaitMillis)
+	if aw, err := juicerAdaptiveWaitConfig(); err == nil && aw.Enabled {
+		buffer = aw.String()
+	}
 	return fmt.Sprintf(
 		"spec=%s intercept=%s K=%d S=%d epoch=%dms idle_epochs=%d nominate=epoch-end removal=drain"+
-			" rules=%s hold_end=%s max_hold=%dms buffer=fixed(%vms) late=%s order=%s"+
+			" rules=%s hold_end=%s max_hold=%dms buffer=%s late=%s order=%s"+
 			" sort_key=batch-now(spec-3.1-exception) diag=%s filter_diag=%s manual_queues=%s",
 		juicerSpecVersion, strings.Join(append(append([]string{}, juicerUnaryBatchPaths...), juicerStreamBatchPaths...), ","),
 		juicerFilterK, juicerFilterS, juicerEpochMillis, juicerIdleEpochs,
-		mode, holdEnd, juicerMaxHoldMillis, juicerFixedWaitMillis, juicerLatePolicy, juicerOrderLabel(),
+		mode, holdEnd, juicerMaxHoldMillis, buffer, juicerLatePolicy, juicerOrderLabel(),
 		diag, juicerFilterDiagnostic, manual)
 }
 
@@ -536,6 +642,10 @@ func juicerServerOptions() []grpc.ServerOption {
 		panic("invalid COCKROACH_JUICER_LATE_POLICY (want queue or bypass): " + juicerLatePolicy)
 	}
 	manualKeys := juicerManualQueueKeysOrPanic()
+	awCfg, err := juicerAdaptiveWaitConfig()
+	if err != nil {
+		panic("invalid Juicer adaptive wait: " + err.Error())
+	}
 	log.Dev.Infof(context.Background(), "juicer: filter diagnostic = %s; filter K = %d; filter S = %d; typed markers = true",
 		juicerFilterDiagnostic, juicerFilterK, juicerFilterS)
 	if manualKeys != nil {
@@ -553,6 +663,11 @@ func juicerServerOptions() []grpc.ServerOption {
 		grpc.JuicerIdleEpochs(juicerIdleEpochs),
 		grpc.JuicerLatePolicy(juicerLatePolicy),
 		grpc.JuicerDiagnostics(juicerDiagnostics),
+	}
+	// Appended only when on, so the option list of every run without it is
+	// unchanged.
+	if awCfg.Enabled {
+		opts = append(opts, grpc.JuicerAdaptiveWait(awCfg))
 	}
 	// Manual mode: the fork skips both hot-key filters and creates a queue only
 	// for the listed keys. Appended only when the variable is set, so the

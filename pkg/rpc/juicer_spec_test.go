@@ -28,10 +28,21 @@ func saveJuicerSpecState() func() {
 	enabled, rules, maxHold, fixed := juicerEnabled, juicerRulesEnv, juicerMaxHoldMillis, juicerFixedWaitMillis
 	k, s, epoch, idle, late, diag := juicerFilterK, juicerFilterS, juicerEpochMillis, juicerIdleEpochs,
 		juicerLatePolicy, juicerDiagnostics
+	aw := []interface{}{juicerAW, juicerAWMaxUsRaw, juicerAWMaxUsSet, juicerAWScaleRaw, juicerAWScaleSet,
+		juicerAWInvRaw, juicerAWInvSet, juicerAWLaRaw, juicerAWLaSet, juicerAWLaUsRaw, juicerAWLaUsSet,
+		juicerAWMinRaw, juicerAWMinSet, juicerManualQueueKeysSet}
 	return func() {
 		juicerEnabled, juicerRulesEnv, juicerMaxHoldMillis, juicerFixedWaitMillis = enabled, rules, maxHold, fixed
 		juicerFilterK, juicerFilterS, juicerEpochMillis, juicerIdleEpochs = k, s, epoch, idle
 		juicerLatePolicy, juicerDiagnostics = late, diag
+		juicerAW = aw[0].(bool)
+		juicerAWMaxUsRaw, juicerAWMaxUsSet = aw[1].(string), aw[2].(bool)
+		juicerAWScaleRaw, juicerAWScaleSet = aw[3].(string), aw[4].(bool)
+		juicerAWInvRaw, juicerAWInvSet = aw[5].(string), aw[6].(bool)
+		juicerAWLaRaw, juicerAWLaSet = aw[7].(string), aw[8].(bool)
+		juicerAWLaUsRaw, juicerAWLaUsSet = aw[9].(string), aw[10].(bool)
+		juicerAWMinRaw, juicerAWMinSet = aw[11].(string), aw[12].(bool)
+		juicerManualQueueKeysSet = aw[13].(bool)
 	}
 }
 
@@ -60,7 +71,7 @@ func TestJuicerSpecDefaults(t *testing.T) {
 	banner := juicerSpecBanner()
 	for _, want := range []string{
 		"rules=conflict-table", "K=100", "S=1", "epoch=10000ms", "idle_epochs=3", "nominate=epoch-end",
-		"max_hold=25ms", "late=queue", "removal=drain", "sort_key=batch-now", "diag=off",
+		"max_hold=25ms", "buffer=fixed(0ms)", "late=queue", "removal=drain", "sort_key=batch-now", "diag=off",
 	} {
 		if !strings.Contains(banner, want) {
 			t.Errorf("spec banner %q lacks %q", banner, want)
@@ -453,4 +464,69 @@ func TestJuicerConflictTableThroughInterceptor(t *testing.T) {
 		h.admitted(ran2, "the same transaction's second batch on the key")
 		<-done2
 	})
+}
+
+// Spec 4: the adaptive buffer is off by default; when on, W_max defaults to H
+// and every invalid or inconsistent setting refuses to start.
+func TestJuicerAdaptiveWaitKnobs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer saveJuicerSpecState()()
+	if juicerAW {
+		t.Fatal("COCKROACH_JUICER_AW must default to off")
+	}
+	if c, err := juicerAdaptiveWaitConfig(); err != nil || c.Enabled {
+		t.Fatalf("off: %+v %v", c, err)
+	}
+	juicerAW = true
+	c, err := juicerAdaptiveWaitConfig()
+	if err != nil || !c.Enabled || c.MaxWait != 25*time.Millisecond || c.ScaleMilli != 1000 ||
+		c.LaMode != juicer.AwLaConst || c.LaConst != time.Millisecond || c.AllInversions || c.MinLaSamples != 10 {
+		t.Fatalf("defaults: %+v %v", c, err)
+	}
+	if !strings.Contains(juicerSpecBanner(), "buffer=adaptive(W_max=25ms") {
+		t.Fatalf("banner %q", juicerSpecBanner())
+	}
+	juicerAWMaxUsRaw, juicerAWMaxUsSet = "0", true
+	juicerAWScaleRaw, juicerAWScaleSet = "1.5", true
+	juicerAWInvRaw, juicerAWInvSet = "all", true
+	juicerAWLaRaw, juicerAWLaSet = "online", true
+	juicerAWLaUsRaw, juicerAWLaUsSet = "700", true
+	juicerAWMinRaw, juicerAWMinSet = "5", true
+	c, err = juicerAdaptiveWaitConfig()
+	if err != nil || c.MaxWait != 0 || c.ScaleMilli != 1500 || !c.AllInversions || c.LaMode != juicer.AwLaOnline ||
+		c.LaConst != 700*time.Microsecond || c.MinLaSamples != 5 {
+		t.Fatalf("set: %+v %v", c, err)
+	}
+	juicerEnabled = true
+	for _, tc := range []struct {
+		name string
+		set  func()
+		want string
+	}{
+		{"cap above H", func() { juicerAWMaxUsRaw = "25001" }, "exceeds"},
+		{"negative cap", func() { juicerAWMaxUsRaw = "-1" }, "AW_MAX_US"},
+		{"bad r", func() { juicerAWInvRaw = "some" }, "AW_INVERSIONS"},
+		{"bad L_a mode", func() { juicerAWLaRaw = "wound" }, "L_a mode"},
+		{"bad scale", func() { juicerAWScaleRaw = "0" }, "AW_SCALE"},
+		{"fixed wait", func() { juicerFixedWaitMillis = 1 }, "FIXED_WAIT_MS"},
+		{"manual queues", func() { juicerManualQueueKeysSet = true }, "MANUAL_QUEUE_KEYS"},
+		{"knob with the feature off", func() { juicerAW = false }, "while COCKROACH_JUICER_AW is off"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			defer saveJuicerSpecState()()
+			tc.set()
+			if _, err := juicerAdaptiveWaitConfig(); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("err %v, want %q", err, tc.want)
+			}
+		})
+	}
+	// On, the server gets exactly one more option.
+	juicerAWMaxUsRaw = "1000"
+	on := juicerServerOptions()
+	juicerAW = false
+	juicerAWMaxUsSet, juicerAWScaleSet, juicerAWInvSet, juicerAWLaSet, juicerAWLaUsSet, juicerAWMinSet =
+		false, false, false, false, false, false
+	if base := juicerServerOptions(); len(on) != len(base)+1 {
+		t.Fatalf("options with AW %d, without %d", len(on), len(base))
+	}
 }
