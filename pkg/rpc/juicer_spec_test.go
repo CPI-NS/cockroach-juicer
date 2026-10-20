@@ -30,7 +30,7 @@ func saveJuicerSpecState() func() {
 		juicerLatePolicy, juicerDiagnostics
 	aw := []interface{}{juicerAW, juicerAWMaxUsRaw, juicerAWMaxUsSet, juicerAWScaleRaw, juicerAWScaleSet,
 		juicerAWInvRaw, juicerAWInvSet, juicerAWLaRaw, juicerAWLaSet, juicerAWLaUsRaw, juicerAWLaUsSet,
-		juicerAWMinRaw, juicerAWMinSet, juicerManualQueueKeysSet}
+		juicerAWMinRaw, juicerAWMinSet, juicerManualQueueKeysSet, juicerHoldCalibration}
 	return func() {
 		juicerEnabled, juicerRulesEnv, juicerMaxHoldMillis, juicerFixedWaitMillis = enabled, rules, maxHold, fixed
 		juicerFilterK, juicerFilterS, juicerEpochMillis, juicerIdleEpochs = k, s, epoch, idle
@@ -43,6 +43,7 @@ func saveJuicerSpecState() func() {
 		juicerAWLaUsRaw, juicerAWLaUsSet = aw[9].(string), aw[10].(bool)
 		juicerAWMinRaw, juicerAWMinSet = aw[11].(string), aw[12].(bool)
 		juicerManualQueueKeysSet = aw[13].(bool)
+		juicerHoldCalibration = aw[14].(bool)
 	}
 }
 
@@ -72,6 +73,7 @@ func TestJuicerSpecDefaults(t *testing.T) {
 	for _, want := range []string{
 		"rules=conflict-table", "K=100", "S=1", "epoch=10000ms", "idle_epochs=3", "nominate=epoch-end",
 		"max_hold=25ms", "buffer=fixed(0ms)", "late=queue", "removal=drain", "sort_key=batch-now", "diag=off",
+		"hold_calibration=off",
 	} {
 		if !strings.Contains(banner, want) {
 			t.Errorf("spec banner %q lacks %q", banner, want)
@@ -529,4 +531,30 @@ func TestJuicerAdaptiveWaitKnobs(t *testing.T) {
 	if base := juicerServerOptions(); len(on) != len(base)+1 {
 		t.Fatalf("options with AW %d, without %d", len(on), len(base))
 	}
+}
+
+// Spec 6.2: the calibration mode is off by default, adds one option, says so
+// in the banner, and refuses the adaptive buffer.
+func TestJuicerHoldCalibrationKnob(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer saveJuicerSpecState()()
+	if juicerHoldCalibration {
+		t.Fatal("COCKROACH_JUICER_HOLD_CALIBRATION must default to off")
+	}
+	juicerEnabled = true
+	base := juicerServerOptions()
+	juicerHoldCalibration = true
+	if on := juicerServerOptions(); len(on) != len(base)+1 {
+		t.Fatalf("options %d with calibration, %d without", len(on), len(base))
+	}
+	if !strings.Contains(juicerSpecBanner(), "hold_calibration=on") {
+		t.Fatalf("banner %q", juicerSpecBanner())
+	}
+	juicerAW = true
+	defer func() {
+		if r := recover(); r == nil || !strings.Contains(r.(string), "HOLD_CALIBRATION") {
+			t.Fatalf("calibration with AW: %v", r)
+		}
+	}()
+	_ = juicerServerOptions()
 }

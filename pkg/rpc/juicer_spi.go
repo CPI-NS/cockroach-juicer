@@ -204,6 +204,16 @@ var (
 	juicerAWMinRaw, juicerAWMinSet     = envutil.EnvString("COCKROACH_JUICER_AW_MIN_LA_SAMPLES", 0)
 )
 
+// COCKROACH_JUICER_HOLD_CALIBRATION runs the fork's observe-only calibration of
+// the hold limit (Juicer spec 6.2): the hot-key filters nominate keys as
+// usual, but a nominated key is only watched — nothing is held, delayed or
+// sorted, whatever RULES says — and each epoch logs, per watched key and
+// pooled, the p99 of "a transaction's first message on the key -> its commit
+// or abort applied on this server" (AppliedControlEvents). For baseline
+// calibration runs only; refused with the adaptive buffer and with manual
+// queues (it reports at the filters' epoch boundaries).
+var juicerHoldCalibration = envutil.EnvOrDefaultBool("COCKROACH_JUICER_HOLD_CALIBRATION", false)
+
 // juicerAdaptiveWaitConfig resolves the AW_* knobs. It returns the disabled
 // zero value when COCKROACH_JUICER_AW is off, and an error for any invalid or
 // inconsistent setting.
@@ -554,6 +564,10 @@ func juicerSpecBanner() string {
 	if juicerManualQueueKeysSet {
 		manual = "on"
 	}
+	calibration := "off"
+	if juicerHoldCalibration {
+		calibration = "on(observe-only; rules not enforced)"
+	}
 	diag := "off"
 	if juicerDiagnostics {
 		diag = "on"
@@ -565,11 +579,11 @@ func juicerSpecBanner() string {
 	return fmt.Sprintf(
 		"spec=%s intercept=%s K=%d S=%d epoch=%dms idle_epochs=%d nominate=epoch-end removal=drain"+
 			" rules=%s hold_end=%s max_hold=%dms buffer=%s late=%s order=%s"+
-			" sort_key=batch-now(spec-3.1-exception) diag=%s filter_diag=%s manual_queues=%s",
+			" sort_key=batch-now(spec-3.1-exception) diag=%s filter_diag=%s manual_queues=%s hold_calibration=%s",
 		juicerSpecVersion, strings.Join(append(append([]string{}, juicerUnaryBatchPaths...), juicerStreamBatchPaths...), ","),
 		juicerFilterK, juicerFilterS, juicerEpochMillis, juicerIdleEpochs,
 		mode, holdEnd, juicerMaxHoldMillis, buffer, juicerLatePolicy, juicerOrderLabel(),
-		diag, juicerFilterDiagnostic, manual)
+		diag, juicerFilterDiagnostic, manual, calibration)
 }
 
 // startJuicerHitReporter logs the resolved configuration once, then
@@ -646,6 +660,9 @@ func juicerServerOptions() []grpc.ServerOption {
 	if err != nil {
 		panic("invalid Juicer adaptive wait: " + err.Error())
 	}
+	if juicerHoldCalibration && (awCfg.Enabled || manualKeys != nil) {
+		panic("COCKROACH_JUICER_HOLD_CALIBRATION cannot run with COCKROACH_JUICER_AW or COCKROACH_JUICER_MANUAL_QUEUE_KEYS")
+	}
 	log.Dev.Infof(context.Background(), "juicer: filter diagnostic = %s; filter K = %d; filter S = %d; typed markers = true",
 		juicerFilterDiagnostic, juicerFilterK, juicerFilterS)
 	if manualKeys != nil {
@@ -668,6 +685,9 @@ func juicerServerOptions() []grpc.ServerOption {
 	// unchanged.
 	if awCfg.Enabled {
 		opts = append(opts, grpc.JuicerAdaptiveWait(awCfg))
+	}
+	if juicerHoldCalibration {
+		opts = append(opts, grpc.JuicerHoldCalibration(true))
 	}
 	// Manual mode: the fork skips both hot-key filters and creates a queue only
 	// for the listed keys. Appended only when the variable is set, so the
