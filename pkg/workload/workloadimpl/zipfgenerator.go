@@ -93,6 +93,30 @@ func NewZipfGenerator(
 	return &z, nil
 }
 
+// WithRand returns a generator with z's parameters that draws from rng: the
+// same generator NewZipfGenerator(rng, iMin, iMax, theta, verbose) would build,
+// without recomputing zeta(iMax, theta), a sum over every value of the support
+// (about 0.4 s at ten million values). It lets many workers share one
+// precomputation while keeping their own random streams.
+func (z *ZipfGenerator) WithRand(rng *rand.Rand) *ZipfGenerator {
+	z.zipfGenMu.mu.Lock()
+	defer z.zipfGenMu.mu.Unlock()
+	return &ZipfGenerator{
+		zipfGenMu: ZipfGeneratorMu{
+			r:     rng,
+			iMax:  z.zipfGenMu.iMax,
+			eta:   z.zipfGenMu.eta,
+			zetaN: z.zipfGenMu.zetaN,
+		},
+		theta:        z.theta,
+		iMin:         z.iMin,
+		alpha:        z.alpha,
+		zeta2:        z.zeta2,
+		halfPowTheta: z.halfPowTheta,
+		verbose:      z.verbose,
+	}
+}
+
 // computeZetaIncrementally recomputes zeta(iMax, theta), assuming that
 // sum = zeta(oldIMax, theta). It returns zeta(iMax, theta), computed incrementally.
 func computeZetaIncrementally(oldIMax, iMax uint64, theta float64, sum float64) (float64, error) {

@@ -159,3 +159,25 @@ func TestZipfGenerator(t *testing.T) {
 	runZipfGenerators(t, false)
 	runZipfGenerators(t, true)
 }
+
+// WithRand must give the generator NewZipfGenerator would build on the same
+// stream, without recomputing zeta.
+func TestZipfGeneratorWithRand(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	proto, err := NewZipfGenerator(rand.New(rand.NewPCG(1, 1)), 3, 100003, 0.99, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for seed := uint64(0); seed < 4; seed++ {
+		fresh, err := NewZipfGenerator(rand.New(rand.NewPCG(9, seed)), 3, 100003, 0.99, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cloned := proto.WithRand(rand.New(rand.NewPCG(9, seed)))
+		for i := 0; i < 10000; i++ {
+			if a, b := fresh.Uint64(), cloned.Uint64(); a != b {
+				t.Fatalf("seed %d draw %d: fresh %d, WithRand %d", seed, i, a, b)
+			}
+		}
+	}
+}

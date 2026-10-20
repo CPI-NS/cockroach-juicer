@@ -142,8 +142,11 @@ func TestValidateConfig(t *testing.T) {
 		{name: "defaults"},
 		{name: "round-8 parameters", flags: []string{
 			`--keys=1000`, `--ops-per-txn=10`, `--read-pct=90`, `--zipf-theta=0.99`}},
-		{name: "more keys per txn than keys exist", flags: []string{`--keys=4`, `--ops-per-txn=5`},
+		{name: "more distinct keys per txn than keys exist",
+			flags:       []string{`--keys=4`, `--ops-per-txn=5`, `--distinct-keys`},
 			expectedErr: "must not exceed"},
+		// Independent draws (the default) need no more keys than one.
+		{name: "more draws per txn than keys exist", flags: []string{`--keys=4`, `--ops-per-txn=5`}},
 		{name: "read percentage above 100", flags: []string{`--read-pct=101`},
 			expectedErr: "between 0 and 100"},
 		{name: "theta of exactly one", flags: []string{`--zipf-theta=1`},
@@ -306,6 +309,9 @@ func newTestOpScramble(t *testing.T, keys, opsPerTxn int, theta float64, scrambl
 		rng:         rand.New(rand.NewPCG(3, 4)),
 		keys:        make([]int64, opsPerTxn),
 		args:        make([]interface{}, opsPerTxn),
+		// The draw tests below pin the --distinct-keys path; the default,
+		// independent path is pinned in ycsbt_repeat_test.go.
+		distinct: true,
 	}
 }
 

@@ -20,13 +20,24 @@ go_library(
 
 go_test(
     name = "ycsbt_test",
-    size = "small",
+    size = "medium",
     srcs = [
+        "main_test.go",
         "ycsbt_hotkeys_test.go",
+        "ycsbt_repeat_test.go",
+        "ycsbt_sql_test.go",
         "ycsbt_test.go",
     ],
     embed = [":ycsbt"],
     deps = [
+        "//pkg/base",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils/serverutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
         "//pkg/workload",
         "//pkg/workload/histogram",
         "//pkg/workload/workloadimpl",

@@ -18,8 +18,10 @@
 // ycsbt is what is left when both of those problems are removed. Each
 // transaction:
 //
-//   - draws --ops-per-txn distinct keys from a Zipf distribution over
-//     [0, --keys), on the client, before anything is sent;
+//   - draws --ops-per-txn keys from a Zipf distribution over [0, --keys), on
+//     the client, before anything is sent — independently, so the same key
+//     can be drawn twice (the default since 2026-10-19; --distinct-keys
+//     restores the earlier distinct draw);
 //   - splits them into a read set and a write set by --read-pct;
 //   - issues exactly one statement, whose read set is a SELECT and whose write
 //     set is an UPDATE ... SET field0 = field0 + 1 ... RETURNING, both carried
@@ -122,7 +124,10 @@ const usertableSchema = `(
 )`
 
 const (
-	defaultKeys      = 1000
+	// Ten million rows since 2026-10-19 (the evaluation plan's default
+	// workload: 10M keys, Zipf 0.99, 5 keys per transaction); it was 1000.
+	// Every harness passes --keys explicitly.
+	defaultKeys      = 10000000
 	defaultOpsPerTxn = 5
 	defaultReadPct   = 50
 	defaultZipfTheta = 0.99
@@ -131,7 +136,12 @@ const (
 	// single leaseholder; that is an antipattern to be asked for explicitly,
 	// not the shape a contention workload should have by accident.
 	defaultKeyScramble = true
-	initialFieldValue  = 0
+	// Keys are drawn independently by default: a transaction may touch a key
+	// more than once, as in the other two systems' generators (evaluation
+	// plan, user decision 2026-10-19). --distinct-keys restores the draw of
+	// every run before that date.
+	defaultDistinctKeys = false
+	initialFieldValue   = 0
 )
 
 // Histogram names. A run reports one line per name, so they double as the
@@ -159,15 +169,16 @@ type ycsbt struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
-	keys        int
-	opsPerTxn   int
-	readPct     int
-	zipfTheta   float64
-	splits      int
-	blind       bool
-	readTxnPct  int
-	keyScramble bool
-	readAsOf    string
+	keys         int
+	opsPerTxn    int
+	readPct      int
+	zipfTheta    float64
+	splits       int
+	blind        bool
+	readTxnPct   int
+	keyScramble  bool
+	readAsOf     string
+	distinctKeys bool
 }
 
 // readAsOfRE is what --read-as-of accepts. The value is interpolated into a
@@ -186,8 +197,10 @@ var ycsbtMeta = workload.Meta{
 	Name:        `ycsbt`,
 	Description: `Transactional YCSB: one implicit-transaction statement per transaction, Zipf keys known up front.`,
 	Details: `
-	Each transaction picks --ops-per-txn distinct keys from a Zipf(--zipf-theta)
-	distribution over [0, --keys), splits them into reads and writes by
+	Each transaction picks --ops-per-txn keys from a Zipf(--zipf-theta)
+	distribution over [0, --keys) -- independently, so a key can come up more
+	than once; --distinct-keys makes them distinct -- splits them into reads and
+	writes by
 	--read-pct, and issues a single statement whose read set is a SELECT CTE and
 	whose write set is an "UPDATE ... SET field0 = field0 + 1 ... RETURNING" CTE.
 
@@ -255,12 +268,19 @@ var ycsbtMeta = workload.Meta{
 			// A read timestamp changes how the read-only transaction is
 			// executed, never what the table holds. It must also be settable
 			// per cell on an already-initialised cluster.
-			`read-as-of`: {RuntimeOnly: true},
+			`read-as-of`:    {RuntimeOnly: true},
+			`distinct-keys`: {RuntimeOnly: true},
 		}
 		g.flags.IntVar(&g.keys, `keys`, defaultKeys,
 			`Number of rows loaded into usertable, and the support of the Zipf key distribution.`)
 		g.flags.IntVar(&g.opsPerTxn, `ops-per-txn`, defaultOpsPerTxn,
-			`Number of distinct keys touched by each transaction.`)
+			`Number of keys each transaction draws (independently, unless --distinct-keys).`)
+		g.flags.BoolVar(&g.distinctKeys, `distinct-keys`, defaultDistinctKeys,
+			`Draw each transaction's keys without repetition (rejection sampling), as every run before `+
+				`2026-10-19 did. Off by default: the keys are drawn independently, so a transaction can `+
+				`touch a key more than once. A repeated key collapses in the read SELECT and the UPDATE `+
+				`(SQL touches each row once) and becomes a repeated row of the blind UPSERT (the last value `+
+				`wins). Run time only.`)
 		g.flags.IntVar(&g.readPct, `read-pct`, defaultReadPct,
 			`Percent (0-100) of each transaction's keys that are read rather than incremented.`)
 		g.flags.Float64Var(&g.zipfTheta, `zipf-theta`, defaultZipfTheta,
@@ -322,10 +342,10 @@ func (w *ycsbt) validateConfig() error {
 	if w.opsPerTxn < 1 {
 		return errors.Errorf("--ops-per-txn (%d) must be at least 1", w.opsPerTxn)
 	}
-	// Each transaction needs that many *distinct* keys, so the key space has
-	// to be able to supply them. Without this the draw loop below would spin
-	// forever looking for a key that does not exist.
-	if w.opsPerTxn > w.keys {
+	// With --distinct-keys each transaction needs that many *distinct* keys, so
+	// the key space has to be able to supply them. Without this the draw loop
+	// below would spin forever looking for a key that does not exist.
+	if w.distinctKeys && w.opsPerTxn > w.keys {
 		return errors.Errorf("--ops-per-txn (%d) must not exceed --keys (%d)", w.opsPerTxn, w.keys)
 	}
 	if w.readPct < 0 || w.readPct > 100 {
@@ -560,17 +580,22 @@ func (w *ycsbt) Ops(
 		resultHist = ``
 	}
 	ql := workload.QueryLoad{ResultHist: resultHist}
+	// The distribution's normalizing constant is a sum over every key — about
+	// 0.4 s at 10M keys — so it is computed once and every worker gets a copy
+	// that draws from its own random stream (WithRand), exactly as if it had
+	// built its own generator from that stream.
+	proto, err := workloadimpl.NewZipfGenerator(
+		rand.New(rand.NewPCG(RandomSeed.Seed(), 0)),
+		0 /* iMin */, uint64(w.keys-1), w.zipfTheta, false /* verbose */)
+	if err != nil {
+		return workload.QueryLoad{}, errors.Wrap(err, "building the key distribution")
+	}
 	for i := 0; i < w.connFlags.Concurrency; i++ {
 		// Every worker draws from the same distribution but owns its own
 		// generator and random stream. A single shared generator would
 		// serialize every key draw in the workload behind one mutex, and the
 		// draws are independent anyway.
-		zipf, err := workloadimpl.NewZipfGenerator(
-			rand.New(rand.NewPCG(RandomSeed.Seed(), uint64(i))),
-			0 /* iMin */, uint64(w.keys-1), w.zipfTheta, false /* verbose */)
-		if err != nil {
-			return workload.QueryLoad{}, errors.Wrap(err, "building the key distribution")
-		}
+		zipf := proto.WithRand(rand.New(rand.NewPCG(RandomSeed.Seed(), uint64(i))))
 		op := &ycsbtOp{
 			hists:       reg.GetHandle(),
 			opName:      opName,
@@ -583,6 +608,7 @@ func (w *ycsbt) Ops(
 			keys:        make([]int64, w.opsPerTxn),
 			args:        make([]interface{}, argsLen),
 			retryErrors: &retryErrors,
+			distinct:    w.distinctKeys,
 		}
 		op.stmt = op.sr.Define(stmtStr)
 		if w.blind && w.readTxnPct > 0 {
@@ -633,6 +659,9 @@ type ycsbtOp struct {
 	keys        []int64
 	args        []interface{}
 	retryErrors *atomic.Int64
+	// distinct is --distinct-keys: draw without repetition. Off, the draws
+	// are independent and a key can repeat.
+	distinct bool
 
 	// Mixed one-shot mode (--read-txn-pct): the read-only statement, its own
 	// argument scratch (keys only, no values), and the per-transaction read
@@ -686,12 +715,17 @@ func gcd(a, b int64) int64 {
 	return a
 }
 
-// drawKeys fills o.keys with distinct keys drawn from the Zipf distribution,
-// then shuffles them.
+// drawKeys fills o.keys with keys drawn from the Zipf distribution, then
+// shuffles them. By default the draws are independent and a key can repeat
+// (see --distinct-keys); with o.distinct they are distinct.
 //
-// Distinctness is what makes the transaction well formed: the same key twice
-// in the write set would have one statement increment it through two CTE rows,
-// and twice in the read set is simply wasted. The shuffle then decides which
+// Repetition is well formed: the read SELECT and the UPDATE touch a row once
+// however often its key is listed (their row counts are checked against the
+// distinct counts), and the blind UPSERT takes a repeated row as a second
+// write of the key, the last value winning. --distinct-keys draws without
+// repetition instead (rejection sampling, then a probe), which is what every
+// run before 2026-10-19 did; it lowers the hot keys' share slightly, the more
+// so the more keys a transaction draws. The shuffle then decides which
 // of them are reads and which are writes. Without it the assignment would
 // inherit the draw order, and rejection sampling makes later draws slightly
 // less likely to be the hottest keys -- which would systematically bias the
@@ -715,6 +749,17 @@ func gcd(a, b int64) int64 {
 //     the same seed draws the same keys it drew before the flag existed.
 func (o *ycsbtOp) drawKeys() {
 	n := len(o.keys)
+	if !o.distinct {
+		for i := 0; i < n; i++ {
+			k := int64(o.zipf.Uint64())
+			if k >= o.keySpace { // clamp, as below
+				k = o.keySpace - 1
+			}
+			o.keys[i] = k
+		}
+		o.scrambleAndShuffle()
+		return
+	}
 	for i := 0; i < n; i++ {
 		var k int64
 		for attempt := 0; ; attempt++ {
@@ -741,12 +786,37 @@ func (o *ycsbtOp) drawKeys() {
 		}
 		o.keys[i] = k
 	}
+	o.scrambleAndShuffle()
+}
+
+// scrambleAndShuffle maps the drawn ranks to keys (--key-scramble) and
+// shuffles them; see drawKeys.
+func (o *ycsbtOp) scrambleAndShuffle() {
 	if o.scrambleMul != 0 {
 		for i, r := range o.keys {
 			o.keys[i] = (r * o.scrambleMul) % o.keySpace
 		}
 	}
+	n := len(o.keys)
 	o.rng.Shuffle(n, func(i, j int) { o.keys[i], o.keys[j] = o.keys[j], o.keys[i] })
+}
+
+// distinctCount returns how many distinct values keys holds.
+func distinctCount(keys []int64) int {
+	n := 0
+	for i, k := range keys {
+		dup := false
+		for _, prev := range keys[:i] {
+			if prev == k {
+				dup = true
+				break
+			}
+		}
+		if !dup {
+			n++
+		}
+	}
+	return n
 }
 
 // contains reports whether k is among the first n keys already drawn.
@@ -776,10 +846,12 @@ func (o *ycsbtOp) run(ctx context.Context) error {
 	}
 	// Every key is loaded before the run, so a short count means the statement
 	// silently touched fewer rows than the transaction asked for -- which would
-	// show up as free throughput rather than as an error.
-	if gotReads != int64(o.reads) || gotWrites != int64(o.writes) {
+	// show up as free throughput rather than as an error. A repeated key is one
+	// row on each side.
+	wantReads, wantWrites := distinctCount(o.keys[:o.reads]), distinctCount(o.keys[o.reads:])
+	if gotReads != int64(wantReads) || gotWrites != int64(wantWrites) {
 		return errors.Errorf("ycsbt transaction touched %d/%d rows, want %d reads and %d writes",
-			gotReads, gotWrites, o.reads, o.writes)
+			gotReads, gotWrites, wantReads, wantWrites)
 	}
 	o.hists.Get(o.opName).Record(timeutil.Since(start))
 	return nil
@@ -803,8 +875,9 @@ func (o *ycsbtOp) runBlind(ctx context.Context) error {
 		}
 		return errors.Wrap(err, "ycsbt blind transaction failed")
 	}
-	// The statement lists each key exactly once, so anything but an exact row
-	// count means rows were silently dropped -- which would show up as free
+	// The blind (fast-path) UPSERT counts every input row, a repeated key
+	// included (sql/tablewriter_upsert.go), so anything but the full row count
+	// means rows were silently dropped -- which would show up as free
 	// throughput rather than as an error.
 	if got := tag.RowsAffected(); got != int64(len(o.keys)) {
 		return errors.Errorf("ycsbt blind transaction wrote %d rows, want %d", got, len(o.keys))
@@ -841,9 +914,10 @@ func (o *ycsbtOp) runReadOnly(ctx context.Context) error {
 		return errors.Wrap(err, "ycsbt read transaction failed")
 	}
 	// Every key is loaded before the run, so a short count means the read
-	// silently missed rows -- free throughput rather than an error.
-	if got != int64(len(o.keys)) {
-		return errors.Errorf("ycsbt read transaction found %d rows, want %d", got, len(o.keys))
+	// silently missed rows -- free throughput rather than an error. A repeated
+	// key is one row.
+	if want := distinctCount(o.keys); got != int64(want) {
+		return errors.Errorf("ycsbt read transaction found %d rows, want %d", got, want)
 	}
 	o.hists.Get(readOnlyOpName).Record(timeutil.Since(start))
 	return nil
