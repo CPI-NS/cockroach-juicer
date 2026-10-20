@@ -1,0 +1,511 @@
+{
+  "format": "juicer-spec-conformance",
+  "format_version": "1.0",
+  "spec_version": "1.2",
+  "file": "s09-multikey",
+  "title": "§9 多 key 消息与重复访问",
+  "clauses": ["§9"],
+  "scenarios": [
+    {
+      "id": "S09-01",
+      "name": "多 key 消息的全部标记都放行才整条投递",
+      "spec_refs": ["9.1", "9.2"],
+      "layer": "core",
+      "applies_to": ["crdb", "spanner"],
+      "not_applicable": {"juicer-cc": "juicer-cc 每个操作一个 RPC、一个 key，没有多 key 消息"},
+      "status": "active",
+      "purpose": "消息在 k1、k2 各有一个标记：k1 上立即放行并开始持有，k2 上被挡；整条消息等 k2 放行时才投递。",
+      "config": {
+        "filter": {"mode": "fixed", "managed_keys": ["k1", "k2"]},
+        "rules": "conflict-table",
+        "H_us": 10000,
+        "buffer": {"policy": "fixed", "W_us": 0},
+        "late_policy": "queue",
+        "queue_removal": "drain"
+      },
+      "inputs": [
+        {"t_us": 0, "type": "arrive", "msg": "x", "txn": 10, "ts": 5, "ops": [{"key": "k2", "access": "write"}]},
+        {
+          "t_us": 1000,
+          "type": "arrive",
+          "msg": "m",
+          "txn": 1,
+          "ts": 10,
+          "ops": [{"key": "k1", "access": "write"}, {"key": "k2", "access": "write"}]
+        },
+        {"t_us": 3000, "type": "control_applied", "txn": 10, "kind": "commit", "keys": ["k2"]},
+        {"t_us": 4000, "type": "control_applied", "txn": 1, "kind": "commit", "keys": ["k1", "k2"]}
+      ],
+      "end_us": 5000,
+      "checkpoint_times": [2000],
+      "expect": {
+        "startup": "accept",
+        "deliveries": [{"msg": "x", "t_us": 0, "path": "queued"}, {"msg": "m", "t_us": 3000, "path": "queued"}],
+        "drops": [],
+        "releases": {"k1": [{"msg": "m", "t_us": 1000}], "k2": [{"msg": "x", "t_us": 0}, {"msg": "m", "t_us": 3000}]},
+        "holds": [
+          {"msg": "m", "key": "k1", "start_us": 1000, "end": {"reason": "event", "t_us": 4000}},
+          {"msg": "x", "key": "k2", "start_us": 0, "end": {"reason": "event", "t_us": 3000}},
+          {"msg": "m", "key": "k2", "start_us": 3000, "end": {"reason": "event", "t_us": 4000}}
+        ],
+        "late": [],
+        "checkpoints": [
+          {
+            "t_us": 2000,
+            "managed": ["k1", "k2"],
+            "draining": [],
+            "queue_len": {"k1": 0, "k2": 1},
+            "held_msgs": ["m"],
+            "open_holds": [{"msg": "m", "key": "k1"}, {"msg": "x", "key": "k2"}],
+            "counters": {"intercepted": 2, "direct": 0, "queued_delivered": 1, "dropped": 0, "held_now": 1, "queues_now": 2}
+          }
+        ],
+        "counters": {
+          "intercepted": 2,
+          "direct": 0,
+          "queued_delivered": 2,
+          "dropped": 0,
+          "held_now": 0,
+          "holds_created": 3,
+          "hold_end": {"event": 3, "ttl": 0, "cancel": 0, "queue_deleted": 0},
+          "late_queued": {"read": 0, "write": 0, "lock_read": 0},
+          "late_bypass": {"read": 0, "write": 0, "lock_read": 0},
+          "queues_max": 2,
+          "queues_now": 2
+        }
+      }
+    },
+    {
+      "id": "S09-02",
+      "name": "先放行的标记的持有从它自己放行时计时",
+      "spec_refs": ["9.2", "6.1"],
+      "layer": "core",
+      "applies_to": ["crdb", "spanner"],
+      "not_applicable": {"juicer-cc": "juicer-cc 每个操作一个 RPC、一个 key，没有多 key 消息"},
+      "status": "active",
+      "purpose": "多 key 消息在 k1 上 5 ms 放行、在 k2 上 10 ms 才放行（整条 10 ms 投递）；k1 上的持有按 5 ms 起算，在 15 ms 到期，另一事务在 k1 上的写于 15 ms 放出，而不是 20 ms。",
+      "config": {
+        "filter": {"mode": "fixed", "managed_keys": ["k1", "k2"]},
+        "rules": "conflict-table",
+        "H_us": 10000,
+        "buffer": {"policy": "fixed", "W_us": 0},
+        "late_policy": "queue",
+        "queue_removal": "drain"
+      },
+      "inputs": [
+        {"t_us": 0, "type": "arrive", "msg": "x", "txn": 10, "ts": 5, "ops": [{"key": "k2", "access": "write"}]},
+        {
+          "t_us": 5000,
+          "type": "arrive",
+          "msg": "m",
+          "txn": 1,
+          "ts": 10,
+          "ops": [{"key": "k1", "access": "write"}, {"key": "k2", "access": "write"}]
+        },
+        {"t_us": 12000, "type": "arrive", "msg": "y", "txn": 3, "ts": 20, "ops": [{"key": "k1", "access": "write"}]}
+      ],
+      "end_us": 16000,
+      "expect": {
+        "startup": "accept",
+        "deliveries": [
+          {"msg": "x", "t_us": 0, "path": "queued"},
+          {"msg": "m", "t_us": 10000, "path": "queued"},
+          {"msg": "y", "t_us": 15000, "path": "queued"}
+        ],
+        "drops": [],
+        "releases": {
+          "k1": [{"msg": "m", "t_us": 5000}, {"msg": "y", "t_us": 15000}],
+          "k2": [{"msg": "x", "t_us": 0}, {"msg": "m", "t_us": 10000}]
+        },
+        "holds": [
+          {"msg": "m", "key": "k1", "start_us": 5000, "end": {"reason": "ttl", "t_us": 15000}},
+          {"msg": "y", "key": "k1", "start_us": 15000, "end": "open"},
+          {"msg": "x", "key": "k2", "start_us": 0, "end": {"reason": "ttl", "t_us": 10000}},
+          {"msg": "m", "key": "k2", "start_us": 10000, "end": "open"}
+        ],
+        "late": [],
+        "counters": {
+          "intercepted": 3,
+          "direct": 0,
+          "queued_delivered": 3,
+          "dropped": 0,
+          "held_now": 0,
+          "holds_created": 4,
+          "hold_end": {"event": 0, "ttl": 2, "cancel": 0, "queue_deleted": 0},
+          "late_queued": {"read": 0, "write": 0, "lock_read": 0},
+          "late_bypass": {"read": 0, "write": 0, "lock_read": 0},
+          "queues_max": 2,
+          "queues_now": 2
+        }
+      }
+    },
+    {
+      "id": "S09-03",
+      "name": "同一消息对同一 key 的读与写合并成一个写标记",
+      "spec_refs": ["9.1"],
+      "layer": "core",
+      "applies_to": ["crdb", "spanner"],
+      "not_applicable": {"juicer-cc": "juicer-cc 每个操作一个 RPC、一个 key，没有多 key 消息"},
+      "status": "active",
+      "purpose": "一条消息对 k1 既读又写，只产生一个标记、类型取写：只有一个持有，另一事务的读被它挡住（若按读算就不会被挡）。",
+      "config": {
+        "filter": {"mode": "fixed", "managed_keys": ["k1"]},
+        "rules": "conflict-table",
+        "H_us": 10000,
+        "buffer": {"policy": "fixed", "W_us": 0},
+        "late_policy": "queue",
+        "queue_removal": "drain"
+      },
+      "inputs": [
+        {
+          "t_us": 0,
+          "type": "arrive",
+          "msg": "m",
+          "txn": 1,
+          "ts": 10,
+          "ops": [{"key": "k1", "access": "read"}, {"key": "k1", "access": "write"}]
+        },
+        {"t_us": 1000, "type": "arrive", "msg": "r", "txn": 2, "ts": 20, "ops": [{"key": "k1", "access": "read"}]},
+        {"t_us": 2000, "type": "control_applied", "txn": 1, "kind": "commit", "keys": ["k1"]}
+      ],
+      "end_us": 3000,
+      "expect": {
+        "startup": "accept",
+        "deliveries": [{"msg": "m", "t_us": 0, "path": "queued"}, {"msg": "r", "t_us": 2000, "path": "queued"}],
+        "drops": [],
+        "releases": {"k1": [{"msg": "m", "t_us": 0}, {"msg": "r", "t_us": 2000}]},
+        "holds": [
+          {"msg": "m", "key": "k1", "start_us": 0, "end": {"reason": "event", "t_us": 2000}},
+          {"msg": "r", "key": "k1", "start_us": 2000, "end": "open"}
+        ],
+        "late": [],
+        "counters": {
+          "intercepted": 2,
+          "direct": 0,
+          "queued_delivered": 2,
+          "dropped": 0,
+          "held_now": 0,
+          "holds_created": 2,
+          "hold_end": {"event": 1, "ttl": 0, "cancel": 0, "queue_deleted": 0},
+          "late_queued": {"read": 0, "write": 0, "lock_read": 0},
+          "late_bypass": {"read": 0, "write": 0, "lock_read": 0},
+          "queues_max": 1,
+          "queues_now": 1
+        }
+      }
+    },
+    {
+      "id": "S09-04",
+      "name": "不受管的 key 不产生标记",
+      "spec_refs": ["9.1", "9.2"],
+      "layer": "core",
+      "applies_to": ["crdb", "spanner"],
+      "not_applicable": {"juicer-cc": "juicer-cc 每个操作一个 RPC、一个 key，没有多 key 消息"},
+      "status": "active",
+      "purpose": "消息碰到受管的 k1 与不受管的 k9：只在 k1 上有标记，k1 放行即整条投递。",
+      "config": {
+        "filter": {"mode": "fixed", "managed_keys": ["k1"]},
+        "rules": "conflict-table",
+        "H_us": 10000,
+        "buffer": {"policy": "fixed", "W_us": 0},
+        "late_policy": "queue",
+        "queue_removal": "drain"
+      },
+      "inputs": [
+        {"t_us": 0, "type": "arrive", "msg": "x", "txn": 10, "ts": 5, "ops": [{"key": "k1", "access": "write"}]},
+        {
+          "t_us": 1000,
+          "type": "arrive",
+          "msg": "m",
+          "txn": 1,
+          "ts": 10,
+          "ops": [{"key": "k1", "access": "write"}, {"key": "k9", "access": "write"}]
+        },
+        {"t_us": 2000, "type": "control_applied", "txn": 10, "kind": "commit", "keys": ["k1"]},
+        {"t_us": 3000, "type": "control_applied", "txn": 1, "kind": "commit", "keys": ["k1", "k9"]}
+      ],
+      "end_us": 4000,
+      "expect": {
+        "startup": "accept",
+        "deliveries": [{"msg": "x", "t_us": 0, "path": "queued"}, {"msg": "m", "t_us": 2000, "path": "queued"}],
+        "drops": [],
+        "releases": {"k1": [{"msg": "x", "t_us": 0}, {"msg": "m", "t_us": 2000}]},
+        "holds": [
+          {"msg": "x", "key": "k1", "start_us": 0, "end": {"reason": "event", "t_us": 2000}},
+          {"msg": "m", "key": "k1", "start_us": 2000, "end": {"reason": "event", "t_us": 3000}}
+        ],
+        "late": [],
+        "counters": {
+          "intercepted": 2,
+          "direct": 0,
+          "queued_delivered": 2,
+          "dropped": 0,
+          "held_now": 0,
+          "holds_created": 2,
+          "hold_end": {"event": 2, "ttl": 0, "cancel": 0, "queue_deleted": 0},
+          "late_queued": {"read": 0, "write": 0, "lock_read": 0},
+          "late_bypass": {"read": 0, "write": 0, "lock_read": 0},
+          "queues_max": 1,
+          "queues_now": 1
+        }
+      }
+    },
+    {
+      "id": "S09-05",
+      "name": "juicer-cc：同一事务两条消息同时访问同一 key",
+      "spec_refs": ["9.4(b)", "9.4(c)", "9.4(d)", "7.1"],
+      "layer": "core",
+      "applies_to": ["juicer-cc"],
+      "not_applicable": {
+        "crdb": "CockroachDB 同一事务的两次发送批头时钟不同，同排序键同时到达的情形见 S05-06、S05-11",
+        "spanner": "Spanner 一个事务在一个分片上只有一条数据消息（准备消息），同一事务不会有第二个标记落在同一 key 上"
+      },
+      "status": "active",
+      "purpose": "事务 1 对 k1 的写与读排序键相同、同时到达：互不挡、都不算迟到、都不算乱序，各自登记控制类持有，在事务 1 提交执行完时一起结束。",
+      "config": {
+        "filter": {"mode": "hotspot", "K": 100, "S": 1, "idle_epochs": 3, "epoch_us": 1000000},
+        "rules": "conflict-table",
+        "H_us": 10000,
+        "buffer": {"policy": "fixed", "W_us": 0},
+        "late_policy": "queue",
+        "queue_removal": "drain"
+      },
+      "inputs": [
+        {"t_us": 100000, "type": "level1_abort", "txn": 90, "keys": ["k1"]},
+        {
+          "t_us": 200000,
+          "type": "arrive",
+          "msg": "p1",
+          "txn": 91,
+          "ts": 500,
+          "ops": [{"key": "k1", "access": "write"}]
+        },
+        {
+          "t_us": 300000,
+          "type": "arrive",
+          "msg": "p2",
+          "txn": 92,
+          "ts": 300,
+          "ops": [{"key": "k1", "access": "write"}]
+        },
+        {"t_us": 1000000, "type": "epoch_end"},
+        {
+          "t_us": 1100000,
+          "type": "arrive",
+          "msg": "a",
+          "txn": 1,
+          "ts": 1000,
+          "ops": [{"key": "k1", "access": "write"}]
+        },
+        {
+          "t_us": 1100000,
+          "type": "arrive",
+          "msg": "b",
+          "txn": 1,
+          "ts": 1000,
+          "ops": [{"key": "k1", "access": "read", "class": "control"}]
+        },
+        {
+          "t_us": 1101000,
+          "type": "arrive",
+          "msg": "c",
+          "txn": 2,
+          "ts": 1100,
+          "ops": [{"key": "k1", "access": "write"}]
+        },
+        {"t_us": 1102000, "type": "control_applied", "txn": 1, "kind": "commit", "keys": ["k1"]},
+        {"t_us": 1103000, "type": "control_applied", "txn": 2, "kind": "commit", "keys": ["k1"]},
+        {"t_us": 2000000, "type": "epoch_end"}
+      ],
+      "end_us": 2100000,
+      "expect": {
+        "startup": "accept",
+        "deliveries": [
+          {"msg": "p1", "t_us": 200000, "path": "direct"},
+          {"msg": "p2", "t_us": 300000, "path": "direct"},
+          {"msg": "a", "t_us": 1100000, "path": "queued"},
+          {"msg": "b", "t_us": 1100000, "path": "queued"},
+          {"msg": "c", "t_us": 1102000, "path": "queued"}
+        ],
+        "drops": [],
+        "releases": {"k1": [{"msg": "a", "t_us": 1100000}, {"msg": "b", "t_us": 1100000}, {"msg": "c", "t_us": 1102000}]},
+        "holds": [
+          {"msg": "a", "key": "k1", "start_us": 1100000, "end": {"reason": "event", "t_us": 1102000}},
+          {"msg": "b", "key": "k1", "start_us": 1100000, "end": {"reason": "event", "t_us": 1102000}},
+          {"msg": "c", "key": "k1", "start_us": 1102000, "end": {"reason": "event", "t_us": 1103000}}
+        ],
+        "late": [],
+        "queue_events": [{"t_us": 1000000, "key": "k1", "event": "created"}],
+        "epochs": [{"index": 0, "ooo": {"k1": 1}}, {"index": 1, "ooo": {}}],
+        "counters": {
+          "intercepted": 5,
+          "direct": 2,
+          "queued_delivered": 3,
+          "dropped": 0,
+          "held_now": 0,
+          "holds_created": 3,
+          "hold_end": {"event": 3, "ttl": 0, "cancel": 0, "queue_deleted": 0},
+          "late_queued": {"read": 0, "write": 0, "lock_read": 0},
+          "late_bypass": {"read": 0, "write": 0, "lock_read": 0},
+          "queues_max": 1,
+          "queues_now": 1
+        }
+      }
+    },
+    {
+      "id": "S09-06",
+      "name": "第一级按“事务 × key”计一次中止",
+      "spec_refs": ["9.4(d)", "2.1"],
+      "layer": "adapter",
+      "applies_to": ["juicer-cc", "crdb"],
+      "not_applicable": {"spanner": "Spanner 一个事务在一个分片上只有一条数据消息，同一（事务, key）至多两个中止来源（失败回复与终止消息），构造不出既能区分“去重 / 不去重”又不在第一级平局的输入"},
+      "status": "active",
+      "purpose": "K = 1：k1 被两个事务各拒绝一次（计 2）；k2 被一个事务通过三个来源报告（两条失败回复、一条中止消息，计 1）。去重后 k2 进不了前 1，不被第二级观察，于是周期末提名 k1；若按来源计数（3 > 2），k2 会进前 1 并以更多的乱序被提名。",
+      "config": {
+        "filter": {"mode": "hotspot", "K": 1, "S": 1, "idle_epochs": 3, "epoch_us": 1000000},
+        "rules": "conflict-table",
+        "H_us": 10000,
+        "buffer": {"policy": "fixed", "W_us": 0},
+        "late_policy": "queue",
+        "queue_removal": "drain"
+      },
+      "adapter_notes": {
+        "juicer-cc": "中止来源走 juicer-cc 拦截器：失败回复（SelfAborted）与 Abort RPC 带的 key；协议用 d2PLWW。",
+        "crdb": "中止来源走 CockroachDB 接入层：c1、c2 是同一事务对 k2 的两个批次（批头时钟 300、310）返回错误；中止消息用 EndTxn(commit=false) 或点名事务 3、状态 ABORTED 的 ResolveIntent。"
+      },
+      "inputs": [
+        {
+          "t_us": 100000,
+          "type": "arrive",
+          "msg": "a1",
+          "txn": 1,
+          "ts": 100,
+          "ops": [{"key": "k1", "access": "write"}]
+        },
+        {"t_us": 101000, "type": "reply", "msg": "a1", "outcome": "ok"},
+        {"t_us": 102000, "type": "control_arrive", "txn": 1, "kind": "abort", "keys": ["k1"]},
+        {
+          "t_us": 110000,
+          "type": "arrive",
+          "msg": "a2",
+          "txn": 2,
+          "ts": 200,
+          "ops": [{"key": "k1", "access": "write"}]
+        },
+        {"t_us": 111000, "type": "reply", "msg": "a2", "outcome": "ok"},
+        {"t_us": 112000, "type": "control_arrive", "txn": 2, "kind": "abort", "keys": ["k1"]},
+        {
+          "t_us": 200000,
+          "type": "arrive",
+          "msg": "c1",
+          "txn": 3,
+          "ts": 300,
+          "ops": [{"key": "k2", "access": "write"}]
+        },
+        {
+          "t_us": 200000,
+          "type": "arrive",
+          "msg": "c2",
+          "txn": 3,
+          "ts": 310,
+          "ops": [{"key": "k2", "access": "write"}],
+          "ts_by_system": {"juicer-cc": 300}
+        },
+        {"t_us": 201000, "type": "reply", "msg": "c1", "outcome": "failed"},
+        {"t_us": 202000, "type": "reply", "msg": "c2", "outcome": "failed"},
+        {"t_us": 203000, "type": "control_arrive", "txn": 3, "kind": "abort", "keys": ["k2"]},
+        {
+          "t_us": 400000,
+          "type": "arrive",
+          "msg": "d1",
+          "txn": 21,
+          "ts": 900,
+          "ops": [{"key": "k2", "access": "write"}]
+        },
+        {
+          "t_us": 401000,
+          "type": "arrive",
+          "msg": "d2",
+          "txn": 22,
+          "ts": 800,
+          "ops": [{"key": "k2", "access": "write"}]
+        },
+        {
+          "t_us": 402000,
+          "type": "arrive",
+          "msg": "d3",
+          "txn": 23,
+          "ts": 700,
+          "ops": [{"key": "k2", "access": "write"}]
+        },
+        {
+          "t_us": 500000,
+          "type": "arrive",
+          "msg": "e1",
+          "txn": 24,
+          "ts": 500,
+          "ops": [{"key": "k1", "access": "write"}]
+        },
+        {
+          "t_us": 501000,
+          "type": "arrive",
+          "msg": "e2",
+          "txn": 25,
+          "ts": 400,
+          "ops": [{"key": "k1", "access": "write"}]
+        },
+        {"t_us": 1000000, "type": "epoch_end"}
+      ],
+      "end_us": 1100000,
+      "expect": {
+        "queue_events": [{"t_us": 1000000, "key": "k1", "event": "created"}],
+        "epochs": [{"index": 0, "ooo": {"k1": 1}}]
+      },
+      "notes": "这是接入层场景：没有 level1_abort 事件，第一级的输入来自失败回复与中止消息，由各系统接入层按 2.1 声明的来源喂给第一级。期望依赖两套接入层都把“带 key 的中止消息”声明为中止来源（juicer-cc 与 CockroachDB 现在都如此）。"
+    },
+    {
+      "id": "S09-07",
+      "name": "Spanner：终止消息冲刷本事务被扣的消息，留下的孤儿标记被清除",
+      "spec_refs": ["9.3", "1.2", "1.6"],
+      "layer": "adapter",
+      "applies_to": ["spanner"],
+      "not_applicable": {"juicer-cc": "juicer-cc 没有提前投递路径（9.3 不适用）", "crdb": "CockroachDB 没有提前投递路径（9.3 不适用）"},
+      "status": "active",
+      "purpose": "事务 2 的准备消息在 k1 上被扣；事务 2 的 Abort 到达时，接入层按 9.3 允许的做法把它被扣的准备消息提前投递；留在堆里的孤儿标记必须被清除，不得放行成持有，之后的写不被它挡。",
+      "config": {
+        "filter": {"mode": "fixed", "managed_keys": ["k1"]},
+        "rules": "conflict-table",
+        "H_us": 10000,
+        "buffer": {"policy": "fixed", "W_us": 0},
+        "late_policy": "queue",
+        "queue_removal": "drain"
+      },
+      "adapter_notes": {
+        "spanner": "默认卫生开关（--juicer_abort_first、--juicer_purge_orphan_markers 都开）；2 ms 是客户端发来事务 2 的 Abort。Abort 与 b 交给存储的先后不比较（取决于 L1）。"
+      },
+      "inputs": [
+        {"t_us": 0, "type": "arrive", "msg": "a", "txn": 1, "ts": 100, "ops": [{"key": "k1", "access": "write"}]},
+        {"t_us": 1000, "type": "arrive", "msg": "b", "txn": 2, "ts": 200, "ops": [{"key": "k1", "access": "write"}]},
+        {"t_us": 2000, "type": "control_arrive", "txn": 2, "kind": "abort", "keys": ["k1"]},
+        {"t_us": 3000, "type": "control_applied", "txn": 1, "kind": "commit", "keys": ["k1"]},
+        {"t_us": 4000, "type": "arrive", "msg": "d", "txn": 3, "ts": 300, "ops": [{"key": "k1", "access": "write"}]}
+      ],
+      "end_us": 5000,
+      "checkpoint_times": [3500],
+      "expect": {
+        "deliveries": [
+          {"msg": "a", "t_us": 0, "path": "queued"},
+          {"msg": "b", "t_us": 2000, "path": "queued", "early": true},
+          {"msg": "d", "t_us": 4000, "path": "queued"}
+        ],
+        "holds": [
+          {"msg": "a", "key": "k1", "start_us": 0, "end": {"reason": "event", "t_us": 3000}},
+          {"msg": "d", "key": "k1", "start_us": 4000, "end": "open"}
+        ],
+        "no_hold_for": [{"msg": "b", "key": "k1"}],
+        "checkpoints": [{"t_us": 3500, "queue_len": {"k1": 0}, "open_holds": []}]
+      },
+      "notes": "b 的投递时刻取 Spanner 接入层声明的冲刷时刻（Abort 到达时），这是 9.3 允许的系统特有做法；规范只要求孤儿标记不成为无人释放的持有，所以 b 的“提前投递”标了 early，比较时只要求它恰好投递一次、不晚于 3 ms。"
+    }
+  ]
+}

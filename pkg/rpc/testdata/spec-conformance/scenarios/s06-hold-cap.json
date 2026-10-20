@@ -1,0 +1,259 @@
+{
+  "format": "juicer-spec-conformance",
+  "format_version": "1.0",
+  "spec_version": "1.2",
+  "file": "s06-hold-cap",
+  "title": "§6 持有与上限",
+  "clauses": ["§6"],
+  "scenarios": [
+    {
+      "id": "S06-01",
+      "name": "被多个持有挡住时，最后一个挡人的持有到期才放",
+      "spec_refs": ["6.1"],
+      "layer": "core",
+      "applies_to": ["juicer-cc", "crdb", "spanner"],
+      "status": "active",
+      "purpose": "写被两个读持有挡住，第一个到期时仍被第二个挡，第二个到期的那一刻放出；全程没有任何事件。",
+      "config": {
+        "filter": {"mode": "fixed", "managed_keys": ["k1"]},
+        "rules": "conflict-table",
+        "H_us": 10000,
+        "buffer": {"policy": "fixed", "W_us": 0},
+        "late_policy": "queue",
+        "queue_removal": "drain"
+      },
+      "inputs": [
+        {"t_us": 0, "type": "arrive", "msg": "a", "txn": 1, "ts": 100, "ops": [{"key": "k1", "access": "read"}]},
+        {"t_us": 2000, "type": "arrive", "msg": "c", "txn": 2, "ts": 200, "ops": [{"key": "k1", "access": "read"}]},
+        {"t_us": 3000, "type": "arrive", "msg": "w", "txn": 3, "ts": 300, "ops": [{"key": "k1", "access": "write"}]}
+      ],
+      "end_us": 13000,
+      "expect": {
+        "startup": "accept",
+        "deliveries": [
+          {"msg": "a", "t_us": 0, "path": "queued"},
+          {"msg": "c", "t_us": 2000, "path": "queued"},
+          {"msg": "w", "t_us": 12000, "path": "queued"}
+        ],
+        "drops": [],
+        "releases": {"k1": [{"msg": "a", "t_us": 0}, {"msg": "c", "t_us": 2000}, {"msg": "w", "t_us": 12000}]},
+        "holds": [
+          {"msg": "a", "key": "k1", "start_us": 0, "end": {"reason": "ttl", "t_us": 10000}},
+          {"msg": "c", "key": "k1", "start_us": 2000, "end": {"reason": "ttl", "t_us": 12000}},
+          {"msg": "w", "key": "k1", "start_us": 12000, "end": "open"}
+        ],
+        "late": [],
+        "counters": {
+          "intercepted": 3,
+          "direct": 0,
+          "queued_delivered": 3,
+          "dropped": 0,
+          "held_now": 0,
+          "holds_created": 3,
+          "hold_end": {"event": 0, "ttl": 2, "cancel": 0, "queue_deleted": 0},
+          "late_queued": {"read": 0, "write": 0, "lock_read": 0},
+          "late_bypass": {"read": 0, "write": 0, "lock_read": 0},
+          "queues_max": 1,
+          "queues_now": 1
+        }
+      }
+    },
+    {
+      "id": "S06-02",
+      "name": "两个事务在两个受管 key 上互相挡住，持有到期打破（多 key 消息）",
+      "spec_refs": ["6.1", "§6 跨 key 互等", "9.2", "7.2"],
+      "layer": "core",
+      "applies_to": ["crdb", "spanner"],
+      "not_applicable": {"juicer-cc": "juicer-cc 每个操作一个 RPC、一个 key，没有多 key 消息；单 key 消息版见 S06-03"},
+      "status": "active",
+      "purpose": "论文 §5.5 的例子：事务 1 的消息在 k1 上已放行、k2 上被事务 2 挡；事务 2 的消息在 k2 上已放行、k1 上（迟到进队）被事务 1 挡；没有任何事件，各自的持有到期后两边都放出。",
+      "config": {
+        "filter": {"mode": "fixed", "managed_keys": ["k1", "k2"]},
+        "rules": "conflict-table",
+        "H_us": 10000,
+        "buffer": {"policy": "fixed", "W_us": 0},
+        "late_policy": "queue",
+        "queue_removal": "drain"
+      },
+      "inputs": [
+        {"t_us": 0, "type": "arrive", "msg": "x", "txn": 10, "ts": 5, "ops": [{"key": "k2", "access": "write"}]},
+        {
+          "t_us": 1000,
+          "type": "arrive",
+          "msg": "m1",
+          "txn": 1,
+          "ts": 10,
+          "ops": [{"key": "k1", "access": "write"}, {"key": "k2", "access": "write"}]
+        },
+        {
+          "t_us": 2000,
+          "type": "arrive",
+          "msg": "m2",
+          "txn": 2,
+          "ts": 8,
+          "ops": [{"key": "k1", "access": "write"}, {"key": "k2", "access": "write"}]
+        },
+        {"t_us": 3000, "type": "control_applied", "txn": 10, "kind": "commit", "keys": ["k2"]}
+      ],
+      "end_us": 14000,
+      "expect": {
+        "startup": "accept",
+        "deliveries": [
+          {"msg": "x", "t_us": 0, "path": "queued"},
+          {"msg": "m2", "t_us": 11000, "path": "queued"},
+          {"msg": "m1", "t_us": 13000, "path": "queued"}
+        ],
+        "drops": [],
+        "releases": {
+          "k1": [{"msg": "m1", "t_us": 1000}, {"msg": "m2", "t_us": 11000}],
+          "k2": [{"msg": "x", "t_us": 0}, {"msg": "m2", "t_us": 3000}, {"msg": "m1", "t_us": 13000}]
+        },
+        "holds": [
+          {"msg": "m1", "key": "k1", "start_us": 1000, "end": {"reason": "ttl", "t_us": 11000}},
+          {"msg": "m2", "key": "k1", "start_us": 11000, "end": "open"},
+          {"msg": "x", "key": "k2", "start_us": 0, "end": {"reason": "event", "t_us": 3000}},
+          {"msg": "m2", "key": "k2", "start_us": 3000, "end": {"reason": "ttl", "t_us": 13000}},
+          {"msg": "m1", "key": "k2", "start_us": 13000, "end": "open"}
+        ],
+        "late": [{"msg": "m2", "key": "k1", "handling": "queued"}],
+        "counters": {
+          "intercepted": 3,
+          "direct": 0,
+          "queued_delivered": 3,
+          "dropped": 0,
+          "held_now": 0,
+          "holds_created": 5,
+          "hold_end": {"event": 1, "ttl": 2, "cancel": 0, "queue_deleted": 0},
+          "late_queued": {"read": 0, "write": 1, "lock_read": 0},
+          "late_bypass": {"read": 0, "write": 0, "lock_read": 0},
+          "queues_max": 2,
+          "queues_now": 2
+        }
+      }
+    },
+    {
+      "id": "S06-03",
+      "name": "两个事务在两个受管 key 上互相挡住，持有到期打破（单 key 消息）",
+      "spec_refs": ["6.1", "§6 跨 key 互等", "7.2"],
+      "layer": "core",
+      "applies_to": ["juicer-cc", "crdb"],
+      "not_applicable": {"spanner": "Spanner 一个事务在一个分片上只有一条消息，两 key 的访问在同一条准备消息里；多 key 消息版见 S06-02"},
+      "status": "active",
+      "purpose": "同 S06-02，但每条消息只碰一个 key（juicer-cc 每个操作一个 RPC；CockroachDB 一个批次被拆到两个 range）：事务 1 持 k1、等 k2，事务 2 持 k2、等 k1，靠持有到期打破。",
+      "config": {
+        "filter": {"mode": "fixed", "managed_keys": ["k1", "k2"]},
+        "rules": "conflict-table",
+        "H_us": 10000,
+        "buffer": {"policy": "fixed", "W_us": 0},
+        "late_policy": "queue",
+        "queue_removal": "drain"
+      },
+      "inputs": [
+        {"t_us": 0, "type": "arrive", "msg": "x", "txn": 10, "ts": 5, "ops": [{"key": "k2", "access": "write"}]},
+        {"t_us": 1000, "type": "arrive", "msg": "a1", "txn": 1, "ts": 10, "ops": [{"key": "k1", "access": "write"}]},
+        {"t_us": 1000, "type": "arrive", "msg": "a2", "txn": 1, "ts": 10, "ops": [{"key": "k2", "access": "write"}]},
+        {"t_us": 2000, "type": "arrive", "msg": "b1", "txn": 2, "ts": 8, "ops": [{"key": "k1", "access": "write"}]},
+        {"t_us": 2000, "type": "arrive", "msg": "b2", "txn": 2, "ts": 8, "ops": [{"key": "k2", "access": "write"}]},
+        {"t_us": 3000, "type": "control_applied", "txn": 10, "kind": "commit", "keys": ["k2"]}
+      ],
+      "end_us": 14000,
+      "expect": {
+        "startup": "accept",
+        "deliveries": [
+          {"msg": "x", "t_us": 0, "path": "queued"},
+          {"msg": "a1", "t_us": 1000, "path": "queued"},
+          {"msg": "b2", "t_us": 3000, "path": "queued"},
+          {"msg": "b1", "t_us": 11000, "path": "queued"},
+          {"msg": "a2", "t_us": 13000, "path": "queued"}
+        ],
+        "drops": [],
+        "releases": {
+          "k1": [{"msg": "a1", "t_us": 1000}, {"msg": "b1", "t_us": 11000}],
+          "k2": [{"msg": "x", "t_us": 0}, {"msg": "b2", "t_us": 3000}, {"msg": "a2", "t_us": 13000}]
+        },
+        "holds": [
+          {"msg": "a1", "key": "k1", "start_us": 1000, "end": {"reason": "ttl", "t_us": 11000}},
+          {"msg": "b1", "key": "k1", "start_us": 11000, "end": "open"},
+          {"msg": "x", "key": "k2", "start_us": 0, "end": {"reason": "event", "t_us": 3000}},
+          {"msg": "b2", "key": "k2", "start_us": 3000, "end": {"reason": "ttl", "t_us": 13000}},
+          {"msg": "a2", "key": "k2", "start_us": 13000, "end": "open"}
+        ],
+        "late": [{"msg": "b1", "key": "k1", "handling": "queued"}],
+        "counters": {
+          "intercepted": 5,
+          "direct": 0,
+          "queued_delivered": 5,
+          "dropped": 0,
+          "held_now": 0,
+          "holds_created": 5,
+          "hold_end": {"event": 1, "ttl": 2, "cancel": 0, "queue_deleted": 0},
+          "late_queued": {"read": 0, "write": 1, "lock_read": 0},
+          "late_bypass": {"read": 0, "write": 0, "lock_read": 0},
+          "queues_max": 2,
+          "queues_now": 2
+        }
+      }
+    },
+    {
+      "id": "S06-04",
+      "name": "Spanner：同时扣留的消息数达到上限后，新消息整条直通",
+      "spec_refs": ["6.5"],
+      "layer": "adapter",
+      "applies_to": ["spanner"],
+      "not_applicable": {"juicer-cc": "juicer-cc 没有扣留总数上限（6.5 是可选项）", "crdb": "CockroachDB 没有扣留总数上限（6.5 是可选项）"},
+      "status": "active",
+      "purpose": "扣留上限设为 2：已有两条消息被扣时，第三条要被扣的消息整条直接投递、不进队、不登记持有，并计数。",
+      "config": {
+        "filter": {"mode": "fixed", "managed_keys": ["k1"]},
+        "rules": "conflict-table",
+        "H_us": 10000,
+        "buffer": {"policy": "fixed", "W_us": 0},
+        "late_policy": "queue",
+        "queue_removal": "drain",
+        "max_held": 2
+      },
+      "adapter_notes": {"spanner": "--juicer_max_held=2（核心层的 JuicerConfig 同名字段）；四条都是读写事务的准备消息。"},
+      "inputs": [
+        {"t_us": 0, "type": "arrive", "msg": "a", "txn": 1, "ts": 100, "ops": [{"key": "k1", "access": "write"}]},
+        {"t_us": 1000, "type": "arrive", "msg": "b", "txn": 2, "ts": 200, "ops": [{"key": "k1", "access": "write"}]},
+        {"t_us": 2000, "type": "arrive", "msg": "c", "txn": 3, "ts": 300, "ops": [{"key": "k1", "access": "write"}]},
+        {"t_us": 3000, "type": "arrive", "msg": "d", "txn": 4, "ts": 400, "ops": [{"key": "k1", "access": "write"}]},
+        {"t_us": 4000, "type": "control_applied", "txn": 1, "kind": "commit", "keys": ["k1"]},
+        {"t_us": 5000, "type": "control_applied", "txn": 2, "kind": "commit", "keys": ["k1"]},
+        {"t_us": 6000, "type": "control_applied", "txn": 3, "kind": "commit", "keys": ["k1"]}
+      ],
+      "end_us": 7000,
+      "expect": {
+        "startup": "accept",
+        "deliveries": [
+          {"msg": "a", "t_us": 0, "path": "queued"},
+          {"msg": "d", "t_us": 3000, "path": "direct"},
+          {"msg": "b", "t_us": 4000, "path": "queued"},
+          {"msg": "c", "t_us": 5000, "path": "queued"}
+        ],
+        "drops": [],
+        "releases": {"k1": [{"msg": "a", "t_us": 0}, {"msg": "b", "t_us": 4000}, {"msg": "c", "t_us": 5000}]},
+        "holds": [
+          {"msg": "a", "key": "k1", "start_us": 0, "end": {"reason": "event", "t_us": 4000}},
+          {"msg": "b", "key": "k1", "start_us": 4000, "end": {"reason": "event", "t_us": 5000}},
+          {"msg": "c", "key": "k1", "start_us": 5000, "end": {"reason": "event", "t_us": 6000}}
+        ],
+        "late": [],
+        "counters": {
+          "intercepted": 4,
+          "direct": 1,
+          "queued_delivered": 3,
+          "dropped": 0,
+          "held_now": 0,
+          "holds_created": 3,
+          "hold_end": {"event": 3, "ttl": 0, "cancel": 0, "queue_deleted": 0},
+          "late_queued": {"read": 0, "write": 0, "lock_read": 0},
+          "late_bypass": {"read": 0, "write": 0, "lock_read": 0},
+          "queues_max": 1,
+          "queues_now": 1,
+          "max_held_pass": 1
+        }
+      }
+    }
+  ]
+}

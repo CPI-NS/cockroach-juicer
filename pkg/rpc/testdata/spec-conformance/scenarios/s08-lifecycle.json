@@ -1,0 +1,537 @@
+{
+  "format": "juicer-spec-conformance",
+  "format_version": "1.0",
+  "spec_version": "1.2",
+  "file": "s08-lifecycle",
+  "title": "§8 队列生命周期",
+  "clauses": ["§8"],
+  "scenarios": [
+    {
+      "id": "S08-01",
+      "name": "撤队列：先停收，已排队的按序经依赖判定放出，堆空即删",
+      "spec_refs": ["8.1", "6.4"],
+      "layer": "core",
+      "applies_to": ["juicer-cc", "crdb", "spanner"],
+      "status": "active",
+      "purpose": "k1 连续 3 个周期没有乱序，周期 3 末开始排空时队里有 3 个被挡的写；排空期间新到的写直接投递、不登记持有、不被旧持有挡；3 个写按排序键、各自等挡人者结束才放出；最后一个放出时堆空，队列删除，它刚登记的持有以“队列删除”结束；之后的消息按不受管处理。",
+      "config": {
+        "filter": {"mode": "hotspot", "K": 100, "S": 1, "idle_epochs": 3, "epoch_us": 1000000},
+        "rules": "conflict-table",
+        "H_us": 20000,
+        "buffer": {"policy": "fixed", "W_us": 0},
+        "late_policy": "queue",
+        "queue_removal": "drain"
+      },
+      "inputs": [
+        {"t_us": 100000, "type": "level1_abort", "txn": 90, "keys": ["k1"]},
+        {
+          "t_us": 200000,
+          "type": "arrive",
+          "msg": "p1",
+          "txn": 91,
+          "ts": 500,
+          "ops": [{"key": "k1", "access": "write"}]
+        },
+        {
+          "t_us": 300000,
+          "type": "arrive",
+          "msg": "p2",
+          "txn": 92,
+          "ts": 300,
+          "ops": [{"key": "k1", "access": "write"}]
+        },
+        {"t_us": 1000000, "type": "epoch_end"},
+        {"t_us": 2000000, "type": "epoch_end"},
+        {"t_us": 3000000, "type": "epoch_end"},
+        {
+          "t_us": 3990000,
+          "type": "arrive",
+          "msg": "a",
+          "txn": 1,
+          "ts": 1000,
+          "ops": [{"key": "k1", "access": "write"}]
+        },
+        {
+          "t_us": 3991000,
+          "type": "arrive",
+          "msg": "b",
+          "txn": 2,
+          "ts": 1100,
+          "ops": [{"key": "k1", "access": "write"}]
+        },
+        {
+          "t_us": 3992000,
+          "type": "arrive",
+          "msg": "c",
+          "txn": 3,
+          "ts": 1200,
+          "ops": [{"key": "k1", "access": "write"}]
+        },
+        {
+          "t_us": 3993000,
+          "type": "arrive",
+          "msg": "d",
+          "txn": 4,
+          "ts": 1300,
+          "ops": [{"key": "k1", "access": "write"}]
+        },
+        {"t_us": 4000000, "type": "epoch_end"},
+        {
+          "t_us": 4001000,
+          "type": "arrive",
+          "msg": "e",
+          "txn": 5,
+          "ts": 1400,
+          "ops": [{"key": "k1", "access": "write"}]
+        },
+        {"t_us": 4002000, "type": "control_applied", "txn": 1, "kind": "commit", "keys": ["k1"]},
+        {"t_us": 4003000, "type": "control_applied", "txn": 2, "kind": "commit", "keys": ["k1"]},
+        {"t_us": 4004000, "type": "control_applied", "txn": 3, "kind": "commit", "keys": ["k1"]},
+        {
+          "t_us": 4005000,
+          "type": "arrive",
+          "msg": "f",
+          "txn": 6,
+          "ts": 1500,
+          "ops": [{"key": "k1", "access": "write"}]
+        }
+      ],
+      "end_us": 4006000,
+      "checkpoint_times": [4000500, 4003500],
+      "expect": {
+        "startup": "accept",
+        "deliveries": [
+          {"msg": "p1", "t_us": 200000, "path": "direct"},
+          {"msg": "p2", "t_us": 300000, "path": "direct"},
+          {"msg": "a", "t_us": 3990000, "path": "queued"},
+          {"msg": "e", "t_us": 4001000, "path": "direct"},
+          {"msg": "b", "t_us": 4002000, "path": "queued"},
+          {"msg": "c", "t_us": 4003000, "path": "queued"},
+          {"msg": "d", "t_us": 4004000, "path": "queued"},
+          {"msg": "f", "t_us": 4005000, "path": "direct"}
+        ],
+        "drops": [],
+        "releases": {
+          "k1": [
+            {"msg": "a", "t_us": 3990000},
+            {"msg": "b", "t_us": 4002000},
+            {"msg": "c", "t_us": 4003000},
+            {"msg": "d", "t_us": 4004000}
+          ]
+        },
+        "holds": [
+          {"msg": "a", "key": "k1", "start_us": 3990000, "end": {"reason": "event", "t_us": 4002000}},
+          {"msg": "b", "key": "k1", "start_us": 4002000, "end": {"reason": "event", "t_us": 4003000}},
+          {"msg": "c", "key": "k1", "start_us": 4003000, "end": {"reason": "event", "t_us": 4004000}},
+          {"msg": "d", "key": "k1", "start_us": 4004000, "end": {"reason": "queue_deleted", "t_us": 4004000}}
+        ],
+        "late": [],
+        "queue_events": [
+          {"t_us": 1000000, "key": "k1", "event": "created"},
+          {"t_us": 4000000, "key": "k1", "event": "drain_started"},
+          {"t_us": 4004000, "key": "k1", "event": "deleted"}
+        ],
+        "epochs": [{"index": 0, "ooo": {"k1": 1}}, {"index": 1, "ooo": {}}, {"index": 2, "ooo": {}}, {"index": 3, "ooo": {}}],
+        "checkpoints": [
+          {
+            "t_us": 4000500,
+            "managed": [],
+            "draining": ["k1"],
+            "queue_len": {"k1": 3},
+            "held_msgs": ["b", "c", "d"],
+            "open_holds": [{"msg": "a", "key": "k1"}],
+            "counters": {"intercepted": 6, "direct": 2, "queued_delivered": 1, "dropped": 0, "held_now": 3}
+          },
+          {
+            "t_us": 4003500,
+            "managed": [],
+            "draining": ["k1"],
+            "queue_len": {"k1": 1},
+            "held_msgs": ["d"],
+            "open_holds": [{"msg": "c", "key": "k1"}],
+            "counters": {"intercepted": 7, "direct": 3, "queued_delivered": 3, "dropped": 0, "held_now": 1}
+          }
+        ],
+        "counters": {
+          "intercepted": 8,
+          "direct": 4,
+          "queued_delivered": 4,
+          "dropped": 0,
+          "held_now": 0,
+          "holds_created": 4,
+          "hold_end": {"event": 3, "ttl": 0, "cancel": 0, "queue_deleted": 1},
+          "late_queued": {"read": 0, "write": 0, "lock_read": 0},
+          "late_bypass": {"read": 0, "write": 0, "lock_read": 0},
+          "queues_max": 1,
+          "queues_now": 0
+        }
+      }
+    },
+    {
+      "id": "S08-02",
+      "name": "排空时不一次放光：已排队的照样等缓冲时间",
+      "spec_refs": ["8.1", "4.2"],
+      "layer": "core",
+      "applies_to": ["juicer-cc", "crdb", "spanner"],
+      "status": "active",
+      "purpose": "W = 5 ms，排空开始时队里两条读的缓冲都还没到点；它们各自在进队时刻加 W 放出，不在排空开始时放出；第二条放出时堆空，队列删除。",
+      "config": {
+        "filter": {"mode": "hotspot", "K": 100, "S": 1, "idle_epochs": 3, "epoch_us": 1000000},
+        "rules": "conflict-table",
+        "H_us": 10000,
+        "buffer": {"policy": "fixed", "W_us": 5000},
+        "late_policy": "queue",
+        "queue_removal": "drain"
+      },
+      "inputs": [
+        {"t_us": 100000, "type": "level1_abort", "txn": 90, "keys": ["k1"]},
+        {
+          "t_us": 200000,
+          "type": "arrive",
+          "msg": "p1",
+          "txn": 91,
+          "ts": 500,
+          "ops": [{"key": "k1", "access": "write"}]
+        },
+        {
+          "t_us": 300000,
+          "type": "arrive",
+          "msg": "p2",
+          "txn": 92,
+          "ts": 300,
+          "ops": [{"key": "k1", "access": "write"}]
+        },
+        {"t_us": 1000000, "type": "epoch_end"},
+        {"t_us": 2000000, "type": "epoch_end"},
+        {"t_us": 3000000, "type": "epoch_end"},
+        {
+          "t_us": 3998000,
+          "type": "arrive",
+          "msg": "a",
+          "txn": 1,
+          "ts": 1000,
+          "ops": [{"key": "k1", "access": "read"}]
+        },
+        {
+          "t_us": 3999000,
+          "type": "arrive",
+          "msg": "b",
+          "txn": 2,
+          "ts": 1100,
+          "ops": [{"key": "k1", "access": "read"}]
+        },
+        {"t_us": 4000000, "type": "epoch_end"}
+      ],
+      "end_us": 4010000,
+      "expect": {
+        "startup": "accept",
+        "deliveries": [
+          {"msg": "p1", "t_us": 200000, "path": "direct"},
+          {"msg": "p2", "t_us": 300000, "path": "direct"},
+          {"msg": "a", "t_us": 4003000, "path": "queued"},
+          {"msg": "b", "t_us": 4004000, "path": "queued"}
+        ],
+        "drops": [],
+        "releases": {"k1": [{"msg": "a", "t_us": 4003000}, {"msg": "b", "t_us": 4004000}]},
+        "holds": [
+          {"msg": "a", "key": "k1", "start_us": 4003000, "end": {"reason": "queue_deleted", "t_us": 4004000}},
+          {"msg": "b", "key": "k1", "start_us": 4004000, "end": {"reason": "queue_deleted", "t_us": 4004000}}
+        ],
+        "late": [],
+        "queue_events": [
+          {"t_us": 1000000, "key": "k1", "event": "created"},
+          {"t_us": 4000000, "key": "k1", "event": "drain_started"},
+          {"t_us": 4004000, "key": "k1", "event": "deleted"}
+        ],
+        "epochs": [{"index": 0, "ooo": {"k1": 1}}, {"index": 1, "ooo": {}}, {"index": 2, "ooo": {}}, {"index": 3, "ooo": {}}],
+        "counters": {
+          "intercepted": 4,
+          "direct": 2,
+          "queued_delivered": 2,
+          "dropped": 0,
+          "held_now": 0,
+          "holds_created": 2,
+          "hold_end": {"event": 0, "ttl": 0, "cancel": 0, "queue_deleted": 2},
+          "late_queued": {"read": 0, "write": 0, "lock_read": 0},
+          "late_bypass": {"read": 0, "write": 0, "lock_read": 0},
+          "queues_max": 1,
+          "queues_now": 0
+        }
+      }
+    },
+    {
+      "id": "S08-03",
+      "name": "排空中被重新提名：取消删除、保留持有、恢复进队",
+      "spec_refs": ["8.2", "2.3", "2.4"],
+      "layer": "core",
+      "applies_to": ["juicer-cc", "crdb", "spanner"],
+      "status": "active",
+      "purpose": "k1 开始排空后的下一个周期里又成为第一级候选并出现乱序到达（这些到达直接投递），周期末被重新提名：取消删除，原来的持有仍在，之后到达的写重新进队并被它挡住。",
+      "config": {
+        "filter": {"mode": "hotspot", "K": 100, "S": 1, "idle_epochs": 3, "epoch_us": 1000000},
+        "rules": "conflict-table",
+        "H_us": 20000,
+        "buffer": {"policy": "fixed", "W_us": 0},
+        "late_policy": "queue",
+        "queue_removal": "drain"
+      },
+      "inputs": [
+        {"t_us": 100000, "type": "level1_abort", "txn": 90, "keys": ["k1"]},
+        {
+          "t_us": 200000,
+          "type": "arrive",
+          "msg": "p1",
+          "txn": 91,
+          "ts": 500,
+          "ops": [{"key": "k1", "access": "write"}]
+        },
+        {
+          "t_us": 300000,
+          "type": "arrive",
+          "msg": "p2",
+          "txn": 92,
+          "ts": 300,
+          "ops": [{"key": "k1", "access": "write"}]
+        },
+        {"t_us": 1000000, "type": "epoch_end"},
+        {"t_us": 2000000, "type": "epoch_end"},
+        {"t_us": 3000000, "type": "epoch_end"},
+        {
+          "t_us": 3990000,
+          "type": "arrive",
+          "msg": "a",
+          "txn": 1,
+          "ts": 1000,
+          "ops": [{"key": "k1", "access": "write"}]
+        },
+        {
+          "t_us": 3991000,
+          "type": "arrive",
+          "msg": "b",
+          "txn": 2,
+          "ts": 1100,
+          "ops": [{"key": "k1", "access": "write"}]
+        },
+        {"t_us": 4000000, "type": "epoch_end"},
+        {"t_us": 4001000, "type": "level1_abort", "txn": 93, "keys": ["k1"]},
+        {
+          "t_us": 4002000,
+          "type": "arrive",
+          "msg": "x",
+          "txn": 7,
+          "ts": 2000,
+          "ops": [{"key": "k1", "access": "write"}]
+        },
+        {
+          "t_us": 4003000,
+          "type": "arrive",
+          "msg": "y",
+          "txn": 8,
+          "ts": 1900,
+          "ops": [{"key": "k1", "access": "write"}]
+        },
+        {"t_us": 4005000, "type": "epoch_end"},
+        {
+          "t_us": 4006000,
+          "type": "arrive",
+          "msg": "z",
+          "txn": 9,
+          "ts": 2100,
+          "ops": [{"key": "k1", "access": "write"}]
+        },
+        {"t_us": 4007000, "type": "control_applied", "txn": 1, "kind": "commit", "keys": ["k1"]},
+        {"t_us": 4008000, "type": "control_applied", "txn": 2, "kind": "commit", "keys": ["k1"]},
+        {"t_us": 4009000, "type": "control_applied", "txn": 9, "kind": "commit", "keys": ["k1"]}
+      ],
+      "end_us": 4009500,
+      "checkpoint_times": [4004000, 4006500],
+      "expect": {
+        "startup": "accept",
+        "deliveries": [
+          {"msg": "p1", "t_us": 200000, "path": "direct"},
+          {"msg": "p2", "t_us": 300000, "path": "direct"},
+          {"msg": "a", "t_us": 3990000, "path": "queued"},
+          {"msg": "x", "t_us": 4002000, "path": "direct"},
+          {"msg": "y", "t_us": 4003000, "path": "direct"},
+          {"msg": "b", "t_us": 4007000, "path": "queued"},
+          {"msg": "z", "t_us": 4008000, "path": "queued"}
+        ],
+        "drops": [],
+        "releases": {"k1": [{"msg": "a", "t_us": 3990000}, {"msg": "b", "t_us": 4007000}, {"msg": "z", "t_us": 4008000}]},
+        "holds": [
+          {"msg": "a", "key": "k1", "start_us": 3990000, "end": {"reason": "event", "t_us": 4007000}},
+          {"msg": "b", "key": "k1", "start_us": 4007000, "end": {"reason": "event", "t_us": 4008000}},
+          {"msg": "z", "key": "k1", "start_us": 4008000, "end": {"reason": "event", "t_us": 4009000}}
+        ],
+        "late": [],
+        "queue_events": [
+          {"t_us": 1000000, "key": "k1", "event": "created"},
+          {"t_us": 4000000, "key": "k1", "event": "drain_started"},
+          {"t_us": 4005000, "key": "k1", "event": "drain_canceled"}
+        ],
+        "epochs": [
+          {"index": 0, "ooo": {"k1": 1}},
+          {"index": 1, "ooo": {}},
+          {"index": 2, "ooo": {}},
+          {"index": 3, "ooo": {}},
+          {"index": 4, "ooo": {"k1": 1}}
+        ],
+        "checkpoints": [
+          {
+            "t_us": 4004000,
+            "managed": [],
+            "draining": ["k1"],
+            "queue_len": {"k1": 1},
+            "held_msgs": ["b"],
+            "open_holds": [{"msg": "a", "key": "k1"}],
+            "counters": {"intercepted": 6, "direct": 4, "queued_delivered": 1, "dropped": 0, "held_now": 1}
+          },
+          {
+            "t_us": 4006500,
+            "managed": ["k1"],
+            "draining": [],
+            "queue_len": {"k1": 2},
+            "held_msgs": ["b", "z"],
+            "open_holds": [{"msg": "a", "key": "k1"}],
+            "counters": {"intercepted": 7, "direct": 4, "queued_delivered": 1, "dropped": 0, "held_now": 2, "queues_now": 1}
+          }
+        ],
+        "counters": {
+          "intercepted": 7,
+          "direct": 4,
+          "queued_delivered": 3,
+          "dropped": 0,
+          "held_now": 0,
+          "holds_created": 3,
+          "hold_end": {"event": 3, "ttl": 0, "cancel": 0, "queue_deleted": 0},
+          "late_queued": {"read": 0, "write": 0, "lock_read": 0},
+          "late_bypass": {"read": 0, "write": 0, "lock_read": 0},
+          "queues_max": 1,
+          "queues_now": 1
+        }
+      },
+      "notes": "epoch_end 事件之间的间隔不必等于 epoch_us：周期 4 只有 5 ms，是为了让排空跨过一个周期边界而不让持有到期。"
+    },
+    {
+      "id": "S08-04",
+      "name": "删除后重新提名：新队列从空开始（新的 t_h、没有旧持有）",
+      "spec_refs": ["8.1", "7.1", "2.4"],
+      "layer": "core",
+      "applies_to": ["juicer-cc", "crdb", "spanner"],
+      "status": "active",
+      "purpose": "队列删除后又被提名，新队列的 t_h 从头算：排序键小于旧队列 t_h 的标记不算迟到。",
+      "config": {
+        "filter": {"mode": "hotspot", "K": 100, "S": 1, "idle_epochs": 3, "epoch_us": 1000000},
+        "rules": "conflict-table",
+        "H_us": 10000,
+        "buffer": {"policy": "fixed", "W_us": 0},
+        "late_policy": "queue",
+        "queue_removal": "drain"
+      },
+      "inputs": [
+        {"t_us": 100000, "type": "level1_abort", "txn": 90, "keys": ["k1"]},
+        {
+          "t_us": 200000,
+          "type": "arrive",
+          "msg": "p1",
+          "txn": 91,
+          "ts": 500,
+          "ops": [{"key": "k1", "access": "write"}]
+        },
+        {
+          "t_us": 300000,
+          "type": "arrive",
+          "msg": "p2",
+          "txn": 92,
+          "ts": 300,
+          "ops": [{"key": "k1", "access": "write"}]
+        },
+        {"t_us": 1000000, "type": "epoch_end"},
+        {
+          "t_us": 1100000,
+          "type": "arrive",
+          "msg": "a",
+          "txn": 1,
+          "ts": 5000,
+          "ops": [{"key": "k1", "access": "write"}]
+        },
+        {"t_us": 1101000, "type": "control_applied", "txn": 1, "kind": "commit", "keys": ["k1"]},
+        {"t_us": 2000000, "type": "epoch_end"},
+        {"t_us": 3000000, "type": "epoch_end"},
+        {"t_us": 4000000, "type": "epoch_end"},
+        {"t_us": 4100000, "type": "level1_abort", "txn": 94, "keys": ["k1"]},
+        {
+          "t_us": 4200000,
+          "type": "arrive",
+          "msg": "b",
+          "txn": 2,
+          "ts": 800,
+          "ops": [{"key": "k1", "access": "write"}]
+        },
+        {
+          "t_us": 4300000,
+          "type": "arrive",
+          "msg": "c",
+          "txn": 3,
+          "ts": 700,
+          "ops": [{"key": "k1", "access": "write"}]
+        },
+        {"t_us": 5000000, "type": "epoch_end"},
+        {
+          "t_us": 5100000,
+          "type": "arrive",
+          "msg": "d",
+          "txn": 4,
+          "ts": 900,
+          "ops": [{"key": "k1", "access": "write"}]
+        },
+        {"t_us": 5101000, "type": "control_applied", "txn": 4, "kind": "commit", "keys": ["k1"]}
+      ],
+      "end_us": 5200000,
+      "expect": {
+        "startup": "accept",
+        "deliveries": [
+          {"msg": "p1", "t_us": 200000, "path": "direct"},
+          {"msg": "p2", "t_us": 300000, "path": "direct"},
+          {"msg": "a", "t_us": 1100000, "path": "queued"},
+          {"msg": "b", "t_us": 4200000, "path": "direct"},
+          {"msg": "c", "t_us": 4300000, "path": "direct"},
+          {"msg": "d", "t_us": 5100000, "path": "queued"}
+        ],
+        "drops": [],
+        "releases": {"k1": [{"msg": "a", "t_us": 1100000}, {"msg": "d", "t_us": 5100000}]},
+        "holds": [
+          {"msg": "a", "key": "k1", "start_us": 1100000, "end": {"reason": "event", "t_us": 1101000}},
+          {"msg": "d", "key": "k1", "start_us": 5100000, "end": {"reason": "event", "t_us": 5101000}}
+        ],
+        "late": [],
+        "queue_events": [
+          {"t_us": 1000000, "key": "k1", "event": "created"},
+          {"t_us": 4000000, "key": "k1", "event": "drain_started"},
+          {"t_us": 4000000, "key": "k1", "event": "deleted"},
+          {"t_us": 5000000, "key": "k1", "event": "created"}
+        ],
+        "epochs": [
+          {"index": 0, "ooo": {"k1": 1}},
+          {"index": 1, "ooo": {}},
+          {"index": 2, "ooo": {}},
+          {"index": 3, "ooo": {}},
+          {"index": 4, "ooo": {"k1": 1}}
+        ],
+        "counters": {
+          "intercepted": 6,
+          "direct": 4,
+          "queued_delivered": 2,
+          "dropped": 0,
+          "held_now": 0,
+          "holds_created": 2,
+          "hold_end": {"event": 2, "ttl": 0, "cancel": 0, "queue_deleted": 0},
+          "late_queued": {"read": 0, "write": 0, "lock_read": 0},
+          "late_bypass": {"read": 0, "write": 0, "lock_read": 0},
+          "queues_max": 1,
+          "queues_now": 1
+        }
+      }
+    }
+  ]
+}

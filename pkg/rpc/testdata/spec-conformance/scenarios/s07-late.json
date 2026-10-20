@@ -1,0 +1,217 @@
+{
+  "format": "juicer-spec-conformance",
+  "format_version": "1.0",
+  "spec_version": "1.2",
+  "file": "s07-late",
+  "title": "§7 迟到消息",
+  "clauses": ["§7"],
+  "scenarios": [
+    {
+      "id": "S07-01",
+      "name": "迟到的写照样进队、等在途持有、放行时登记持有，t_h 不回退",
+      "spec_refs": ["7.1", "7.2", "7.4"],
+      "layer": "core",
+      "applies_to": ["juicer-cc", "crdb", "spanner"],
+      "status": "active",
+      "purpose": "排序键 10 的写在 20 已放行后到达，判为迟到，进队并等 20 的持有；它放行后 t_h 仍是 20，所以随后到达的排序键 15 也是迟到。",
+      "config": {
+        "filter": {"mode": "fixed", "managed_keys": ["k1"]},
+        "rules": "conflict-table",
+        "H_us": 10000,
+        "buffer": {"policy": "fixed", "W_us": 0},
+        "late_policy": "queue",
+        "queue_removal": "drain"
+      },
+      "inputs": [
+        {"t_us": 0, "type": "arrive", "msg": "a", "txn": 1, "ts": 20, "ops": [{"key": "k1", "access": "write"}]},
+        {"t_us": 1000, "type": "arrive", "msg": "b", "txn": 2, "ts": 10, "ops": [{"key": "k1", "access": "write"}]},
+        {"t_us": 2000, "type": "control_applied", "txn": 1, "kind": "commit", "keys": ["k1"]},
+        {"t_us": 3000, "type": "arrive", "msg": "c", "txn": 3, "ts": 15, "ops": [{"key": "k1", "access": "write"}]},
+        {"t_us": 4000, "type": "control_applied", "txn": 2, "kind": "commit", "keys": ["k1"]},
+        {"t_us": 5000, "type": "control_applied", "txn": 3, "kind": "commit", "keys": ["k1"]}
+      ],
+      "end_us": 6000,
+      "expect": {
+        "startup": "accept",
+        "deliveries": [
+          {"msg": "a", "t_us": 0, "path": "queued"},
+          {"msg": "b", "t_us": 2000, "path": "queued"},
+          {"msg": "c", "t_us": 4000, "path": "queued"}
+        ],
+        "drops": [],
+        "releases": {"k1": [{"msg": "a", "t_us": 0}, {"msg": "b", "t_us": 2000}, {"msg": "c", "t_us": 4000}]},
+        "holds": [
+          {"msg": "a", "key": "k1", "start_us": 0, "end": {"reason": "event", "t_us": 2000}},
+          {"msg": "b", "key": "k1", "start_us": 2000, "end": {"reason": "event", "t_us": 4000}},
+          {"msg": "c", "key": "k1", "start_us": 4000, "end": {"reason": "event", "t_us": 5000}}
+        ],
+        "late": [{"msg": "b", "key": "k1", "handling": "queued"}, {"msg": "c", "key": "k1", "handling": "queued"}],
+        "counters": {
+          "intercepted": 3,
+          "direct": 0,
+          "queued_delivered": 3,
+          "dropped": 0,
+          "held_now": 0,
+          "holds_created": 3,
+          "hold_end": {"event": 3, "ttl": 0, "cancel": 0, "queue_deleted": 0},
+          "late_queued": {"read": 0, "write": 2, "lock_read": 0},
+          "late_bypass": {"read": 0, "write": 0, "lock_read": 0},
+          "queues_max": 1,
+          "queues_now": 1
+        }
+      }
+    },
+    {
+      "id": "S07-02",
+      "name": "迟到的读也进队；默认配置下旁路计数为 0",
+      "spec_refs": ["7.2", "7.4"],
+      "layer": "core",
+      "applies_to": ["juicer-cc", "crdb", "spanner"],
+      "status": "active",
+      "purpose": "迟到的读同样进队、被写的持有挡住、放行时登记持有；按类型计数：迟到进队的读 1，旁路 0。",
+      "config": {
+        "filter": {"mode": "fixed", "managed_keys": ["k1"]},
+        "rules": "conflict-table",
+        "H_us": 10000,
+        "buffer": {"policy": "fixed", "W_us": 0},
+        "late_policy": "queue",
+        "queue_removal": "drain"
+      },
+      "inputs": [
+        {"t_us": 0, "type": "arrive", "msg": "a", "txn": 1, "ts": 20, "ops": [{"key": "k1", "access": "write"}]},
+        {"t_us": 1000, "type": "arrive", "msg": "b", "txn": 2, "ts": 10, "ops": [{"key": "k1", "access": "read"}]},
+        {"t_us": 2000, "type": "control_applied", "txn": 1, "kind": "commit", "keys": ["k1"]}
+      ],
+      "end_us": 3000,
+      "expect": {
+        "startup": "accept",
+        "deliveries": [{"msg": "a", "t_us": 0, "path": "queued"}, {"msg": "b", "t_us": 2000, "path": "queued"}],
+        "drops": [],
+        "releases": {"k1": [{"msg": "a", "t_us": 0}, {"msg": "b", "t_us": 2000}]},
+        "holds": [
+          {"msg": "a", "key": "k1", "start_us": 0, "end": {"reason": "event", "t_us": 2000}},
+          {"msg": "b", "key": "k1", "start_us": 2000, "end": "open"}
+        ],
+        "late": [{"msg": "b", "key": "k1", "handling": "queued"}],
+        "counters": {
+          "intercepted": 2,
+          "direct": 0,
+          "queued_delivered": 2,
+          "dropped": 0,
+          "held_now": 0,
+          "holds_created": 2,
+          "hold_end": {"event": 1, "ttl": 0, "cancel": 0, "queue_deleted": 0},
+          "late_queued": {"read": 1, "write": 0, "lock_read": 0},
+          "late_bypass": {"read": 0, "write": 0, "lock_read": 0},
+          "queues_max": 1,
+          "queues_now": 1
+        }
+      }
+    },
+    {
+      "id": "S07-03",
+      "name": "排序键与 t_h 相等不算迟到（不同事务）",
+      "spec_refs": ["7.1", "3.2"],
+      "layer": "core",
+      "applies_to": ["crdb"],
+      "not_applicable": {
+        "juicer-cc": "juicer-cc 的排序键就是事务号（微秒左移 12 位 + 工作线程号），不同事务的排序键不会相等；同一事务排序键相等的情形见 S09-05",
+        "spanner": "Spanner 的排序键含事务号（开始时间戳 + 客户端号 + 事务号），不同事务的排序键不会相等"
+      },
+      "status": "active",
+      "purpose": "CockroachDB 两个事务的批头时钟相等：后到的不算迟到，正常进队、等前者的持有。",
+      "config": {
+        "filter": {"mode": "fixed", "managed_keys": ["k1"]},
+        "rules": "conflict-table",
+        "H_us": 10000,
+        "buffer": {"policy": "fixed", "W_us": 0},
+        "late_policy": "queue",
+        "queue_removal": "drain"
+      },
+      "inputs": [
+        {"t_us": 0, "type": "arrive", "msg": "a", "txn": 1, "ts": 100, "ops": [{"key": "k1", "access": "write"}]},
+        {"t_us": 1000, "type": "arrive", "msg": "b", "txn": 2, "ts": 100, "ops": [{"key": "k1", "access": "write"}]},
+        {"t_us": 2000, "type": "control_applied", "txn": 1, "kind": "commit", "keys": ["k1"]},
+        {"t_us": 3000, "type": "control_applied", "txn": 2, "kind": "commit", "keys": ["k1"]}
+      ],
+      "end_us": 4000,
+      "expect": {
+        "startup": "accept",
+        "deliveries": [{"msg": "a", "t_us": 0, "path": "queued"}, {"msg": "b", "t_us": 2000, "path": "queued"}],
+        "drops": [],
+        "releases": {"k1": [{"msg": "a", "t_us": 0}, {"msg": "b", "t_us": 2000}]},
+        "holds": [
+          {"msg": "a", "key": "k1", "start_us": 0, "end": {"reason": "event", "t_us": 2000}},
+          {"msg": "b", "key": "k1", "start_us": 2000, "end": {"reason": "event", "t_us": 3000}}
+        ],
+        "late": [],
+        "counters": {
+          "intercepted": 2,
+          "direct": 0,
+          "queued_delivered": 2,
+          "dropped": 0,
+          "held_now": 0,
+          "holds_created": 2,
+          "hold_end": {"event": 2, "ttl": 0, "cancel": 0, "queue_deleted": 0},
+          "late_queued": {"read": 0, "write": 0, "lock_read": 0},
+          "late_bypass": {"read": 0, "write": 0, "lock_read": 0},
+          "queues_max": 1,
+          "queues_now": 1
+        }
+      }
+    },
+    {
+      "id": "S07-04",
+      "name": "非默认的旁路选项：迟到标记直接投递、不登记持有",
+      "spec_refs": ["7.3", "7.4"],
+      "layer": "core",
+      "applies_to": ["juicer-cc", "crdb", "spanner"],
+      "status": "active",
+      "purpose": "迟到处理设为 bypass（只用于复现旧结果）：迟到的写不进队、不被持有挡、不登记持有，按类型计入旁路；不迟到的照常进队。",
+      "config": {
+        "filter": {"mode": "fixed", "managed_keys": ["k1"]},
+        "rules": "conflict-table",
+        "H_us": 10000,
+        "buffer": {"policy": "fixed", "W_us": 0},
+        "late_policy": "bypass",
+        "queue_removal": "drain"
+      },
+      "inputs": [
+        {"t_us": 0, "type": "arrive", "msg": "a", "txn": 1, "ts": 20, "ops": [{"key": "k1", "access": "write"}]},
+        {"t_us": 1000, "type": "arrive", "msg": "b", "txn": 2, "ts": 10, "ops": [{"key": "k1", "access": "write"}]},
+        {"t_us": 2000, "type": "arrive", "msg": "c", "txn": 3, "ts": 30, "ops": [{"key": "k1", "access": "write"}]},
+        {"t_us": 3000, "type": "control_applied", "txn": 1, "kind": "commit", "keys": ["k1"]},
+        {"t_us": 4000, "type": "control_applied", "txn": 3, "kind": "commit", "keys": ["k1"]}
+      ],
+      "end_us": 5000,
+      "expect": {
+        "startup": "accept",
+        "deliveries": [
+          {"msg": "a", "t_us": 0, "path": "queued"},
+          {"msg": "b", "t_us": 1000, "path": "direct"},
+          {"msg": "c", "t_us": 3000, "path": "queued"}
+        ],
+        "drops": [],
+        "releases": {"k1": [{"msg": "a", "t_us": 0}, {"msg": "c", "t_us": 3000}]},
+        "holds": [
+          {"msg": "a", "key": "k1", "start_us": 0, "end": {"reason": "event", "t_us": 3000}},
+          {"msg": "c", "key": "k1", "start_us": 3000, "end": {"reason": "event", "t_us": 4000}}
+        ],
+        "late": [{"msg": "b", "key": "k1", "handling": "bypass"}],
+        "counters": {
+          "intercepted": 3,
+          "direct": 1,
+          "queued_delivered": 2,
+          "dropped": 0,
+          "held_now": 0,
+          "holds_created": 2,
+          "hold_end": {"event": 2, "ttl": 0, "cancel": 0, "queue_deleted": 0},
+          "late_queued": {"read": 0, "write": 0, "lock_read": 0},
+          "late_bypass": {"read": 0, "write": 1, "lock_read": 0},
+          "queues_max": 1,
+          "queues_now": 1
+        }
+      }
+    }
+  ]
+}

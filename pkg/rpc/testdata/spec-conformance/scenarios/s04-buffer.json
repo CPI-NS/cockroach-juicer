@@ -1,0 +1,208 @@
+{
+  "format": "juicer-spec-conformance",
+  "format_version": "1.0",
+  "spec_version": "1.2",
+  "file": "s04-buffer",
+  "title": "§4 缓冲时间（不随口径变的部分；口径相关的标 pending_caliber）",
+  "clauses": ["§4"],
+  "scenarios": [
+    {
+      "id": "S04-01",
+      "name": "W 从每个标记自己的进队时刻起算",
+      "spec_refs": ["4.2"],
+      "layer": "core",
+      "applies_to": ["juicer-cc", "crdb", "spanner"],
+      "status": "active",
+      "purpose": "W = 3 ms，两条读分别在 0 与 2 ms 进队，分别在 3 ms 与 5 ms 放行；W 是每个标记的驻留下限，不是从队头时刻或第一条进队时刻起算。",
+      "config": {
+        "filter": {"mode": "fixed", "managed_keys": ["k1"]},
+        "rules": "conflict-table",
+        "H_us": 10000,
+        "buffer": {"policy": "fixed", "W_us": 3000},
+        "late_policy": "queue",
+        "queue_removal": "drain"
+      },
+      "inputs": [
+        {"t_us": 0, "type": "arrive", "msg": "a", "txn": 1, "ts": 50, "ops": [{"key": "k1", "access": "read"}]},
+        {"t_us": 2000, "type": "arrive", "msg": "b", "txn": 2, "ts": 60, "ops": [{"key": "k1", "access": "read"}]}
+      ],
+      "end_us": 6000,
+      "expect": {
+        "startup": "accept",
+        "deliveries": [{"msg": "a", "t_us": 3000, "path": "queued"}, {"msg": "b", "t_us": 5000, "path": "queued"}],
+        "drops": [],
+        "releases": {"k1": [{"msg": "a", "t_us": 3000}, {"msg": "b", "t_us": 5000}]},
+        "holds": [
+          {"msg": "a", "key": "k1", "start_us": 3000, "end": "open"},
+          {"msg": "b", "key": "k1", "start_us": 5000, "end": "open"}
+        ],
+        "late": [],
+        "counters": {
+          "intercepted": 2,
+          "direct": 0,
+          "queued_delivered": 2,
+          "dropped": 0,
+          "held_now": 0,
+          "holds_created": 2,
+          "hold_end": {"event": 0, "ttl": 0, "cancel": 0, "queue_deleted": 0},
+          "late_queued": {"read": 0, "write": 0, "lock_read": 0},
+          "late_bypass": {"read": 0, "write": 0, "lock_read": 0},
+          "queues_max": 1,
+          "queues_now": 1
+        }
+      }
+    },
+    {
+      "id": "S04-02",
+      "name": "缓冲期内到达的更小排序键先放",
+      "spec_refs": ["4.2", "3.2"],
+      "layer": "core",
+      "applies_to": ["juicer-cc", "crdb", "spanner"],
+      "status": "active",
+      "purpose": "W = 3 ms，排序键 50 的读先到，排序键 40 的读在 2 ms 到达并成为队头；前者虽然 3 ms 已到点，也要等后者 5 ms 出堆，两者在 5 ms 按 40、50 的顺序放出。",
+      "config": {
+        "filter": {"mode": "fixed", "managed_keys": ["k1"]},
+        "rules": "conflict-table",
+        "H_us": 10000,
+        "buffer": {"policy": "fixed", "W_us": 3000},
+        "late_policy": "queue",
+        "queue_removal": "drain"
+      },
+      "inputs": [
+        {"t_us": 0, "type": "arrive", "msg": "a", "txn": 1, "ts": 50, "ops": [{"key": "k1", "access": "read"}]},
+        {"t_us": 2000, "type": "arrive", "msg": "b", "txn": 2, "ts": 40, "ops": [{"key": "k1", "access": "read"}]}
+      ],
+      "end_us": 6000,
+      "expect": {
+        "startup": "accept",
+        "deliveries": [{"msg": "b", "t_us": 5000, "path": "queued"}, {"msg": "a", "t_us": 5000, "path": "queued"}],
+        "drops": [],
+        "releases": {"k1": [{"msg": "b", "t_us": 5000}, {"msg": "a", "t_us": 5000}]},
+        "holds": [
+          {"msg": "a", "key": "k1", "start_us": 5000, "end": "open"},
+          {"msg": "b", "key": "k1", "start_us": 5000, "end": "open"}
+        ],
+        "late": [],
+        "counters": {
+          "intercepted": 2,
+          "direct": 0,
+          "queued_delivered": 2,
+          "dropped": 0,
+          "held_now": 0,
+          "holds_created": 2,
+          "hold_end": {"event": 0, "ttl": 0, "cancel": 0, "queue_deleted": 0},
+          "late_queued": {"read": 0, "write": 0, "lock_read": 0},
+          "late_bypass": {"read": 0, "write": 0, "lock_read": 0},
+          "queues_max": 1,
+          "queues_now": 1
+        }
+      }
+    },
+    {
+      "id": "S04-03",
+      "name": "W = 0 退化为只排序加依赖执行器；默认就是 W = 0",
+      "spec_refs": ["4.4", "4.5", "12.1"],
+      "layer": "core",
+      "applies_to": ["juicer-cc", "crdb", "spanner"],
+      "status": "active",
+      "purpose": "三种配置（不写任何缓冲参数、显式固定 W = 0、显式关闭自适应缓冲）给出逐条相同的结果：没有挡人的持有时到达即放，被挡时在挡人的持有结束的同一时刻放，不挂缓冲定时器。",
+      "config": {
+        "filter": {"mode": "fixed", "managed_keys": ["k1"]},
+        "rules": "conflict-table",
+        "H_us": 10000,
+        "buffer": {"policy": "fixed", "W_us": 0},
+        "late_policy": "queue",
+        "queue_removal": "drain"
+      },
+      "config_variants": [
+        {"name": "default", "override": {"buffer": null}, "note": "不写任何缓冲参数，取代码默认"},
+        {"name": "fixed_zero", "override": {"buffer": {"policy": "fixed", "W_us": 0}}},
+        {
+          "name": "adaptive_off",
+          "override": {"buffer": {"policy": "adaptive", "enabled": false}},
+          "note": "显式写出自适应缓冲的开关并设为关（juicer-cc --waitPolicy=fixed；CockroachDB COCKROACH_JUICER_AW=false；Spanner --juicer_adaptive_wait=false）"
+        }
+      ],
+      "inputs": [
+        {"t_us": 0, "type": "arrive", "msg": "a", "txn": 1, "ts": 100, "ops": [{"key": "k1", "access": "write"}]},
+        {"t_us": 1000, "type": "arrive", "msg": "b", "txn": 2, "ts": 50, "ops": [{"key": "k1", "access": "read"}]},
+        {"t_us": 2000, "type": "control_applied", "txn": 1, "kind": "commit", "keys": ["k1"]},
+        {"t_us": 3000, "type": "arrive", "msg": "c", "txn": 3, "ts": 300, "ops": [{"key": "k1", "access": "read"}]}
+      ],
+      "end_us": 4000,
+      "expect": {
+        "startup": "accept",
+        "deliveries": [
+          {"msg": "a", "t_us": 0, "path": "queued"},
+          {"msg": "b", "t_us": 2000, "path": "queued"},
+          {"msg": "c", "t_us": 3000, "path": "queued"}
+        ],
+        "drops": [],
+        "releases": {"k1": [{"msg": "a", "t_us": 0}, {"msg": "b", "t_us": 2000}, {"msg": "c", "t_us": 3000}]},
+        "holds": [
+          {"msg": "a", "key": "k1", "start_us": 0, "end": {"reason": "event", "t_us": 2000}},
+          {"msg": "b", "key": "k1", "start_us": 2000, "end": "open"},
+          {"msg": "c", "key": "k1", "start_us": 3000, "end": "open"}
+        ],
+        "late": [{"msg": "b", "key": "k1", "handling": "queued"}],
+        "counters": {
+          "intercepted": 3,
+          "direct": 0,
+          "queued_delivered": 3,
+          "dropped": 0,
+          "held_now": 0,
+          "holds_created": 3,
+          "hold_end": {"event": 1, "ttl": 0, "cancel": 0, "queue_deleted": 0},
+          "late_queued": {"read": 1, "write": 0, "lock_read": 0},
+          "late_bypass": {"read": 0, "write": 0, "lock_read": 0},
+          "queues_max": 1,
+          "queues_now": 1
+        },
+        "buffer_timers_armed": 0
+      }
+    },
+    {
+      "id": "S04-04",
+      "name": "缓冲时间上限大于持有上限时拒绝启动",
+      "spec_refs": ["4.3", "6.3"],
+      "layer": "core",
+      "applies_to": ["juicer-cc", "crdb", "spanner"],
+      "status": "pending_caliber",
+      "caliber": "4.3、6.3：缓冲时间与其他定时等待的上限是否不超过 H（选项 a/b/c）待用户定",
+      "purpose": "若 4.3 选 (a)（0 ≤ W ≤ W_max ≤ H，启动时检查），固定 W = 20 ms 而 H = 10 ms 的配置必须拒绝启动；W = H 可以启动。",
+      "config": {
+        "filter": {"mode": "fixed", "managed_keys": ["k1"]},
+        "rules": "conflict-table",
+        "H_us": 10000,
+        "buffer": {"policy": "fixed", "W_us": 20000},
+        "late_policy": "queue",
+        "queue_removal": "drain"
+      },
+      "config_variants": [{"name": "w_equals_h", "override": {"buffer": {"policy": "fixed", "W_us": 10000}}, "expect_startup": "accept"}],
+      "inputs": [],
+      "end_us": 0,
+      "expect": {"startup": "reject"}
+    },
+    {
+      "id": "S04-05",
+      "name": "自适应缓冲：每周期、每个受管 key 一个 W，周期内不变",
+      "spec_refs": ["4.1", "4.6"],
+      "layer": "core",
+      "applies_to": ["juicer-cc", "crdb", "spanner"],
+      "status": "pending_caliber",
+      "caliber": "4.6：自适应缓冲的口径（L_a、r、F(W) 样本、候选 W、门槛、s、统计范围）待用户定",
+      "purpose": "打开自适应缓冲后，同一周期里进入同一受管 key 的两个标记（都不被持有挡）各自的驻留时长相等，等于该 key 本周期的 W_k；W_k 只在周期末随热点名单一起变。具体数值要等口径定下后按公式填写。",
+      "config": {
+        "filter": {"mode": "hotspot", "K": 100, "S": 1, "idle_epochs": 3, "epoch_us": 1000000},
+        "rules": "conflict-table",
+        "H_us": 10000,
+        "buffer": {"policy": "adaptive", "enabled": true},
+        "late_policy": "queue",
+        "queue_removal": "drain"
+      },
+      "inputs": [],
+      "end_us": 0,
+      "expect": null
+    }
+  ]
+}

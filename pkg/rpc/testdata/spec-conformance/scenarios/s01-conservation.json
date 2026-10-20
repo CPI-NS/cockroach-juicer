@@ -1,0 +1,287 @@
+{
+  "format": "juicer-spec-conformance",
+  "format_version": "1.0",
+  "spec_version": "1.2",
+  "file": "s01-conservation",
+  "title": "§1 拦截与消息守恒",
+  "clauses": ["§1"],
+  "scenarios": [
+    {
+      "id": "S01-01",
+      "name": "三种结局各出现一次，守恒等式每步成立",
+      "spec_refs": ["1.2", "1.3", "1.7", "10.1"],
+      "layer": "core",
+      "applies_to": ["juicer-cc", "crdb"],
+      "not_applicable": {"spanner": "Spanner strongstore 客户端没有逐请求超时，没有调用方放弃的路径（规范 10.1 不适用）；不带取消的同类场景见 S01-02"},
+      "status": "active",
+      "purpose": "一条消息直接投递、一条排队后投递、一条在排队时被调用方放弃而丢弃，核对每条消息恰好一种结局、投递内容不变，以及“拦截 = 直接投递 + 排队后投递 + 丢弃 + 仍扣着”在中途与结束时都成立。",
+      "config": {
+        "filter": {"mode": "fixed", "managed_keys": ["k1"]},
+        "rules": "conflict-table",
+        "H_us": 10000,
+        "buffer": {"policy": "fixed", "W_us": 0},
+        "late_policy": "queue",
+        "queue_removal": "drain"
+      },
+      "inputs": [
+        {
+          "t_us": 0,
+          "type": "arrive",
+          "msg": "a",
+          "txn": 1,
+          "ts": 100,
+          "ops": [{"key": "k1", "access": "write"}],
+          "payload": "a-payload-01"
+        },
+        {
+          "t_us": 1000,
+          "type": "arrive",
+          "msg": "b",
+          "txn": 2,
+          "ts": 200,
+          "ops": [{"key": "k9", "access": "write"}],
+          "payload": "b-payload-02"
+        },
+        {
+          "t_us": 2000,
+          "type": "arrive",
+          "msg": "c",
+          "txn": 3,
+          "ts": 300,
+          "ops": [{"key": "k1", "access": "read"}],
+          "payload": "c-payload-03"
+        },
+        {
+          "t_us": 3000,
+          "type": "arrive",
+          "msg": "d",
+          "txn": 4,
+          "ts": 400,
+          "ops": [{"key": "k1", "access": "write"}],
+          "payload": "d-payload-04"
+        },
+        {"t_us": 4000, "type": "cancel", "msg": "c"},
+        {"t_us": 5000, "type": "control_applied", "txn": 1, "kind": "commit", "keys": ["k1"]},
+        {"t_us": 6000, "type": "control_applied", "txn": 4, "kind": "commit", "keys": ["k1"]}
+      ],
+      "end_us": 7000,
+      "checkpoint_times": [3500, 4500],
+      "expect": {
+        "startup": "accept",
+        "deliveries": [
+          {"msg": "a", "t_us": 0, "path": "queued"},
+          {"msg": "b", "t_us": 1000, "path": "direct"},
+          {"msg": "d", "t_us": 5000, "path": "queued"}
+        ],
+        "drops": [{"msg": "c", "t_us": 4000}],
+        "releases": {"k1": [{"msg": "a", "t_us": 0}, {"msg": "d", "t_us": 5000}]},
+        "holds": [
+          {"msg": "a", "key": "k1", "start_us": 0, "end": {"reason": "event", "t_us": 5000}},
+          {"msg": "d", "key": "k1", "start_us": 5000, "end": {"reason": "event", "t_us": 6000}}
+        ],
+        "late": [],
+        "checkpoints": [
+          {
+            "t_us": 3500,
+            "managed": ["k1"],
+            "draining": [],
+            "queue_len": {"k1": 2},
+            "held_msgs": ["c", "d"],
+            "open_holds": [{"msg": "a", "key": "k1"}],
+            "counters": {"intercepted": 4, "direct": 1, "queued_delivered": 1, "dropped": 0, "held_now": 2, "queues_now": 1}
+          },
+          {
+            "t_us": 4500,
+            "managed": ["k1"],
+            "draining": [],
+            "queue_len": {"k1": 1},
+            "held_msgs": ["d"],
+            "open_holds": [{"msg": "a", "key": "k1"}],
+            "counters": {"intercepted": 4, "direct": 1, "queued_delivered": 1, "dropped": 1, "held_now": 1, "queues_now": 1}
+          }
+        ],
+        "counters": {
+          "intercepted": 4,
+          "direct": 1,
+          "queued_delivered": 2,
+          "dropped": 1,
+          "held_now": 0,
+          "holds_created": 2,
+          "hold_end": {"event": 2, "ttl": 0, "cancel": 0, "queue_deleted": 0},
+          "late_queued": {"read": 0, "write": 0, "lock_read": 0},
+          "late_bypass": {"read": 0, "write": 0, "lock_read": 0},
+          "queues_max": 1,
+          "queues_now": 1
+        }
+      }
+    },
+    {
+      "id": "S01-02",
+      "name": "没有取消时的守恒：直接投递与排队后投递",
+      "spec_refs": ["1.2", "1.3", "1.7"],
+      "layer": "core",
+      "applies_to": ["juicer-cc", "crdb", "spanner"],
+      "status": "active",
+      "purpose": "不受管 key 上的消息直接投递，受管 key 上被挡的消息排队后投递；中途有消息仍扣着时守恒等式也成立，每条消息只投递一次、内容不变。",
+      "config": {
+        "filter": {"mode": "fixed", "managed_keys": ["k1"]},
+        "rules": "conflict-table",
+        "H_us": 10000,
+        "buffer": {"policy": "fixed", "W_us": 0},
+        "late_policy": "queue",
+        "queue_removal": "drain"
+      },
+      "inputs": [
+        {
+          "t_us": 0,
+          "type": "arrive",
+          "msg": "a",
+          "txn": 1,
+          "ts": 100,
+          "ops": [{"key": "k1", "access": "write"}],
+          "payload": "a-payload-11"
+        },
+        {
+          "t_us": 1000,
+          "type": "arrive",
+          "msg": "b",
+          "txn": 2,
+          "ts": 200,
+          "ops": [{"key": "k9", "access": "write"}],
+          "payload": "b-payload-12"
+        },
+        {
+          "t_us": 2000,
+          "type": "arrive",
+          "msg": "c",
+          "txn": 3,
+          "ts": 300,
+          "ops": [{"key": "k1", "access": "write"}],
+          "payload": "c-payload-13"
+        },
+        {
+          "t_us": 3000,
+          "type": "arrive",
+          "msg": "d",
+          "txn": 4,
+          "ts": 400,
+          "ops": [{"key": "k1", "access": "write"}],
+          "payload": "d-payload-14"
+        },
+        {"t_us": 5000, "type": "control_applied", "txn": 1, "kind": "commit", "keys": ["k1"]},
+        {"t_us": 6000, "type": "control_applied", "txn": 3, "kind": "commit", "keys": ["k1"]},
+        {"t_us": 7000, "type": "control_applied", "txn": 4, "kind": "commit", "keys": ["k1"]}
+      ],
+      "end_us": 8000,
+      "checkpoint_times": [3500, 5500],
+      "expect": {
+        "startup": "accept",
+        "deliveries": [
+          {"msg": "a", "t_us": 0, "path": "queued"},
+          {"msg": "b", "t_us": 1000, "path": "direct"},
+          {"msg": "c", "t_us": 5000, "path": "queued"},
+          {"msg": "d", "t_us": 6000, "path": "queued"}
+        ],
+        "drops": [],
+        "releases": {"k1": [{"msg": "a", "t_us": 0}, {"msg": "c", "t_us": 5000}, {"msg": "d", "t_us": 6000}]},
+        "holds": [
+          {"msg": "a", "key": "k1", "start_us": 0, "end": {"reason": "event", "t_us": 5000}},
+          {"msg": "c", "key": "k1", "start_us": 5000, "end": {"reason": "event", "t_us": 6000}},
+          {"msg": "d", "key": "k1", "start_us": 6000, "end": {"reason": "event", "t_us": 7000}}
+        ],
+        "late": [],
+        "checkpoints": [
+          {
+            "t_us": 3500,
+            "managed": ["k1"],
+            "draining": [],
+            "queue_len": {"k1": 2},
+            "held_msgs": ["c", "d"],
+            "open_holds": [{"msg": "a", "key": "k1"}],
+            "counters": {"intercepted": 4, "direct": 1, "queued_delivered": 1, "dropped": 0, "held_now": 2, "queues_now": 1}
+          },
+          {
+            "t_us": 5500,
+            "managed": ["k1"],
+            "draining": [],
+            "queue_len": {"k1": 1},
+            "held_msgs": ["d"],
+            "open_holds": [{"msg": "c", "key": "k1"}],
+            "counters": {"intercepted": 4, "direct": 1, "queued_delivered": 2, "dropped": 0, "held_now": 1, "queues_now": 1}
+          }
+        ],
+        "counters": {
+          "intercepted": 4,
+          "direct": 1,
+          "queued_delivered": 3,
+          "dropped": 0,
+          "held_now": 0,
+          "holds_created": 3,
+          "hold_end": {"event": 3, "ttl": 0, "cancel": 0, "queue_deleted": 0},
+          "late_queued": {"read": 0, "write": 0, "lock_read": 0},
+          "late_bypass": {"read": 0, "write": 0, "lock_read": 0},
+          "queues_max": 1,
+          "queues_now": 1
+        }
+      }
+    },
+    {
+      "id": "S01-03",
+      "name": "非事务消息不进扣留路径、不计入拦截",
+      "spec_refs": ["1.1", "1.7"],
+      "layer": "adapter",
+      "applies_to": ["juicer-cc", "crdb", "spanner"],
+      "status": "active",
+      "purpose": "复制、心跳一类的非事务消息即使在受管 key 被挡时也直接交给系统，不计入拦截数，也不影响受管 key 上的排队。",
+      "config": {
+        "filter": {"mode": "fixed", "managed_keys": ["k1"]},
+        "rules": "conflict-table",
+        "H_us": 10000,
+        "buffer": {"policy": "fixed", "W_us": 0},
+        "late_policy": "queue",
+        "queue_removal": "drain"
+      },
+      "adapter_notes": {
+        "juicer-cc": "x 用 DbServer.Replicate RPC（或 Begin，以运行器能注入的为准）",
+        "crdb": "x 用一个非 /cockroach.roachpb.Internal/Batch 的 RPC，例如节点心跳或 Raft 消息",
+        "spanner": "x 用复制端口上的一条副本消息（Juicer 只包住第 0 视图 leader 的存储接收者）"
+      },
+      "inputs": [
+        {"t_us": 0, "type": "arrive", "msg": "a", "txn": 1, "ts": 100, "ops": [{"key": "k1", "access": "write"}]},
+        {"t_us": 1000, "type": "arrive_non_txn", "msg": "x"},
+        {"t_us": 2000, "type": "arrive", "msg": "b", "txn": 2, "ts": 200, "ops": [{"key": "k1", "access": "write"}]},
+        {"t_us": 3000, "type": "control_applied", "txn": 1, "kind": "commit", "keys": ["k1"]},
+        {"t_us": 4000, "type": "control_applied", "txn": 2, "kind": "commit", "keys": ["k1"]}
+      ],
+      "end_us": 5000,
+      "expect": {
+        "startup": "accept",
+        "deliveries": [
+          {"msg": "a", "t_us": 0, "path": "queued"},
+          {"msg": "x", "t_us": 1000, "path": "not_intercepted"},
+          {"msg": "b", "t_us": 3000, "path": "queued"}
+        ],
+        "drops": [],
+        "releases": {"k1": [{"msg": "a", "t_us": 0}, {"msg": "b", "t_us": 3000}]},
+        "holds": [
+          {"msg": "a", "key": "k1", "start_us": 0, "end": {"reason": "event", "t_us": 3000}},
+          {"msg": "b", "key": "k1", "start_us": 3000, "end": {"reason": "event", "t_us": 4000}}
+        ],
+        "late": [],
+        "counters": {
+          "intercepted": 2,
+          "direct": 0,
+          "queued_delivered": 2,
+          "dropped": 0,
+          "held_now": 0,
+          "holds_created": 2,
+          "hold_end": {"event": 2, "ttl": 0, "cancel": 0, "queue_deleted": 0},
+          "late_queued": {"read": 0, "write": 0, "lock_read": 0},
+          "late_bypass": {"read": 0, "write": 0, "lock_read": 0},
+          "queues_max": 1,
+          "queues_now": 1
+        }
+      }
+    }
+  ]
+}
