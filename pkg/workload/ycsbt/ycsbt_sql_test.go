@@ -59,11 +59,33 @@ func TestYCSBTRepeatedKeysThroughSQL(t *testing.T) {
 		return v
 	}
 
+	// The store counters a run reads to report one-phase commits that fell
+	// back to transactional evaluation (Prometheus txn_server_side_1PC_failure
+	// and _success, summed over the stores of every node).
+	onePCCounts := func() (success, failure int64) {
+		t.Helper()
+		var s, f float64
+		require.NoError(t, conn.QueryRowContext(ctx,
+			`SELECT sum(value) FILTER (WHERE name = 'txn.server_side.1PC.success'),
+			        sum(value) FILTER (WHERE name = 'txn.server_side.1PC.failure')
+			   FROM crdb_internal.node_metrics`).Scan(&s, &f))
+		return int64(s), int64(f)
+	}
+	// A distinct-key blind UPSERT on one range commits in one phase.
+	s0, f0 := onePCCounts()
+	require.Equal(t, int64(2), exec(buildBlindStmt(2), int64(7), int64(1), int64(8), int64(2)))
+	s1, f1 := onePCCounts()
+	require.Equal(t, int64(1), s1-s0, "a distinct-key single-range UPSERT is a one-phase commit")
+	require.Equal(t, int64(0), f1-f0)
+
 	// Blind UPSERT with key 1 three times and key 2 twice, KV-traced.
 	exec(`SET tracing = on,kv`)
 	n := exec(buildBlindStmt(5), int64(1), int64(11), int64(2), int64(22), int64(1), int64(33), int64(3), int64(44), int64(1), int64(55))
 	exec(`SET tracing = off`)
 	require.Equal(t, int64(5), n, "the blind UPSERT counts every input row, repeated keys included")
+	s2, f2 := onePCCounts()
+	require.Equal(t, int64(1), f2-f1, "the repeated key makes the one-phase commit fall back, and the counter says so")
+	require.Equal(t, int64(0), s2-s1)
 	require.Equal(t, int64(55), value(1), "last write of key 1 wins")
 	require.Equal(t, int64(22), value(2))
 	require.Equal(t, int64(44), value(3))
