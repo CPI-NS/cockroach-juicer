@@ -74,6 +74,8 @@ func TestJuicerSpecDefaults(t *testing.T) {
 		"rules=conflict-table", "K=100", "S=1", "epoch=10000ms", "idle_epochs=3", "nominate=epoch-end",
 		"max_hold=25ms", "buffer=fixed(0ms)", "late=queue", "removal=drain", "sort_key=batch-now", "diag=off",
 		"hold_calibration=off", "abort_sources=failed-batch,endtxn-abort,resolve-intent-aborted",
+		"caller_abandon=withdraw", "event_log=off",
+		"hold_end=request(get,refresh):own_reply|own_failure|ttl;control(put,cput,inc,del,locking-get):applied(endtxn|resolve-intent|1pc-reply)|own_failure|ttl",
 	} {
 		if !strings.Contains(banner, want) {
 			t.Errorf("spec banner %q lacks %q", banner, want)

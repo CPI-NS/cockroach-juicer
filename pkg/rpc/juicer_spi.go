@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/juicertrace"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -558,7 +559,18 @@ func juicerSpecBanner() string {
 	mode := juicerRulesMode()
 	holdEnd := "per-relation(see BuildRules)"
 	if mode == juicerRulesConflictTable {
-		holdEnd = "get,refresh:own-response;put,cput,inc,del,locking-get:commit-or-abort-applied(endtxn|resolve-intent|1pc-response)-or-own-failure"
+		// The events that end each class of hold (spec 5.4, table 5-C), in
+		// the spec's terms: a request-class hold ends with its own reply
+		// (success or failure), a control-class one when its transaction's
+		// commit or abort is applied here or its own request fails; both
+		// end at max_hold (ttl).
+		holdEnd = "request(get,refresh):own_reply|own_failure|ttl;" +
+			"control(put,cput,inc,del,locking-get):applied(endtxn|resolve-intent|1pc-reply)|own_failure|ttl"
+	}
+	// Per-event logging (11.3): the native release trace.
+	eventLog := "off"
+	if juicertrace.Enabled() {
+		eventLog = "on(COCKROACH_JUICER_TRACE)"
 	}
 	manual := "off"
 	if juicerManualQueueKeysSet {
@@ -580,11 +592,12 @@ func juicerSpecBanner() string {
 		"spec=%s intercept=%s K=%d S=%d epoch=%dms idle_epochs=%d nominate=epoch-end removal=drain"+
 			" abort_sources=failed-batch,endtxn-abort,resolve-intent-aborted l2_counts_from=candidate-epoch"+
 			" rules=%s hold_end=%s max_hold=%dms buffer=%s late=%s order=%s"+
-			" sort_key=batch-now(spec-3.1-exception) diag=%s filter_diag=%s manual_queues=%s hold_calibration=%s",
+			" sort_key=batch-now(spec-3.1-exception) caller_abandon=withdraw event_log=%s"+
+			" diag=%s filter_diag=%s manual_queues=%s hold_calibration=%s",
 		juicerSpecVersion, strings.Join(append(append([]string{}, juicerUnaryBatchPaths...), juicerStreamBatchPaths...), ","),
 		juicerFilterK, juicerFilterS, juicerEpochMillis, juicerIdleEpochs,
 		mode, holdEnd, juicerMaxHoldMillis, buffer, juicerLatePolicy, juicerOrderLabel(),
-		diag, juicerFilterDiagnostic, manual, calibration)
+		eventLog, diag, juicerFilterDiagnostic, manual, calibration)
 }
 
 // startJuicerHitReporter logs the resolved configuration once, then
