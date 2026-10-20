@@ -318,7 +318,10 @@
       "name": "未绑定事务号的队头遇到冲突的持有",
       "spec_refs": ["5.2"],
       "layer": "core",
-      "applies_to": ["juicer-cc", "crdb", "spanner"],
+      "applies_to": ["juicer-cc", "crdb"],
+      "not_applicable": {
+        "spanner": "Spanner 的事务号 0 是真实的事务号（types.h 的 D14），没有“未绑定”的概念：接入层与核心对每条要扣的消息都标为已绑定，构造不出未绑定的标记。核心的未绑定路径由 Spanner 自己的 engine-vectors（E01、E13、E14、E16）覆盖"
+      },
       "status": "pending_ambiguity",
       "blocked_by": "A6",
       "purpose": "事务 1 的写持有在途，事务号未绑定的写到达：规范 5.2 说“必须放行”，是无条件放行，还是仍受在途持有约束、只是不登记，取决于 A6 的裁定。",

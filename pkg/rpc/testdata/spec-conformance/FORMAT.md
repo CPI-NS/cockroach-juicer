@@ -84,6 +84,8 @@
 
 `config_variants` 里的 `override` 按字段覆盖 `config`；值为 `null` 表示“不写这个参数，取代码默认”。
 
+`fixed` 模式的说明（测试集 1.1 版补）：juicer-cc 的 `--manualQueueKeys` 在某个 key 收到第一条消息时才建它的队列，不是从时刻 0 起就建。活跃场景里每个手动受管的 key 都在任何检查点之前收到过消息，所以结果不受影响；以后新写 `fixed` 模式的场景也要保证这一点，否则 `queues_now`、`queue_len` 会因实现而不同。
+
 ### 4.2 三套实现的对应参数
 
 运行器把场景配置翻译成本实现的参数。核心层运行器通常直接构造核心对象，不经过命令行；下表给出含义相同的参数，方便对照。
@@ -165,6 +167,11 @@
 
 接入层场景（`layer = adapter`）里，第一级的输入来自接入层按 2.1 声明的中止来源（失败回复、带 key 的中止消息等），不再有 `level1_abort`。
 
+两处运行器口径（测试集 1.1 版补，来自 CockroachDB 运行器）：
+
+- **经真实拦截器跑核心层的运行器**：CockroachDB 的核心层运行器走真实拦截器，失败回复会照实现把中止报给第一级，与上面“核心层不得把 `reply failed` 喂给第一级”不同。活跃的核心层场景里，带 `reply failed` 的只有 `fixed` 模式的 S05-10、S05-11（没有第一级），所以结果相同；以后在 `hotspot` 模式的核心层场景里写 `reply failed`，要保证它是否进第一级不影响期望，或者改写成接入层场景。
+- **CockroachDB 的 `control_arrive`**：CockroachDB 的一条控制消息（EndTxn、ResolveIntent）分不出“到达”与“执行完”。核心层场景里，运行器把 `control_arrive` 直接喂成核心的到达事件；接入层场景里，`control_arrive` 只能用一个回复里事务仍未决的 EndTxn 批次来表达，现在只在 S09-06 里用来报中止来源。
+
 **`control_applied.via`**：核心层场景不写 `via`，运行器给核心喂本实现的通用“提交或中止已执行完”事件（Go 两套是 `Event{Kind: ControlApplied, OpType: OpCommit/OpAbort, TxnID}`；Spanner 是 `Event{kind: Applied, opType: Commit/Abort}`），按 `keys` 逐个 key 喂。接入层场景用 `via` 指明表 5-C 里的哪一种观测点，运行器必须走那条真实路径：
 
 | `via` | 系统 | 含义 |
@@ -241,7 +248,7 @@
 | `per_message_diag` | `off` / `segment_timing_only`（juicer-cc 声明过的例外） |
 | `event_log` | `off` |
 
-期望值的写法：字面值必须相等；`{"present": true}` 只要求打印了；`{"min": n}` 要求不小于 n；`{"per_system": {系统: 值}}` 按系统取值，值为 `null` 表示该系统不打印这一项；`{"expected": v, "compare": "warn"}` 不相等只告警。
+期望值的写法（可以出现在任意一层，例如 `hold_end_events.request`）：字面值必须相等；`{"present": true}` 只要求打印了；`{"min": n}` 要求不小于 n；`{"per_system": {系统: 值}}` 按系统取值，值为 `null` 表示该系统不打印这一项；`{"expected": v, "compare": "warn"}` 不相等只告警。
 
 ## 7. 比较规则
 
@@ -255,6 +262,7 @@
 - `end.reason` 必须相等。
 - `end` 不带 `lazy` 时，结束时刻按 7.1 比较。这类到期（`ttl`）都发生在有队头正被它挡住的时候，按规范 6.1 必须有定时器在那一刻唤醒。
 - `end` 带 `lazy: true` 的 `ttl`：那一刻没有队头在等它，实现可以晚些清扫。实际结束时刻不早于期望即可；到 `end_us` 时它若仍在在途集合里（存活已满 H、未被清扫），也算符合。对应的 `counters.hold_end.ttl` 给的是区间。
+- 持有到期之后、被清扫之前又遇到自己的结束事件（回复、提交或中止执行完），结束原因记 `event` 还是 `ttl`，待裁定（`AMBIGUITIES.md` A16）。裁定之前场景作者保证不出现这种情形：每个持有要么在存活满 H 之前被事件结束，要么到期时正有队头在等它。
 
 ### 7.3 全局不变量（每个场景都查，不另写在 `expect` 里）
 
@@ -278,4 +286,5 @@
 ## 9. 版本
 
 - 格式版本 `1.0`：本文件。加字段只升次版本号，运行器遇到不认识的字段必须忽略；改字段含义升主版本号。
+- 测试集本身另有版本号（场景内容的版本，与格式版本无关），记在 `README.md` 末尾的变更记录里；运行器以套件摘要（`SHA256SUMS` 的 sha256）认版本。
 - 场景对应的规范版本写在每个文件的 `spec_version`。规范升版本后，主会话按新条文更新场景与 `AMBIGUITIES.md`，再重新生成 `SHA256SUMS`。

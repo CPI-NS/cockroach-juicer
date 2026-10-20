@@ -642,7 +642,10 @@
       "name": "事务号未绑定的队头放行但不登记持有",
       "spec_refs": ["5.2"],
       "layer": "core",
-      "applies_to": ["juicer-cc", "crdb", "spanner"],
+      "applies_to": ["juicer-cc", "crdb"],
+      "not_applicable": {
+        "spanner": "Spanner 的事务号 0 是真实的事务号（types.h 的 D14），没有“未绑定”的概念：接入层与核心对每条要扣的消息都标为已绑定，构造不出未绑定的标记。核心的未绑定路径由 Spanner 自己的 engine-vectors（E01、E13、E14、E16）覆盖"
+      },
       "status": "active",
       "purpose": "没有挡人的持有时，事务号为 0（未绑定）的写到达即放，不登记持有；随后另一事务的写不被它挡。",
       "config": {
@@ -680,7 +683,7 @@
           "queues_now": 1
         }
       },
-      "notes": "三套接入层都不会产生事务号为 0 的数据消息；这是核心层场景，规范 5.2 明文规定了核心对它的行为。未绑定队头遇到冲突持有时怎么办见 P-03。"
+      "notes": "juicer-cc 与 CockroachDB 的接入层都不会产生事务号为 0 的数据消息；这是核心层场景，规范 5.2 明文规定了核心对它的行为。测试集 1.1 版去掉了 Spanner（理由见 not_applicable）。未绑定队头遇到冲突持有时怎么办见 P-03。"
     },
     {
       "id": "S05-13",

@@ -394,7 +394,7 @@
       "config": {
         "filter": {"mode": "hotspot", "K": 100, "S": 1, "idle_epochs": 3, "epoch_us": 1000000},
         "rules": "conflict-table",
-        "H_us": 10000,
+        "H_us": 200000,
         "buffer": {"policy": "fixed", "W_us": 0},
         "late_policy": "queue",
         "queue_removal": "drain"
@@ -483,7 +483,8 @@
           "queues_max": 1,
           "queues_now": 0
         }
-      }
+      },
+      "notes": "H 取 200 ms（测试集 1.1 版由 10 ms 调大）：每个持有都在到期之前被自己的事件结束，避开“过期未清扫的持有被自己的事件放掉，结束原因算 event 还是 ttl”（AMBIGUITIES A16）。场景要测的提名与撤销时机不变。"
     },
     {
       "id": "S02-07",
@@ -496,7 +497,7 @@
       "config": {
         "filter": {"mode": "hotspot", "K": 100, "S": 1, "idle_epochs": 3, "epoch_us": 1000000},
         "rules": "conflict-table",
-        "H_us": 10000,
+        "H_us": 200000,
         "buffer": {"policy": "fixed", "W_us": 0},
         "late_policy": "queue",
         "queue_removal": "drain"
@@ -598,7 +599,8 @@
           "queues_max": 1,
           "queues_now": 0
         }
-      }
+      },
+      "notes": "H 取 200 ms（测试集 1.1 版由 10 ms 调大）：每个持有都在到期之前被自己的事件结束，避开“过期未清扫的持有被自己的事件放掉，结束原因算 event 还是 ttl”（AMBIGUITIES A16）。场景要测的提名与撤销时机不变。"
     },
     {
       "id": "S02-08",
@@ -611,7 +613,7 @@
       "config": {
         "filter": {"mode": "hotspot", "K": 100, "S": 1, "idle_epochs": 3, "epoch_us": 1000000},
         "rules": "conflict-table",
-        "H_us": 10000,
+        "H_us": 200000,
         "buffer": {"policy": "fixed", "W_us": 0},
         "late_policy": "queue",
         "queue_removal": "drain"
@@ -784,7 +786,8 @@
           "queues_max": 2,
           "queues_now": 1
         }
-      }
+      },
+      "notes": "H 取 200 ms（测试集 1.1 版由 10 ms 调大）：每个持有都在到期之前被自己的事件结束，避开“过期未清扫的持有被自己的事件放掉，结束原因算 event 还是 ttl”（AMBIGUITIES A16）。场景要测的提名与撤销时机不变。"
     },
     {
       "id": "S02-09",

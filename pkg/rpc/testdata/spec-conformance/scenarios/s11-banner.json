@@ -20,7 +20,7 @@
       "expect": {
         "startup": "accept",
         "banner": {
-          "spec_version": {"present": true, "expected": "1.2", "compare": "warn"},
+          "spec_version": "1.2",
           "intercepted_types": {"present": true},
           "level1_abort_sources": {"present": true},
           "K": 100,
@@ -29,7 +29,16 @@
           "idle_epochs": 3,
           "nomination": "epoch_end",
           "rules": "conflict-table",
-          "hold_end_events": {"control": ["applied", "own_failure", "ttl"], "request": ["own_reply", "own_failure", "ttl"]},
+          "hold_end_events": {
+            "control": ["applied", "own_failure", "ttl"],
+            "request": {
+              "per_system": {
+                "juicer-cc": null,
+                "crdb": ["own_reply", "own_failure", "ttl"],
+                "spanner": ["own_reply", "own_failure", "ttl"]
+              }
+            }
+          },
           "H_us": {"present": true, "min": 1000},
           "buffer": {"policy": "fixed", "W_us": 0, "adaptive": false},
           "late_policy": "queue",
@@ -47,7 +56,7 @@
           "event_log": "off"
         }
       },
-      "notes": "H 的默认值待标定（规范 6.2），现在只要求打印且不小于 1 ms。规范版本号三套代码里写的是 1.1 一类的旧号，比较时只告警。"
+      "notes": "H 的默认值待标定（规范 6.2），现在只要求打印且不小于 1 ms。规范版本号按 A14 的裁定（10-20 主会话定：三套声明行统一印规范版本号）必须是 1.2，测试集 1.1 版起严格比较。juicer-cc 在冲突表规则下没有请求类持有（同 S05-09 的不适用理由），所以不打印请求类的结束事件。"
     },
     {
       "id": "S11-02",
