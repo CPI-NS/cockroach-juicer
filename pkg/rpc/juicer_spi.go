@@ -548,8 +548,10 @@ func juicerOrderLabel() string {
 	return "sorted"
 }
 
-// juicerSpecVersion names the Juicer spec revision this SPI is aligned with.
-const juicerSpecVersion = "1.1-draft-20261019"
+// juicerSpecVersion names the Juicer spec version this SPI conforms to, as
+// the spec writes it (A14, decided 2026-10-20: every system prints the
+// spec's version number; the conformance suite passes for it).
+const juicerSpecVersion = "1.2"
 
 // juicerSpecBanner renders the configuration declaration line of the Juicer
 // spec (clause 11.1): one line with every setting the spec asks a server to
