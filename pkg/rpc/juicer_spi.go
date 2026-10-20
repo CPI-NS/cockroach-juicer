@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/juicer"
@@ -46,13 +47,16 @@ var (
 	// That is the point — it is the control arm that isolates Juicer's
 	// reordering from its holding (campaign #22).
 	juicerFifo = envutil.EnvOrDefaultBool("COCKROACH_JUICER_FIFO", false)
-	// juicerMaxHoldMillis is the hold engine's single TTL: the gate
-	// relation's quantization clock (campaign #14: E/W ≈ 80% on the winning
-	// workpoint — most holds end by this clock, so its value IS the
-	// mechanism's wait time and the axis a MAX_HOLD sweep moves), and the
-	// residency cap of the sfu/full relations. Non-positive values are
-	// clamped upward by the relation constructors: the gate has no no-TTL
-	// mode.
+	// juicerMaxHoldMillis is the hold engine's single TTL, H in the Juicer
+	// spec (section 6): no hold outlives it, and it bounds every other timed
+	// wait (FIXED_WAIT_MS, the adaptive buffer's cap). It must be at least
+	// 1 ms; juicerServerOptions refuses anything else (it used to be clamped
+	// to 25 ms by the gate and to the fork's 500 ms default by the other
+	// relations). The 25 ms default is a placeholder carried over from the
+	// gate era: the spec calibrates H per system as the p99, on the baseline
+	// at the workpoint, of "a hot-key transaction's first message arrives ->
+	// its commit or abort has been applied on this server", which has not
+	// been measured yet.
 	juicerMaxHoldMillis    = envutil.EnvOrDefaultInt("COCKROACH_JUICER_MAX_HOLD_MS", 25)
 	juicerDebugLogs        = envutil.EnvOrDefaultBool("COCKROACH_JUICER_DEBUG", false)
 	juicerUnaryBatchPaths  = []string{"/cockroach.roachpb.Internal/Batch", "/cockroach.roachpb.KVBatch/Batch"}
@@ -115,26 +119,60 @@ func millisToDuration(ms float64) time.Duration {
 // campaign-7 per-node pinned read timestamp, with its key table) were removed
 // in the 2026-08-13 simplification; reproduce those campaigns from their
 // pinned tags.
+//
+// EXCEPTION to the Juicer spec (clause 3.1, which sorts by a timestamp the
+// transaction's originator assigns once at its start): CockroachDB keeps the
+// per-send batch clock, by user decision of 2026-10-19 — sorting by the
+// transaction's original timestamp lets the retry chain stretch lateness to
+// seconds (campaign 10, above). Distinct transactions may therefore share a
+// sorting key. The configuration declaration line says so
+// (juicerSpecBanner: sort_key=batch-now(spec-3.1-exception)).
 type juicerTxnSortKey struct {
 	wallTime int64
 	logical  int32
 }
 
 // Sizes of the fork's two hot-key filters: K keys admitted by the abort tracker
-// (Level 1), S of those tracked for reorder damage (Level 2).
+// (Level 1), S of those nominated for a queue by their out-of-order arrivals
+// (Level 2).
 //
 // These MUST be passed explicitly. The fork's defaultServerOptions does not
 // initialize juicerFilterK/juicerFilterS, so omitting the ServerOptions leaves
 // both at Go's zero value, and AbortTracker.calculateAndSendDelta returns
 // immediately when TopNFirstFilter <= 0. Level 1 then never promotes a key, never
 // emits a TopKeysDelta, and no per-key queue is ever created — however many
-// aborts are recorded. The defaults below mirror the fork's own
-// juicer.DefaultAbortTrackerConfig() (1000/100), which the interceptor
-// construction path does not consult.
+// aborts are recorded.
+//
+// Defaults K = 100, S = 1 (Juicer spec 2.6/2.8, user decision 2026-10-19;
+// they were 1000/100 until then — reproduce older runs by setting both).
 var (
-	juicerFilterK = envutil.EnvOrDefaultInt("COCKROACH_JUICER_FILTER_K", 1000)
-	juicerFilterS = envutil.EnvOrDefaultInt("COCKROACH_JUICER_FILTER_S", 100)
+	juicerFilterK = envutil.EnvOrDefaultInt("COCKROACH_JUICER_FILTER_K", 100)
+	juicerFilterS = envutil.EnvOrDefaultInt("COCKROACH_JUICER_FILTER_S", 1)
 )
+
+// The hot-key filters' statistics epoch and the lazy-removal threshold (Juicer
+// spec 2.5, 2.7). Since 2026-10-19 the fork nominates keys only at an epoch
+// boundary and retires a queue only after IDLE_EPOCHS consecutive epochs
+// without an out-of-order arrival; both used to be hard-coded (10 s, 3).
+var (
+	juicerEpochMillis = envutil.EnvOrDefaultInt("COCKROACH_JUICER_EPOCH_MS", 10000)
+	juicerIdleEpochs  = envutil.EnvOrDefaultInt("COCKROACH_JUICER_IDLE_EPOCHS", 3)
+)
+
+// COCKROACH_JUICER_LATE_POLICY says what a queue does with a late marker (one
+// whose sorting key is below the largest key the queue has released): "queue"
+// (the default since 2026-10-19, Juicer spec 7.2) queues it like any other
+// marker — buffer time, dependency enforcer, hold — reads included; "bypass"
+// lets it through at once without a hold, the behaviour of every earlier run.
+// Any other value refuses to start.
+var juicerLatePolicy = envutil.EnvOrDefaultString("COCKROACH_JUICER_LATE_POLICY", "queue")
+
+// COCKROACH_JUICER_DIAG turns on the fork's per-message diagnostics (Juicer
+// spec 11.2): the filter-cost timers, the dispatch-order history (a global
+// lock per message), the interceptor latency samples and the raw-age debug
+// line. Off by default since 2026-10-19 — every earlier run had them on. None
+// of them feeds a decision. The FILTER_DIAGNOSTIC arms keep their own timers.
+var juicerDiagnostics = envutil.EnvOrDefaultBool("COCKROACH_JUICER_DIAG", false)
 
 // COCKROACH_JUICER_MANUAL_QUEUE_KEYS pins the set of keys that get a per-key
 // queue instead of letting the two hot-key filters choose them. Its value is a
@@ -196,34 +234,37 @@ func parseJuicerManualQueueKeys(raw string) ([]string, error) {
 type juicerRules string
 
 const (
-	juicerRulesGate       juicerRules = "gate"
-	juicerRulesWrites     juicerRules = "writes"
-	juicerRulesWriteGate  juicerRules = "writegate"
-	juicerRulesReadHold   juicerRules = "readhold"
-	juicerRulesReadOnly   juicerRules = "readonly"
-	juicerRulesNoReadRead juicerRules = "noreadread"
-	juicerRulesTypeGate   juicerRules = "typegate"
-	juicerRulesReadWait   juicerRules = "readwait"
-	juicerRulesReadGate   juicerRules = "readgate"
-	juicerRulesReadFirst  juicerRules = "readfirst"
-	juicerRulesFull       juicerRules = "full"
-	juicerRulesSFU        juicerRules = "sfu"
-	juicerRulesOff        juicerRules = "off"
+	juicerRulesConflictTable juicerRules = juicer.ConflictTableName
+	juicerRulesGate          juicerRules = "gate"
+	juicerRulesWrites        juicerRules = "writes"
+	juicerRulesWriteGate     juicerRules = "writegate"
+	juicerRulesReadHold      juicerRules = "readhold"
+	juicerRulesReadOnly      juicerRules = "readonly"
+	juicerRulesNoReadRead    juicerRules = "noreadread"
+	juicerRulesTypeGate      juicerRules = "typegate"
+	juicerRulesReadWait      juicerRules = "readwait"
+	juicerRulesReadGate      juicerRules = "readgate"
+	juicerRulesReadFirst     juicerRules = "readfirst"
+	juicerRulesFull          juicerRules = "full"
+	juicerRulesSFU           juicerRules = "sfu"
+	juicerRulesOff           juicerRules = "off"
 )
 
-// The default is GATE as of the 2026-08-26 merge: the completion gate — the
-// one relation with a demonstrated win (campaigns #11/#12/#14) — is the
-// standard configuration, expressed as a dependency relation instead of the
-// former HOLD_UNTIL_DONE switch. off/sfu/full remain selectable; RMW and
-// other multi-wave workloads MUST select off (campaign #13: the gate is pure
-// harm there, −73% throughput at the measured workpoint).
-var juicerRulesEnv = envutil.EnvOrDefaultString("COCKROACH_JUICER_RULES", string(juicerRulesGate))
+// The default is CONFLICT-TABLE as of 2026-10-19 (Juicer spec section 5, user
+// decision): the one relation the spec prescribes for every system. From
+// 2026-08-26 to then it was GATE, the completion gate; reproduce runs of that
+// period with RULES=gate (and the other knobs whose defaults moved the same
+// day, see juicerSpecBanner). All the earlier relations remain selectable.
+var juicerRulesEnv = envutil.EnvOrDefaultString("COCKROACH_JUICER_RULES", string(juicerRulesConflictTable))
 
-// juicerRulesMode parses COCKROACH_JUICER_RULES. Empty means the default gate;
-// an unrecognized nonempty value is an error, never a silent rule substitution.
+// juicerRulesMode parses COCKROACH_JUICER_RULES. Empty means the default
+// conflict-table; an unrecognized nonempty value is an error, never a silent
+// rule substitution.
 func juicerRulesMode() juicerRules {
 	switch juicerRules(strings.ToLower(strings.TrimSpace(juicerRulesEnv))) {
-	case "", juicerRulesGate:
+	case "", juicerRulesConflictTable:
+		return juicerRulesConflictTable
+	case juicerRulesGate:
 		return juicerRulesGate
 	case juicerRulesWrites:
 		return juicerRulesWrites
@@ -394,6 +435,37 @@ func juicerOrderLabel() string {
 	return "sorted"
 }
 
+// juicerSpecVersion names the Juicer spec revision this SPI is aligned with.
+const juicerSpecVersion = "1.1-draft-20261019"
+
+// juicerSpecBanner renders the configuration declaration line of the Juicer
+// spec (clause 11.1): one line with every setting the spec asks a server to
+// declare, so a run's treatment can be checked field by field against the
+// spec's default table.
+func juicerSpecBanner() string {
+	mode := juicerRulesMode()
+	holdEnd := "per-relation(see BuildRules)"
+	if mode == juicerRulesConflictTable {
+		holdEnd = "get,refresh:own-response;put,cput,inc,del,locking-get:commit-or-abort-applied(endtxn|resolve-intent|1pc-response)-or-own-failure"
+	}
+	manual := "off"
+	if juicerManualQueueKeysSet {
+		manual = "on"
+	}
+	diag := "off"
+	if juicerDiagnostics {
+		diag = "on"
+	}
+	return fmt.Sprintf(
+		"spec=%s intercept=%s K=%d S=%d epoch=%dms idle_epochs=%d nominate=epoch-end removal=drain"+
+			" rules=%s hold_end=%s max_hold=%dms buffer=fixed(%vms) late=%s order=%s"+
+			" sort_key=batch-now(spec-3.1-exception) diag=%s filter_diag=%s manual_queues=%s",
+		juicerSpecVersion, strings.Join(append(append([]string{}, juicerUnaryBatchPaths...), juicerStreamBatchPaths...), ","),
+		juicerFilterK, juicerFilterS, juicerEpochMillis, juicerIdleEpochs,
+		mode, holdEnd, juicerMaxHoldMillis, juicerFixedWaitMillis, juicerLatePolicy, juicerOrderLabel(),
+		diag, juicerFilterDiagnostic, manual)
+}
+
 // startJuicerHitReporter logs the resolved configuration once, then
 // interception-hit deltas every minute.
 func startJuicerHitReporter(ctx context.Context) {
@@ -403,6 +475,7 @@ func startJuicerHitReporter(ctx context.Context) {
 		log.Dev.Infof(ctx,
 			"juicer: sorting key source = batch-now (per-send gateway clock; empty Now falls back to MinTimestamp); fixed wait = %v ms; rules = %s (maxHold %d ms); order = %s",
 			juicerFixedWaitMillis, juicerRulesMode(), juicerMaxHoldMillis, juicerOrderLabel())
+		log.Dev.Infof(ctx, "juicer: spec config: %s", juicerSpecBanner())
 		go func() {
 			var lastSplit, lastResp uint64
 			var lastFail kvFailureSnapshot
@@ -448,6 +521,20 @@ func juicerServerOptions() []grpc.ServerOption {
 	if juicerFilterK <= 0 || juicerFilterS <= 0 || juicerFilterS > juicerFilterK {
 		panic("Juicer requires 0 < FILTER_S <= FILTER_K")
 	}
+	if juicerMaxHoldMillis < 1 {
+		panic("Juicer requires COCKROACH_JUICER_MAX_HOLD_MS >= 1 (spec 6.2: every hold is bounded, and 0 never means unbounded)")
+	}
+	// Spec 6.3: no timed wait may exceed the hold limit.
+	if millisToDuration(juicerFixedWaitMillis) > time.Duration(juicerMaxHoldMillis)*time.Millisecond {
+		panic(fmt.Sprintf("Juicer requires COCKROACH_JUICER_FIXED_WAIT_MS (%v) <= COCKROACH_JUICER_MAX_HOLD_MS (%d)",
+			juicerFixedWaitMillis, juicerMaxHoldMillis))
+	}
+	if juicerEpochMillis <= 0 || juicerIdleEpochs <= 0 {
+		panic("Juicer requires positive COCKROACH_JUICER_EPOCH_MS and COCKROACH_JUICER_IDLE_EPOCHS")
+	}
+	if _, ok := juicer.ParseLatePolicy(juicerLatePolicy); !ok || juicerLatePolicy == "" {
+		panic("invalid COCKROACH_JUICER_LATE_POLICY (want queue or bypass): " + juicerLatePolicy)
+	}
 	manualKeys := juicerManualQueueKeysOrPanic()
 	log.Dev.Infof(context.Background(), "juicer: filter diagnostic = %s; filter K = %d; filter S = %d; typed markers = true",
 		juicerFilterDiagnostic, juicerFilterK, juicerFilterS)
@@ -462,6 +549,10 @@ func juicerServerOptions() []grpc.ServerOption {
 		grpc.JuicerStreamMethods(juicerStreamBatchPaths),
 		grpc.JuicerFilterK(juicerFilterK),
 		grpc.JuicerFilterS(juicerFilterS),
+		grpc.JuicerEpoch(time.Duration(juicerEpochMillis) * time.Millisecond),
+		grpc.JuicerIdleEpochs(juicerIdleEpochs),
+		grpc.JuicerLatePolicy(juicerLatePolicy),
+		grpc.JuicerDiagnostics(juicerDiagnostics),
 	}
 	// Manual mode: the fork skips both hot-key filters and creates a queue only
 	// for the listed keys. Appended only when the variable is set, so the
@@ -541,7 +632,14 @@ func juicerTxnID(ba *kvpb.BatchRequest) int64 {
 	if ba == nil || ba.Txn == nil {
 		return 0
 	}
-	b := ba.Txn.ID.GetBytes()
+	return juicerTxnIDFromUUID(ba.Txn.ID)
+}
+
+// juicerTxnIDFromUUID is juicerTxnID's mapping from a transaction UUID, also
+// applied to the transaction a ResolveIntent names (IntentTxn), so that an
+// intent's resolution and the transaction's own messages carry the same id.
+func juicerTxnIDFromUUID(u uuid.UUID) int64 {
+	b := u.GetBytes()
 	id := int64(binary.LittleEndian.Uint64(b[8:16]))
 	if id == 0 {
 		id = int64(binary.LittleEndian.Uint64(b[0:8]))
@@ -796,6 +894,109 @@ func (crdbJuicerSPI) IsSelfAbortedResponse(resp interface{}) bool {
 	return true
 }
 
+var _ juicer.ControlEventSPI[int64] = crdbJuicerSPI{}
+
+// juicerAppliedOp maps a transaction status to the control operation it
+// applies: COMMITTED -> OpCommit, ABORTED -> OpAbort, anything else (PENDING,
+// STAGING, PREPARED) -> OpUnknown, i.e. nothing has been applied yet.
+func juicerAppliedOp(status roachpb.TransactionStatus) juicer.OperationType {
+	switch status {
+	case roachpb.COMMITTED:
+		return juicer.OpCommit
+	case roachpb.ABORTED:
+		return juicer.OpAbort
+	}
+	return juicer.OpUnknown
+}
+
+// AppliedControlEvents implements the fork's ControlEventSPI: after a batch's
+// handler has returned, which transactions' commits or aborts it applied on
+// this server, and on which keys. These end the control-class holds of the
+// conflict-table relation (Juicer spec 5.4 (b), table 5-C):
+//
+//   - A transactional batch carrying an EndTxn whose response shows the
+//     transaction COMMITTED or ABORTED applied that outcome for the batch's
+//     own transaction: on its anchor key (the EndTxn's header key), on every
+//     point key of its lock spans and in-flight writes — EndTxn resolves the
+//     range-local ones synchronously, and no ResolveIntent ever comes for
+//     them — and on the keys of the batch's other requests. That covers the
+//     client's own commit or rollback, the parallel commit's explicit-commit
+//     EndTxn, and a one-phase commit, whose [writes..., EndTxn] batch is
+//     sortable and responds COMMITTED. A STAGING response (a parallel commit
+//     not yet explicit) applies nothing. Lock-span keys on other ranges get
+//     the event too when this server happens to hold a queue for them; the
+//     transaction is decided by then, so a conflicting request that meets
+//     its intent resolves it instead of aborting.
+//   - A ResolveIntent request whose status is COMMITTED or ABORTED applied
+//     that outcome for the transaction it names (IntentTxn, mapped like
+//     juicerTxnID) on its key. Async intent resolution batches carry no
+//     transaction of their own (juicerTxnID is 0 for them) and often the
+//     intents of many transactions, which is why the events are per request.
+//     Ranged resolutions name no point key and are skipped, like span
+//     requests everywhere in this SPI.
+//
+// A failed batch applies nothing.
+func (crdbJuicerSPI) AppliedControlEvents(
+	req, resp interface{}, err error,
+) []juicer.ControlEvent[int64] {
+	if err != nil {
+		return nil
+	}
+	ba := asBatchRequest(req)
+	br, _ := resp.(*kvpb.BatchResponse)
+	if ba == nil || br == nil || br.Error != nil {
+		return nil
+	}
+	if ba.Txn != nil {
+		// Only an EndTxn moves a transaction to COMMITTED or ABORTED, and a
+		// transactional batch never carries ResolveIntent requests.
+		if br.Txn == nil {
+			return nil
+		}
+		op := juicerAppliedOp(br.Txn.Status)
+		if op == juicer.OpUnknown {
+			return nil
+		}
+		txnID := juicerTxnID(ba)
+		var out []juicer.ControlEvent[int64]
+		add := func(k roachpb.Key) {
+			if len(k) > 0 {
+				out = append(out, juicer.ControlEvent[int64]{Key: juicerKeyHash(k), TxnID: txnID, OpType: op})
+			}
+		}
+		for i := range ba.Requests {
+			inner := ba.Requests[i].GetInner()
+			if et, ok := inner.(*kvpb.EndTxnRequest); ok {
+				for _, sp := range et.LockSpans {
+					if len(sp.EndKey) == 0 {
+						add(sp.Key)
+					}
+				}
+				for _, w := range et.InFlightWrites {
+					add(w.Key)
+				}
+			}
+			if h := inner.Header(); len(h.EndKey) == 0 {
+				add(h.Key)
+			}
+		}
+		return out
+	}
+	var out []juicer.ControlEvent[int64]
+	for i := range ba.Requests {
+		r, ok := ba.Requests[i].GetInner().(*kvpb.ResolveIntentRequest)
+		if !ok {
+			continue
+		}
+		if op := juicerAppliedOp(r.Status); op != juicer.OpUnknown && len(r.Key) > 0 {
+			out = append(out, juicer.ControlEvent[int64]{
+				Key: juicerKeyHash(r.Key), TxnID: juicerTxnIDFromUUID(r.IntentTxn.ID), OpType: op,
+			})
+		}
+	}
+	return out
+}
+
 // crdbJuicerLogBridge routes the fork's Juicer logs (queue events, pairing
 // violations, block escapes) into CRDB's Dev channel so they appear in the
 // normal node logs. Debug-level fork logs are per-operation and only flow
@@ -836,7 +1037,14 @@ func (crdbJuicerSPI) AbortCurrentRequest(req interface{}) (interface{}, error)  
 // against a dependency relation — and a single on/off flag cannot tell you
 // which one produced an effect.
 //
-//	gate (default)  The completion gate, juicer.GateRules: after a message is
+//	conflict-table  (default since 2026-10-19) The Juicer spec's relation, the
+//	                same for every system: reads never block reads; a write
+//	                (or locking read) blocks and is blocked by the other
+//	                transactions' operations on its key; write and locking
+//	                read holds last until their transaction's commit or abort
+//	                has been applied here, read holds until their own
+//	                response. See the case below.
+//	gate            The completion gate, juicer.GateRules: after a message is
 //	                released on a key, the next message on that key — whatever
 //	                its operation type or transaction — waits for the released
 //	                message's response (success or failure) or the MaxHold
@@ -968,6 +1176,23 @@ func (crdbJuicerSPI) BuildRules() juicer.DependencyRules {
 	mode := juicerRulesMode()
 	maxHold := time.Duration(juicerMaxHoldMillis) * time.Millisecond
 	switch mode {
+	case juicerRulesConflictTable:
+		// Juicer spec section 5, the CockroachDB row of table 5-B: writes and
+		// locking reads (SELECT FOR UPDATE, the read of a read-modify-write)
+		// count as writes; a hold blocks a head of another transaction iff at
+		// least one of the two writes, so reads never wait for reads. Writes
+		// and locking reads leave an intent or a lock until their transaction
+		// ends: control-class, their holds last until the transaction's
+		// commit or abort has been applied on this server (AppliedControlEvents:
+		// the anchor's EndTxn, this key's ResolveIntent, or a one-phase
+		// commit's response) or their own request fails. Plain reads and
+		// Refresh leave only the timestamp cache: request-class, their holds
+		// end with their own response — a read-only transaction sends no
+		// EndTxn, so anything longer would hold until MaxHold.
+		lockingOp := func(o juicer.OperationType) bool {
+			return o == juicer.OpSet || o == juicer.OpGetForPut
+		}
+		return juicer.ConflictTableRules(maxHold, lockingOp, lockingOp)
 	case juicerRulesOff:
 		// Zero value: DependencyRules.Enabled() is false and the fork's
 		// enforcerFactory returns nil, leaving the queues in sorting-only mode.

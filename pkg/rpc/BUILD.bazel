@@ -124,6 +124,7 @@ go_test(
         "datadriven_test.go",
         "down_node_test.go",
         "juicer_spi_test.go",
+        "juicer_spec_test.go",
         "juicer_jitter_test.go",
         "juicer_hotkeys_test.go",
         "juicer_manual_queue_test.go",

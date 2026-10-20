@@ -369,9 +369,9 @@ func TestJuicerStandardConfigDefaults(t *testing.T) {
 	if juicerMaxHoldMillis != 25 {
 		t.Errorf("COCKROACH_JUICER_MAX_HOLD_MS default = %v, want 25", juicerMaxHoldMillis)
 	}
-	if got := juicerRulesMode(); got != juicerRulesGate {
-		t.Errorf("COCKROACH_JUICER_RULES default mode = %q, want %q (the completion gate is standard)",
-			got, juicerRulesGate)
+	if got := juicerRulesMode(); got != juicerRulesConflictTable {
+		t.Errorf("COCKROACH_JUICER_RULES default mode = %q, want %q (the spec's relation, since 2026-10-19)",
+			got, juicerRulesConflictTable)
 	}
 
 	defer func(saved bool) { juicerEnabled = saved }(juicerEnabled)
@@ -442,11 +442,11 @@ func TestJuicerFifoQueueOption(t *testing.T) {
 func TestJuicerGateRules(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer func(saved string) { juicerRulesEnv = saved }(juicerRulesEnv)
-	juicerRulesEnv = ""
+	juicerRulesEnv = "gate" // the default until 2026-10-19
 
 	rules := newCRDBJuicerSPI().BuildRules()
 	if !rules.Enabled() {
-		t.Fatal("default rules disabled, want the gate relation")
+		t.Fatal("gate rules disabled")
 	}
 	if !rules.AdmitUnbound {
 		t.Fatal("gate relation must admit unbound heads untracked (non-transactional batches)")
@@ -1004,10 +1004,18 @@ func TestJuicerRulesModes(t *testing.T) {
 		expectedBlocksWW    bool // Blocks(write held, write head), cross-txn
 		expectedBlocksRead  bool // Blocks(write held, read head), cross-txn
 		expectedReadBlocks  bool // Blocks(read held, write head), cross-txn
+		// expectedConflictTable: the spec relation, whose grid
+		// TestJuicerConflictTableRulesCRDB pins in full; here only that it
+		// was selected and that writes, locking reads and reads interact.
+		expectedConflictTable bool
 	}{
 		{
-			name: "default is the gate", env: "", expectedMode: juicerRulesGate,
-			expectedEnabled: true, expectedTypeBlind: true,
+			name: "default is conflict-table", env: "", expectedMode: juicerRulesConflictTable,
+			expectedEnabled: true, expectedConflictTable: true,
+		},
+		{
+			name: "conflict-table selected by name", env: "Conflict-Table", expectedMode: juicerRulesConflictTable,
+			expectedEnabled: true, expectedConflictTable: true,
 		},
 		{
 			name: "gate selected by name", env: "gate", expectedMode: juicerRulesGate,
@@ -1111,6 +1119,13 @@ func TestJuicerRulesModes(t *testing.T) {
 				return
 			}
 			readB := juicer.OpRef{TxnID: 2, OpType: juicer.OpGet}
+			if tc.expectedConflictTable {
+				if !rules.ObserveControlApplied || !rules.Blocks(sfuA, sfuB) || !rules.Blocks(sfuA, readB) ||
+					!rules.Blocks(readB, sfuA) || rules.Blocks(readB, juicer.OpRef{TxnID: 3, OpType: juicer.OpGet}) {
+					t.Error("conflict-table grid broken")
+				}
+				return
+			}
 			if tc.expectedTypeBlind {
 				// The gate blocks everything behind an in-flight message —
 				// reads and same-txn successors included.
