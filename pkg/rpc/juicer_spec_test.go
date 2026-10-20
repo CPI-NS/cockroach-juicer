@@ -73,7 +73,7 @@ func TestJuicerSpecDefaults(t *testing.T) {
 	for _, want := range []string{
 		"rules=conflict-table", "K=100", "S=1", "epoch=10000ms", "idle_epochs=3", "nominate=epoch-end",
 		"max_hold=25ms", "buffer=fixed(0ms)", "late=queue", "removal=drain", "sort_key=batch-now", "diag=off",
-		"hold_calibration=off",
+		"hold_calibration=off", "abort_sources=failed-batch,endtxn-abort,resolve-intent-aborted",
 	} {
 		if !strings.Contains(banner, want) {
 			t.Errorf("spec banner %q lacks %q", banner, want)

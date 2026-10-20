@@ -578,6 +578,7 @@ func juicerSpecBanner() string {
 	}
 	return fmt.Sprintf(
 		"spec=%s intercept=%s K=%d S=%d epoch=%dms idle_epochs=%d nominate=epoch-end removal=drain"+
+			" abort_sources=failed-batch,endtxn-abort,resolve-intent-aborted l2_counts_from=candidate-epoch"+
 			" rules=%s hold_end=%s max_hold=%dms buffer=%s late=%s order=%s"+
 			" sort_key=batch-now(spec-3.1-exception) diag=%s filter_diag=%s manual_queues=%s hold_calibration=%s",
 		juicerSpecVersion, strings.Join(append(append([]string{}, juicerUnaryBatchPaths...), juicerStreamBatchPaths...), ","),
