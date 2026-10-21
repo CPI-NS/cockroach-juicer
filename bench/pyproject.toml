@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools==75.1.0", "wheel==0.44.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "crdb-bench"
+version = "0.1.0"
+description = "Standalone Juicer CockroachDB SQL experiment adapter"
+requires-python = ">=3.11"
+dependencies = ["experiment-common==0.1.0"]
+
+[project.scripts]
+crdb-bench = "crdb_bench.__main__:entrypoint"
+
+[tool.setuptools.packages.find]
+include = ["crdb_bench*"]
+
+[tool.uv.sources]
+experiment-common = { path = "../../common", editable = true }
+
+[project.entry-points."experiment_common.adapters"]
+crdb = "crdb_bench:CRDBAdapter"
+
+# Exact Requires-Python / Requires-Dist read from the cached upstream wheel.
+# Avoid fetching metadata for another Python/platform during offline resolution.
+[[tool.uv.dependency-metadata]]
+name = "pyyaml"
+version = "6.0.3"
+requires-python = ">=3.8"
+requires-dist = []

@@ -1,0 +1,20 @@
+test_plan_uses_one_global_allocation_and_post_start_load (test_adapter.AdapterPlan.test_plan_uses_one_global_allocation_and_post_start_load) ... ok
+test_local_mapping_runs_control_artifact_not_worker_destination (test_adapter.ArtifactPaths.test_local_mapping_runs_control_artifact_not_worker_destination) ... ok
+test_rejects_read_mode_reinterpretation_and_native_aliases (test_adapter.CanonicalConfiguration.test_rejects_read_mode_reinterpretation_and_native_aliases) ... ok
+test_ssh_plan_uses_deployed_artifacts_and_exact_multi_url_capacity (test_adapter.CanonicalConfiguration.test_ssh_plan_uses_deployed_artifacts_and_exact_multi_url_capacity) ... ok
+test_merges_samples_and_preserves_retry_layers_and_server_window (test_adapter.CollectedMetrics.test_merges_samples_and_preserves_retry_layers_and_server_window) ... ok
+test_ctrl_c_stops_owned_servers_clients_and_children (test_cli.StopCLI.test_ctrl_c_stops_owned_servers_clients_and_children) ... ok
+test_explicit_stop_stops_owned_servers_clients_and_children (test_cli.StopCLI.test_explicit_stop_stops_owned_servers_clients_and_children) ... ok
+test_duplicate_keys_preserve_all_five_draws (test_client.ClientCLI.test_duplicate_keys_preserve_all_five_draws) ... ok
+test_blind_duplicate_inputs_are_not_merged (test_client.SchedulerCLI.test_blind_duplicate_inputs_are_not_merged) ... ok
+test_duplicate_keys_preserve_all_five_draws (test_client.SchedulerCLI.test_duplicate_keys_preserve_all_five_draws) ... ok
+test_wait_cap_retry_latency_and_cutoff_through_real_pgx (test_client.SchedulerCLI.test_wait_cap_retry_latency_and_cutoff_through_real_pgx) ... ok
+test_duplicate_keys_preserve_all_five_draws (test_client.WorkloadCLI.test_duplicate_keys_preserve_all_five_draws) ... ok
+test_scramble_matches_current_ycsbt_coprime_stride (test_client.WorkloadCLI.test_scramble_matches_current_ycsbt_coprime_stride) ... ok
+test_ten_million_keys_zipf_and_poisson_are_parameterized_and_seeded (test_client.WorkloadCLI.test_ten_million_keys_zipf_and_poisson_are_parameterized_and_seeded) ... ok
+test_two_configs_use_real_sql_and_collect_retry_evidence (test_smoke.RealSQLSmoke.test_two_configs_use_real_sql_and_collect_retry_evidence) ... skipped 'Opt-in real CRDB smoke'
+
+----------------------------------------------------------------------
+Ran 15 tests in 5.840s
+
+OK (skipped=1)

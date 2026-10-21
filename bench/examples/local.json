@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "experiment_id": "crdb-local-smoke",
+  "system": "crdb",
+  "mode": "local",
+  "inventory": [
+    {
+      "id": "local",
+      "address": "127.0.0.1",
+      "cpus": 4,
+      "max_client_processes": 4,
+      "roles": [
+        "server",
+        "client",
+        "control"
+      ],
+      "work_dir": "/tmp/crdb-bench"
+    }
+  ],
+  "topology": {
+    "nodes": [
+      {
+        "id": "n1",
+        "host_id": "local",
+        "rpc_port": 27357,
+        "sql_port": 27358,
+        "http_port": 28080
+      }
+    ],
+    "replicas": 1,
+    "splits": 1
+  },
+  "workload": {
+    "name": "ycsbt",
+    "keys": 100,
+    "transaction_size": 5,
+    "zipf": 0.99,
+    "distinct_keys": false,
+    "read_fraction": 0.9,
+    "read_mode": "per_transaction",
+    "seed": 42,
+    "retries": 0
+  },
+  "load": {
+    "mode": "closed",
+    "concurrency": 2,
+    "processes": 2
+  },
+  "juicer": {
+    "enabled": false
+  },
+  "measurement": {
+    "warmup_seconds": 1,
+    "duration_seconds": 3,
+    "timeout_seconds": 30
+  },
+  "artifacts": {
+    "cockroach": "/absolute/path/to/cockroach-short",
+    "sql_client": "/absolute/path/to/crdb-sql-client",
+    "source_revision": "REPLACE_WITH_FORK_COMMIT",
+    "client_source": "/absolute/path/to/checkout/bench/sqlclient"
+  },
+  "matrix": {},
+  "repeats": 1,
+  "runtime": {
+    "max_attempts": 1,
+    "deadline_seconds": 120,
+    "cleanup_margin_seconds": 10,
+    "reuse_data": false,
+    "unattended": false
+  }
+}

@@ -1,0 +1,304 @@
+{
+  "schema_version": 1,
+  "evidence_kind": "Real Linux functional SQL smoke; fake-process CLI stop tests separately labelled",
+  "agent_model": "gpt-6.1-sol (coordinator task assignment)",
+  "real_cli": {
+    "root": "/tmp/crdb-issue04-final",
+    "status": "completed",
+    "completed_cell_count": 2,
+    "workload_keys": 20,
+    "ops_per_txn": 5,
+    "duration_seconds_per_cell": 3,
+    "cells": [
+      {
+        "cell_id": "ae3c3554aa8cf3a38582-r000",
+        "mode": "closed",
+        "juicer_enabled": false,
+        "status": "success",
+        "metrics": {
+          "aborts": 9.0,
+          "attempts": 497,
+          "commits": 497,
+          "latency_ms": {
+            "p50": 7.863281,
+            "p99": 124.724427
+          },
+          "throughput_tps": 165.66666666666666
+        },
+        "validity": {
+          "reasons": [],
+          "valid": true
+        },
+        "retry_layers": {
+          "cc_restarts_per_server_commit": {
+            "denominator": 289.0,
+            "denominator_counter": "txn_commits",
+            "numerator": 9.0,
+            "numerator_counters": [
+              "txn_restarts_txnaborted",
+              "txn_restarts_writetooold",
+              "txn_restarts_serializable",
+              "txn_restarts_txnpush"
+            ],
+            "unit": "events per server KV commit",
+            "value": 0.031141868512110725,
+            "window": "server_counter_scrapes"
+          },
+          "client": {
+            "abort_ratio": 0.0,
+            "attempt_errors": 0,
+            "attempt_window": "Each SQL attempt starts and ends inside its client measurement window",
+            "attempts": 497,
+            "retries": 0,
+            "terminal_errors": 0,
+            "terminal_window": "Logical transaction execution starts and ends inside its client measurement window",
+            "visible_40001": 0
+          },
+          "deadlocks_per_server_commit": {
+            "denominator": 289.0,
+            "denominator_counter": "txn_commits",
+            "numerator": 9.0,
+            "numerator_counters": [
+              "txnwaitqueue_deadlocks_total"
+            ],
+            "unit": "events per server KV commit",
+            "value": 0.031141868512110725,
+            "window": "server_counter_scrapes"
+          },
+          "one_pc_fallback_per_attempt": {
+            "denominator": 10.0,
+            "denominator_counters": [
+              "txn_server_side_1PC_success",
+              "txn_server_side_1PC_failure"
+            ],
+            "numerator": 7.0,
+            "numerator_counter": "txn_server_side_1PC_failure",
+            "unit": "failed 1PC batches per attempted 1PC batch",
+            "value": 0.7,
+            "window": "server_counter_scrapes"
+          },
+          "one_phase_commits_per_server_commit": {
+            "denominator": 289.0,
+            "denominator_counter": "txn_commits",
+            "numerator": 3.0,
+            "numerator_counters": [
+              "txn_commits1pc"
+            ],
+            "unit": "events per server KV commit",
+            "value": 0.010380622837370242,
+            "window": "server_counter_scrapes"
+          },
+          "sql_auto_retries_per_server_commit": {
+            "denominator": 289.0,
+            "denominator_counter": "txn_commits",
+            "numerator": 9.0,
+            "numerator_counters": [
+              "sql_txn_auto_retry_count"
+            ],
+            "unit": "events per server KV commit",
+            "value": 0.031141868512110725,
+            "window": "server_counter_scrapes"
+          },
+          "uncertainty_restarts_per_server_commit": {
+            "denominator": 289.0,
+            "denominator_counter": "txn_commits",
+            "numerator": 0.0,
+            "numerator_counters": [
+              "txn_restarts_readwithinuncertainty"
+            ],
+            "unit": "events per server KV commit",
+            "value": 0.0,
+            "window": "server_counter_scrapes"
+          }
+        },
+        "collection_verified": true,
+        "collection_file_count": 10,
+        "cleanup_errors": [],
+        "result_sha256": "5eaed0efca0f911cdf4867a32cf4adf91a01f0cbe28ad57030f3e8b4724b784e"
+      },
+      {
+        "cell_id": "252b8c3d9508f28315d1-r000",
+        "mode": "open",
+        "juicer_enabled": true,
+        "status": "success",
+        "metrics": {
+          "aborts": 0.0,
+          "attempts": 63,
+          "commits": 63,
+          "latency_ms": {
+            "p50": 3.403073,
+            "p99": 8.58964
+          },
+          "throughput_tps": 21.0
+        },
+        "validity": {
+          "reasons": [],
+          "valid": true
+        },
+        "retry_layers": {
+          "cc_restarts_per_server_commit": {
+            "denominator": 37.0,
+            "denominator_counter": "txn_commits",
+            "numerator": 0.0,
+            "numerator_counters": [
+              "txn_restarts_txnaborted",
+              "txn_restarts_writetooold",
+              "txn_restarts_serializable",
+              "txn_restarts_txnpush"
+            ],
+            "unit": "events per server KV commit",
+            "value": 0.0,
+            "window": "server_counter_scrapes"
+          },
+          "client": {
+            "abort_ratio": 0.0,
+            "attempt_errors": 0,
+            "attempt_window": "Each SQL attempt starts and ends inside its client measurement window",
+            "attempts": 63,
+            "retries": 0,
+            "terminal_errors": 0,
+            "terminal_window": "Logical transaction execution starts and ends inside its client measurement window",
+            "visible_40001": 0
+          },
+          "deadlocks_per_server_commit": {
+            "denominator": 37.0,
+            "denominator_counter": "txn_commits",
+            "numerator": 0.0,
+            "numerator_counters": [
+              "txnwaitqueue_deadlocks_total"
+            ],
+            "unit": "events per server KV commit",
+            "value": 0.0,
+            "window": "server_counter_scrapes"
+          },
+          "one_pc_fallback_per_attempt": {
+            "denominator": 3.0,
+            "denominator_counters": [
+              "txn_server_side_1PC_success",
+              "txn_server_side_1PC_failure"
+            ],
+            "numerator": 2.0,
+            "numerator_counter": "txn_server_side_1PC_failure",
+            "unit": "failed 1PC batches per attempted 1PC batch",
+            "value": 0.6666666666666666,
+            "window": "server_counter_scrapes"
+          },
+          "one_phase_commits_per_server_commit": {
+            "denominator": 37.0,
+            "denominator_counter": "txn_commits",
+            "numerator": 1.0,
+            "numerator_counters": [
+              "txn_commits1pc"
+            ],
+            "unit": "events per server KV commit",
+            "value": 0.02702702702702703,
+            "window": "server_counter_scrapes"
+          },
+          "sql_auto_retries_per_server_commit": {
+            "denominator": 37.0,
+            "denominator_counter": "txn_commits",
+            "numerator": 0.0,
+            "numerator_counters": [
+              "sql_txn_auto_retry_count"
+            ],
+            "unit": "events per server KV commit",
+            "value": 0.0,
+            "window": "server_counter_scrapes"
+          },
+          "uncertainty_restarts_per_server_commit": {
+            "denominator": 37.0,
+            "denominator_counter": "txn_commits",
+            "numerator": 0.0,
+            "numerator_counters": [
+              "txn_restarts_readwithinuncertainty"
+            ],
+            "unit": "events per server KV commit",
+            "value": 0.0,
+            "window": "server_counter_scrapes"
+          }
+        },
+        "collection_verified": true,
+        "collection_file_count": 10,
+        "cleanup_errors": [],
+        "result_sha256": "8b7dff7f095058e2fb79e324d4dae285a0cd7e0a35592ac1484c935a35963d43"
+      }
+    ]
+  },
+  "source_binary": {
+    "source_revision": "1a2f996bd33530f96f022ed797842a760a43f0a0",
+    "grpc_revision": "2d0f58eb5e0719569e5fb39997298560723dbb10",
+    "sha256": "86bdaa026f8261af1b1d8408d97f4cfba7a8a238bd8e87a7218ff8005f8df0cb",
+    "reused": true,
+    "current_worktree_binary_build": false
+  },
+  "stop_cli_fixture_tests": [
+    {
+      "operation": "ctrl-c",
+      "status": "stopped",
+      "cell_count": 1,
+      "cell_status": "interrupted",
+      "completed_cell_count": 0,
+      "cleanup_errors": [],
+      "pids": [
+        {
+          "parent": 2700308,
+          "child": 2700312
+        },
+        {
+          "parent": 2700323,
+          "child": 2700326
+        },
+        {
+          "parent": 2700321,
+          "child": 2700325
+        }
+      ],
+      "evidence_root": "/tmp/crdb-issue04-stop-evidence/ctrl-c"
+    },
+    {
+      "operation": "explicit-stop",
+      "status": "stopped",
+      "cell_count": 1,
+      "cell_status": "interrupted",
+      "completed_cell_count": 0,
+      "cleanup_errors": [],
+      "pids": [
+        {
+          "parent": 2700356,
+          "child": 2700360
+        },
+        {
+          "parent": 2700371,
+          "child": 2700374
+        },
+        {
+          "parent": 2700369,
+          "child": 2700373
+        }
+      ],
+      "evidence_root": "/tmp/crdb-issue04-stop-evidence/explicit-stop"
+    }
+  ],
+  "platforms": {
+    "linux_amd64": "Executed",
+    "macos_arm64": "Untested, explicitly deferred",
+    "real_ssh": "Not executed; generated-plan coverage only"
+  },
+  "packaging": {
+    "lock_status": "uv lock --offline succeeded with exact cached upstream PyYAML metadata",
+    "python": "3.14.8",
+    "pyyaml": "6.0.3",
+    "uv": "0.13.1",
+    "dependency_sync": "uv sync --offline --frozen --no-install-project --no-install-package experiment-common",
+    "wheel_sha256": "31db7f82b6d07ebe8d578f947aa23f1eb1afe32029bb1cbb1632fa298c3ca075",
+    "installed_console_validate": "passed: 2 cells; common supplied from separate source checkout"
+  },
+  "real_ctrl_c_evidence": "real-ctrl-c.json",
+  "tests": {
+    "total": 15,
+    "passed": 14,
+    "skipped": 1,
+    "reason": "Opt-in real smoke is separate; two real cells were run through the standalone CLI",
+    "log": "tests-python314.log"
+  }
+}

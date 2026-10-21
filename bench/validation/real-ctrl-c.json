@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "evidence_kind": "Real Linux CRDB standalone CLI interrupted after observed SQL client progress",
+  "root": "/tmp/crdb-issue04-real-stop",
+  "driver_returncode": 130,
+  "status": "stopped",
+  "cell_count": 1,
+  "cell_status": "interrupted",
+  "completed_cell_count": 0,
+  "cleanup_errors": [],
+  "owned_processes": [
+    {
+      "name": "reset-load",
+      "pid": 2713401,
+      "finished": true,
+      "returncode": 0,
+      "stopped": false,
+      "alive": false
+    },
+    {
+      "name": "crdb-n1",
+      "pid": 2713299,
+      "finished": true,
+      "returncode": 0,
+      "stopped": true,
+      "alive": false
+    },
+    {
+      "name": "verify-client-0",
+      "pid": 2713165,
+      "finished": true,
+      "returncode": 0,
+      "stopped": false,
+      "alive": false
+    },
+    {
+      "name": "prepare-n1",
+      "pid": 2713162,
+      "finished": true,
+      "returncode": 0,
+      "stopped": false,
+      "alive": false
+    },
+    {
+      "name": "init-cluster",
+      "pid": 2713302,
+      "finished": true,
+      "returncode": 0,
+      "stopped": false,
+      "alive": false
+    },
+    {
+      "name": "sql-client-1",
+      "pid": 2713418,
+      "finished": true,
+      "returncode": 1,
+      "stopped": true,
+      "alive": false
+    },
+    {
+      "name": "sql-client-0",
+      "pid": 2713410,
+      "finished": true,
+      "returncode": 1,
+      "stopped": true,
+      "alive": false
+    },
+    {
+      "name": "sql-ready",
+      "pid": 2713393,
+      "finished": true,
+      "returncode": 0,
+      "stopped": false,
+      "alive": false
+    },
+    {
+      "name": "verify-client-1",
+      "pid": 2713248,
+      "finished": true,
+      "returncode": 0,
+      "stopped": false,
+      "alive": false
+    },
+    {
+      "name": "verify-n1",
+      "pid": 2713205,
+      "finished": true,
+      "returncode": 0,
+      "stopped": false,
+      "alive": false
+    }
+  ]
+}

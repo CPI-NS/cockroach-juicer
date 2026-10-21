@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "experiment_id": "crdb-ssh-open",
+  "system": "crdb",
+  "mode": "ssh",
+  "inventory": [
+    {
+      "id": "s1",
+      "address": "192.0.2.10",
+      "user": "ubuntu",
+      "cpus": 8,
+      "max_client_processes": 4,
+      "roles": [
+        "server",
+        "control"
+      ],
+      "work_dir": "/tmp/crdb-bench"
+    },
+    {
+      "id": "c1",
+      "address": "192.0.2.20",
+      "user": "ubuntu",
+      "cpus": 8,
+      "max_client_processes": 8,
+      "roles": [
+        "client"
+      ],
+      "work_dir": "/tmp/crdb-bench"
+    }
+  ],
+  "topology": {
+    "nodes": [
+      {
+        "id": "n1",
+        "host_id": "s1",
+        "rpc_port": 27357,
+        "sql_port": 27358,
+        "http_port": 28080
+      }
+    ],
+    "replicas": 1,
+    "splits": 1
+  },
+  "workload": {
+    "name": "ycsbt",
+    "keys": 10000000,
+    "transaction_size": 5,
+    "zipf": 0.99,
+    "distinct_keys": false,
+    "read_fraction": 0.9,
+    "read_mode": "per_transaction",
+    "seed": 42,
+    "retries": 0
+  },
+  "load": {
+    "mode": "open",
+    "rate": 100,
+    "arrival": "poisson",
+    "max_inflight": 8,
+    "processes": 2
+  },
+  "juicer": {
+    "enabled": false
+  },
+  "measurement": {
+    "warmup_seconds": 1,
+    "duration_seconds": 10,
+    "timeout_seconds": 600
+  },
+  "artifacts": {
+    "cockroach": {
+      "path": "/control/artifacts/cockroach-short",
+      "deploy_to": "/workers/bin/cockroach-short",
+      "hosts": [
+        "s1",
+        "c1"
+      ]
+    },
+    "sql_client": {
+      "path": "/control/artifacts/crdb-sql-client",
+      "deploy_to": "/workers/bin/crdb-sql-client",
+      "hosts": [
+        "s1",
+        "c1"
+      ]
+    },
+    "source_revision": "REPLACE_WITH_FORK_COMMIT",
+    "client_source": "/absolute/path/to/checkout/bench/sqlclient"
+  },
+  "matrix": {},
+  "repeats": 1,
+  "runtime": {
+    "max_attempts": 1,
+    "deadline_seconds": 900,
+    "cleanup_margin_seconds": 10,
+    "reuse_data": false,
+    "unattended": false
+  }
+}
