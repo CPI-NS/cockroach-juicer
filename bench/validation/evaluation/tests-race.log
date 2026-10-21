@@ -1,0 +1,8 @@
+test_wait_cap_retry_latency_and_cutoff_through_real_pgx (test_client.SchedulerCLI.test_wait_cap_retry_latency_and_cutoff_through_real_pgx) ... ok
+test_blind_duplicate_inputs_are_not_merged (test_client.SchedulerCLI.test_blind_duplicate_inputs_are_not_merged) ... ok
+test_top_hot_rank_plan_uses_distinct_ranges_and_balanced_node_targets (test_client.LayoutPlanCLI.test_top_hot_rank_plan_uses_distinct_ranges_and_balanced_node_targets) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 5.667s
+
+OK

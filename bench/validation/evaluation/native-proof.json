@@ -1,0 +1,256 @@
+{
+  "attempt": "/tmp/crdb-ticket11-native-2/cells/4dec8f5bfc1f3e71827c-r000/attempt-001-e057c568",
+  "batch": "/tmp/crdb-ticket11-native-2",
+  "cleanup_errors": [],
+  "files": {
+    "collection.json": "ccee50ff017cdf4cc0b8521ac7b00e5cc1615377fd1843707a559674020023d0",
+    "exits.json": "32fef3e9a444dbd27202db8e7e2fe6671d85a263c166ecc038bafdc0fe6081b4",
+    "result.json": "258b904edbbb2cfcad0fff7c4f84f3704aaa33428c93864871d686a0cdb538d5"
+  },
+  "kind": "Native Linux three-node functional smoke, not an efficacy comparison",
+  "measurement_seconds": 3,
+  "prior_failed_batch": "/tmp/crdb-ticket11-native",
+  "prior_failure": "Catalog inspection refused without allow_unsafe_internals session setting; ordinary failure followed by owned-process cleanup",
+  "processes": [
+    {
+      "finished": true,
+      "inactive": {
+        "pid": true,
+        "supervisor_pid": true
+      },
+      "name": "prepare-n1",
+      "pid": 2737460,
+      "returncode": 0,
+      "supervisor_pid": 2737459
+    },
+    {
+      "finished": true,
+      "inactive": {
+        "pid": true,
+        "supervisor_pid": true
+      },
+      "name": "prepare-n2",
+      "pid": 2737463,
+      "returncode": 0,
+      "supervisor_pid": 2737462
+    },
+    {
+      "finished": true,
+      "inactive": {
+        "pid": true,
+        "supervisor_pid": true
+      },
+      "name": "prepare-n3",
+      "pid": 2737466,
+      "returncode": 0,
+      "supervisor_pid": 2737465
+    },
+    {
+      "finished": true,
+      "inactive": {
+        "pid": true,
+        "supervisor_pid": true
+      },
+      "name": "verify-client-0",
+      "pid": 2737469,
+      "returncode": 0,
+      "supervisor_pid": 2737468
+    },
+    {
+      "finished": true,
+      "inactive": {
+        "pid": true,
+        "supervisor_pid": true
+      },
+      "name": "verify-n1",
+      "pid": 2737514,
+      "returncode": 0,
+      "supervisor_pid": 2737513
+    },
+    {
+      "finished": true,
+      "inactive": {
+        "pid": true,
+        "supervisor_pid": true
+      },
+      "name": "verify-n2",
+      "pid": 2737554,
+      "returncode": 0,
+      "supervisor_pid": 2737553
+    },
+    {
+      "finished": true,
+      "inactive": {
+        "pid": true,
+        "supervisor_pid": true
+      },
+      "name": "verify-n3",
+      "pid": 2737592,
+      "returncode": 0,
+      "supervisor_pid": 2737591
+    },
+    {
+      "finished": true,
+      "inactive": {
+        "pid": true,
+        "supervisor_pid": true
+      },
+      "name": "verify-client-1",
+      "pid": 2737632,
+      "returncode": 0,
+      "supervisor_pid": 2737630
+    },
+    {
+      "finished": true,
+      "inactive": {
+        "pid": true,
+        "supervisor_pid": true
+      },
+      "name": "verify-client-2",
+      "pid": 2737692,
+      "returncode": 0,
+      "supervisor_pid": 2737691
+    },
+    {
+      "finished": true,
+      "inactive": {
+        "pid": true,
+        "supervisor_pid": true
+      },
+      "name": "init-cluster",
+      "pid": 2737754,
+      "returncode": 0,
+      "supervisor_pid": 2737734
+    },
+    {
+      "finished": true,
+      "inactive": {
+        "pid": true,
+        "supervisor_pid": true
+      },
+      "name": "sql-ready",
+      "pid": 2737899,
+      "returncode": 0,
+      "supervisor_pid": 2737898
+    },
+    {
+      "finished": true,
+      "inactive": {
+        "pid": true,
+        "supervisor_pid": true
+      },
+      "name": "reset-load",
+      "pid": 2737909,
+      "returncode": 0,
+      "supervisor_pid": 2737908
+    },
+    {
+      "finished": true,
+      "inactive": {
+        "pid": true,
+        "supervisor_pid": true
+      },
+      "name": "place-hot-ranges",
+      "pid": 2737917,
+      "returncode": 0,
+      "supervisor_pid": 2737916
+    },
+    {
+      "finished": true,
+      "inactive": {
+        "pid": true,
+        "supervisor_pid": true
+      },
+      "name": "sql-client-1",
+      "pid": 2737951,
+      "returncode": 0,
+      "supervisor_pid": 2737935
+    },
+    {
+      "finished": true,
+      "inactive": {
+        "pid": true,
+        "supervisor_pid": true
+      },
+      "name": "sql-client-2",
+      "pid": 2737964,
+      "returncode": 0,
+      "supervisor_pid": 2737936
+    },
+    {
+      "finished": true,
+      "inactive": {
+        "pid": true,
+        "supervisor_pid": true
+      },
+      "name": "sql-client-0",
+      "pid": 2737944,
+      "returncode": 0,
+      "supervisor_pid": 2737934
+    },
+    {
+      "finished": true,
+      "inactive": {
+        "pid": true,
+        "supervisor_pid": true
+      },
+      "name": "verify-live-layout",
+      "pid": 2737937,
+      "returncode": 0,
+      "supervisor_pid": 2737933
+    },
+    {
+      "finished": true,
+      "inactive": {
+        "pid": true,
+        "supervisor_pid": true
+      },
+      "name": "evidence-n1",
+      "pid": 2738028,
+      "returncode": 0,
+      "supervisor_pid": 2738027
+    },
+    {
+      "finished": true,
+      "inactive": {
+        "pid": true,
+        "supervisor_pid": true
+      },
+      "name": "evidence-n2",
+      "pid": 2738043,
+      "returncode": 0,
+      "supervisor_pid": 2738042
+    },
+    {
+      "finished": true,
+      "inactive": {
+        "pid": true,
+        "supervisor_pid": true
+      },
+      "name": "evidence-n3",
+      "pid": 2738051,
+      "returncode": 0,
+      "supervisor_pid": 2738050
+    },
+    {
+      "finished": true,
+      "inactive": {
+        "pid": true,
+        "supervisor_pid": true
+      },
+      "name": "verify-final-layout",
+      "pid": 2738059,
+      "returncode": 0,
+      "supervisor_pid": 2738058
+    }
+  ],
+  "warmup_seconds": 1,
+  "workload": {
+    "distinct_keys": false,
+    "keys": 20,
+    "read_fraction": 0.5,
+    "read_mode": "per_transaction",
+    "transaction_size": 5,
+    "zipf": 0.99
+  }
+}

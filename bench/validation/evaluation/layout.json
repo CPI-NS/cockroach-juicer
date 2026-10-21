@@ -1,0 +1,150 @@
+{
+  "4dec8f5bfc1f3e71827c-r000": {
+    "continuity": "Discrete verified snapshots plus final map; movement away and back between snapshots is not excluded",
+    "final": 1792625778347780344,
+    "hot_keys": [
+      {
+        "key": 0,
+        "lease_store": 1,
+        "range_id": 83,
+        "rank": 0,
+        "target_node": "n1"
+      },
+      {
+        "key": 13,
+        "lease_store": 3,
+        "range_id": 95,
+        "rank": 1,
+        "target_node": "n2"
+      },
+      {
+        "key": 6,
+        "lease_store": 2,
+        "range_id": 89,
+        "rank": 2,
+        "target_node": "n3"
+      },
+      {
+        "key": 19,
+        "lease_store": 1,
+        "range_id": 101,
+        "rank": 3,
+        "target_node": "n1"
+      },
+      {
+        "key": 12,
+        "lease_store": 3,
+        "range_id": 94,
+        "rank": 4,
+        "target_node": "n2"
+      },
+      {
+        "key": 5,
+        "lease_store": 2,
+        "range_id": 88,
+        "rank": 5,
+        "target_node": "n3"
+      },
+      {
+        "key": 18,
+        "lease_store": 1,
+        "range_id": 100,
+        "rank": 6,
+        "target_node": "n1"
+      },
+      {
+        "key": 11,
+        "lease_store": 3,
+        "range_id": 93,
+        "rank": 7,
+        "target_node": "n2"
+      },
+      {
+        "key": 4,
+        "lease_store": 2,
+        "range_id": 87,
+        "rank": 8,
+        "target_node": "n3"
+      },
+      {
+        "key": 17,
+        "lease_store": 1,
+        "range_id": 99,
+        "rank": 9,
+        "target_node": "n1"
+      },
+      {
+        "key": 10,
+        "lease_store": 3,
+        "range_id": 92,
+        "rank": 10,
+        "target_node": "n2"
+      },
+      {
+        "key": 3,
+        "lease_store": 2,
+        "range_id": 86,
+        "rank": 11,
+        "target_node": "n3"
+      },
+      {
+        "key": 16,
+        "lease_store": 1,
+        "range_id": 98,
+        "rank": 12,
+        "target_node": "n1"
+      },
+      {
+        "key": 9,
+        "lease_store": 3,
+        "range_id": 91,
+        "rank": 13,
+        "target_node": "n2"
+      },
+      {
+        "key": 2,
+        "lease_store": 2,
+        "range_id": 85,
+        "rank": 14,
+        "target_node": "n3"
+      },
+      {
+        "key": 15,
+        "lease_store": 1,
+        "range_id": 97,
+        "rank": 15,
+        "target_node": "n1"
+      }
+    ],
+    "initial": 1792625768491153196,
+    "leases_by_node": {
+      "n1": 7,
+      "n2": 7,
+      "n3": 7
+    },
+    "measurement_samples": 6,
+    "nodes": [
+      {
+        "name": "n1",
+        "node_id": 1,
+        "sql_url": "postgresql://root@localhost:46603/defaultdb?sslmode=disable",
+        "store_id": 1
+      },
+      {
+        "name": "n2",
+        "node_id": 3,
+        "sql_url": "postgresql://root@localhost:49807/defaultdb?sslmode=disable",
+        "store_id": 3
+      },
+      {
+        "name": "n3",
+        "node_id": 2,
+        "sql_url": "postgresql://root@localhost:43095/defaultdb?sslmode=disable",
+        "store_id": 2
+      }
+    ],
+    "observation_count": 9,
+    "range_count": 21,
+    "valid": true
+  }
+}

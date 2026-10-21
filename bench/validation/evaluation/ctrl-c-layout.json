@@ -1,0 +1,26 @@
+{
+  "driver_returncode": 130,
+  "batch_status": "stopped",
+  "cells_started": 1,
+  "planned_cells": 2,
+  "owned_pids": {
+    "observer.json": {
+      "2743019": false,
+      "2743025": false
+    },
+    "server.json": {
+      "2743002": false,
+      "2743006": false
+    },
+    "client-1.json": {
+      "2743023": false,
+      "2743027": false
+    },
+    "client-0.json": {
+      "2743021": false,
+      "2743026": false
+    }
+  },
+  "unrelated_sentinel_running": true,
+  "cleanup_errors": []
+}
