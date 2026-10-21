@@ -1,0 +1,44 @@
+{
+  "batches": [
+    "/tmp/crdb-issue04-final"
+  ],
+  "missing_cell_ids": [],
+  "parser_version": "experiment-common/0.1.0",
+  "rows": [
+    {
+      "aborts": 0.0,
+      "attempts": 63,
+      "batch_id": "acc315297309426eae05ba99bef9553b",
+      "cell_id": "252b8c3d9508f28315d1-r000",
+      "commits": 63,
+      "environment_hash": "142cc114f5625d01a7c824241f707420eacb9f72d951d18b628c8c50d0231220",
+      "load": 20,
+      "p50_ms": 3.403073,
+      "p99_ms": 8.58964,
+      "raw_result_hash": "dcea0d76c78e77eeeab7a9c3a13583c12a673c6db2213257db7fb477dec8fd48",
+      "repeat": 0,
+      "series": "crdb; juicer=True; settings=833a717a",
+      "throughput_tps": 21.0
+    },
+    {
+      "aborts": 9.0,
+      "attempts": 497,
+      "batch_id": "acc315297309426eae05ba99bef9553b",
+      "cell_id": "ae3c3554aa8cf3a38582-r000",
+      "commits": 497,
+      "environment_hash": "142cc114f5625d01a7c824241f707420eacb9f72d951d18b628c8c50d0231220",
+      "load": 2,
+      "p50_ms": 7.863281,
+      "p99_ms": 124.724427,
+      "raw_result_hash": "c52fb52eee01f732b6f91f23f7d2c6859533325fd71256fbb3a85db8f32779f7",
+      "repeat": 0,
+      "series": "crdb; juicer=False; settings=77543f80",
+      "throughput_tps": 165.66666666666666
+    }
+  ],
+  "schema_version": 1,
+  "source_hashes": {
+    "252b8c3d9508f28315d1-r000": "dcea0d76c78e77eeeab7a9c3a13583c12a673c6db2213257db7fb477dec8fd48",
+    "ae3c3554aa8cf3a38582-r000": "c52fb52eee01f732b6f91f23f7d2c6859533325fd71256fbb3a85db8f32779f7"
+  }
+}

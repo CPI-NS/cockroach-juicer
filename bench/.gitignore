@@ -1,0 +1,9 @@
+__pycache__/
+*.egg-info/
+.venv/
+.lock-check/
+sqlclient/crdb-bench-client
+artifacts/
+results/
+
+build/
