@@ -6,12 +6,13 @@ This is system analysis, not a second lifecycle or experiment runner.
 import argparse
 import csv
 import hashlib
-import html
 import json
 from pathlib import Path
 import subprocess
+import xml.etree.ElementTree as ET
 
 from experiment_common.analysis import merge_results
+from experiment_common.research_plot import plot_series
 from . import CRDBAdapter
 
 
@@ -20,74 +21,60 @@ def _write(path, value):
 
 
 def _figure(path, cells):
-    height = max(400, 370 + 15 * len({cell["series"] for cell in cells}))
-    parts = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="{height}" viewBox="0 0 1080 {height}">',
-        f'<rect width="1080" height="{height}" fill="white"/>',
-        '<text x="20" y="22" font-family="sans-serif" font-size="14">CRDB Figure 7.8b inputs: one point per cell/repeat; calibration is labelled separately</text>',
-    ]
-    columns = [
+    groups = {}
+    for cell in cells:
+        key = (cell["series"], cell["environment_hash"], cell["repeat"])
+        groups.setdefault(key, []).append(cell)
+    panels = []
+    outputs = {}
+    for metric, title in (
         ("p99_ms", "p99 (ms)"),
         ("p50_ms", "p50 (ms)"),
         ("cc_restarts_per_commit", "CC restarts / server KV commit"),
-    ]
-    groups = {}
-    for cell in cells:
-        groups.setdefault(cell["series"], []).append(cell)
-    colors = ["#1764aa", "#bf3b2b", "#3d7a42", "#7b4fa0", "#9b7417", "#537780"]
-    xmax = (
-        max(
-            [
-                1,
-                *[
-                    c["throughput_tps"]
-                    for c in cells
-                    if c["throughput_tps"] is not None
-                ],
+    ):
+        series = []
+        for (condition, environment, repeat), rows in sorted(groups.items()):
+            name = f"{condition}; environment={environment}; repeat={repeat}"
+            points = [
+                (r["throughput_tps"], r[metric])
+                for r in sorted(rows, key=lambda r: r["configured_load"])
+                if r["throughput_tps"] is not None
             ]
+            series.append((name, points))
+        panel = path.with_name(f"figure-7.8b-{metric}.svg")
+        if not any(y is not None for _, points in series for _, y in points):
+            panel.unlink(missing_ok=True)
+            outputs[metric] = dict(
+                path=None,
+                reason="No available throughput/metric pairs; nulls remain in JSON/CSV",
+            )
+            continue
+        plot_series(
+            panel,
+            f"CRDB Figure 7.8b inputs: {title}",
+            series,
+            xlabel="Achieved throughput (transactions/s)",
+            ylabel=title,
         )
-        * 1.1
+        panels.append(ET.parse(panel).getroot())
+        outputs[metric] = dict(path=panel.name, reason=None)
+    # Compose native metric panels; all axes, lines, null breaks and legends are common-owned.
+    width = sum(int(panel.attrib["width"]) for panel in panels)
+    height = max((int(panel.attrib["height"]) for panel in panels), default=0)
+    composite = ET.Element(
+        "{http://www.w3.org/2000/svg}svg",
+        width=str(width),
+        height=str(height),
+        viewBox=f"0 0 {width} {height}",
     )
-    for panel, (metric, title) in enumerate(columns):
-        left = 55 + panel * 355
-        top = 55
-        width = 290
-        height = 235
-        maximum = (
-            max([0.001, *[c[metric] for c in cells if c[metric] is not None]]) * 1.12
-        )
-        parts.extend(
-            [
-                f'<text x="{left}" y="44" font-family="sans-serif" font-size="12">{html.escape(title)}</text>',
-                f'<path d="M{left},{top} V{top+height} H{left+width}" stroke="#333" fill="none"/>',
-                f'<text x="{left}" y="{top-2}" font-family="sans-serif" font-size="10">{maximum:.4g}</text>',
-                f'<text x="{left}" y="{top+height+14}" font-family="sans-serif" font-size="10">0</text>',
-                f'<text x="{left+width-35}" y="{top+height+14}" font-family="sans-serif" font-size="10">{xmax:.4g}</text>',
-                f'<text x="{left+10}" y="{top+height+32}" font-family="sans-serif" font-size="11">Achieved throughput (transactions/s)</text>',
-            ]
-        )
-        for i, (name, rows) in enumerate(sorted(groups.items())):
-            color = colors[i % len(colors)]
-            points = []
-            for c in sorted(rows, key=lambda row: row["throughput_tps"] or 0):
-                if c[metric] is None or c["throughput_tps"] is None:
-                    continue
-                x = left + width * c["throughput_tps"] / xmax
-                y = top + height - height * c[metric] / maximum
-                points.append(f"{x:.3f},{y:.3f}")
-                parts.append(
-                    f'<circle cx="{x:.3f}" cy="{y:.3f}" r="3.5" fill="{color}"><title>{html.escape(c["cell_id"]+": "+name)}</title></circle>'
-                )
-            if len(points) > 1:
-                parts.append(
-                    f'<polyline points="{" ".join(points)}" stroke="{color}" fill="none"/>'
-                )
-    for i, name in enumerate(sorted(groups)):
-        parts.append(
-            f'<text x="20" y="{348+i*15}" font-family="sans-serif" font-size="10" fill="{colors[i%len(colors)]}">{html.escape(name)}</text>'
-        )
-    parts.append("</svg>")
-    path.write_text("\n".join(parts) + "\n")
+    left = 0
+    for panel in panels:
+        panel.set("x", str(left))
+        panel.set("y", "0")
+        composite.append(panel)
+        left += int(panel.attrib["width"])
+    ET.ElementTree(composite).write(path, encoding="unicode")
+    return outputs
 
 
 def export_report(records, output):
@@ -129,6 +116,10 @@ def export_report(records, output):
             cell_id=cell_id,
             batch_id=record["batch_id"],
             repeat=record["repeat"],
+            environment_hash=record["environment_hash"],
+            configured_load=c["load"][
+                "rate" if c["load"]["mode"] == "open" else "concurrency"
+            ],
             condition_id=condition_id,
             series=f"{condition_id}; {c['load']['mode']}; {treatment}; setting={setting_id}",
             comparison_eligible=not calibration,
@@ -157,6 +148,8 @@ def export_report(records, output):
                 dict(
                     cell_id=cell_id,
                     batch_id=record["batch_id"],
+                    environment_hash=record["environment_hash"],
+                    repeat=record["repeat"],
                     layer=name,
                     value=metric["value"],
                     numerator=metric["numerator"],
@@ -175,6 +168,8 @@ def export_report(records, output):
                 dict(
                     cell_id=cell_id,
                     batch_id=record["batch_id"],
+                    environment_hash=record["environment_hash"],
+                    repeat=record["repeat"],
                     layer="kv_restart_" + cause,
                     value=(
                         numerator / server_commits
@@ -188,6 +183,8 @@ def export_report(records, output):
                 )
             )
         evidence[cell_id] = dict(
+            environment_hash=record["environment_hash"],
+            repeat=record["repeat"],
             source_batch=record.get("source_batch"),
             source_result_hash=record.get("source_result_hash"),
             derived_result_sha256=hashlib.sha256(
@@ -222,6 +219,7 @@ def export_report(records, output):
         calibration=calibrations,
         layout=layouts,
     )
+    report["plots"] = _figure(output / "figure-7.8b.svg", cells)
     _write(output / "evaluation-report.json", report)
     _write(output / "hold-calibration.json", calibrations)
     _write(output / "layout.json", layouts)
@@ -230,7 +228,6 @@ def export_report(records, output):
             writer = csv.DictWriter(f, fieldnames=list(rows[0]), lineterminator="\n")
             writer.writeheader()
             writer.writerows(rows)
-    _figure(output / "figure-7.8b.svg", cells)
     return report
 
 
@@ -255,6 +252,7 @@ def main(argv=None):
                 cell_id=candidate["cell_id"],
                 repeat=candidate["repeat"],
                 batch_id=candidate["batch_id"],
+                environment_hash=candidate["environment_hash"],
                 config=candidate["config"],
                 result=result,
                 source_batch=candidate["batch_path"],

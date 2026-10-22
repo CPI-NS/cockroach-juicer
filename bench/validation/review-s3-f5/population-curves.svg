@@ -1,0 +1,103 @@
+<ns0:svg xmlns:ns0="http://www.w3.org/2000/svg" width="2460" height="445" viewBox="0 0 2460 445"><ns0:svg width="820" height="445" viewBox="0 0 820 445" x="0" y="0">
+<ns0:rect width="100%" height="100%" fill="white" />
+<ns0:text x="70" y="26" font-family="sans-serif">CRDB Figure 7.8b inputs: p99 (ms)</ns0:text>
+<ns0:path d="M70 65V330H760" fill="none" stroke="black" />
+<ns0:text x="320" y="430" font-family="sans-serif">Achieved throughput (transactions/s)</ns0:text>
+<ns0:text x="5" y="53" font-family="sans-serif">p99 (ms)</ns0:text>
+<ns0:text x="8" y="330" font-family="sans-serif">0</ns0:text>
+<ns0:text x="70" y="350" font-family="sans-serif">0.5</ns0:text>
+<ns0:text x="8" y="280" font-family="sans-serif">0.8</ns0:text>
+<ns0:text x="206" y="350" font-family="sans-serif">0.8</ns0:text>
+<ns0:text x="8" y="230" font-family="sans-serif">1.6</ns0:text>
+<ns0:text x="342" y="350" font-family="sans-serif">1.1</ns0:text>
+<ns0:text x="8" y="180" font-family="sans-serif">2.4</ns0:text>
+<ns0:text x="478" y="350" font-family="sans-serif">1.4</ns0:text>
+<ns0:text x="8" y="130" font-family="sans-serif">3.2</ns0:text>
+<ns0:text x="614" y="350" font-family="sans-serif">1.7</ns0:text>
+<ns0:text x="8" y="80" font-family="sans-serif">4</ns0:text>
+<ns0:text x="750" y="350" font-family="sans-serif">2</ns0:text>
+<ns0:circle data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=0" data-x="0.5" data-y="4" cx="70.000" cy="80.000" r="3" fill="#1565c0"><ns0:title>bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=0: 0.5, 4</ns0:title></ns0:circle>
+<ns0:circle data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=0" data-x="1.0" data-y="4" cx="296.667" cy="80.000" r="3" fill="#1565c0"><ns0:title>bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=0: 1.0, 4</ns0:title></ns0:circle>
+<ns0:polyline data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=0" points="70.000,80.000 296.667,80.000" stroke="#1565c0" fill="none" />
+<ns0:text x="70" y="378" fill="#1565c0" font-family="sans-serif">bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=0</ns0:text>
+<ns0:circle data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=1" data-x="0.5" data-y="4" cx="70.000" cy="80.000" r="3" fill="#c62828"><ns0:title>bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=1: 0.5, 4</ns0:title></ns0:circle>
+<ns0:circle data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=1" data-x="1.0" data-y="4" cx="296.667" cy="80.000" r="3" fill="#c62828"><ns0:title>bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=1: 1.0, 4</ns0:title></ns0:circle>
+<ns0:polyline data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=1" points="70.000,80.000 296.667,80.000" stroke="#c62828" fill="none" />
+<ns0:text x="315" y="378" fill="#c62828" font-family="sans-serif">bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=1</ns0:text>
+<ns0:circle data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=0" data-x="1.5" data-y="4" cx="523.333" cy="80.000" r="3" fill="#2e7d32"><ns0:title>bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=0: 1.5, 4</ns0:title></ns0:circle>
+<ns0:circle data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=0" data-x="2.0" data-y="4" cx="750.000" cy="80.000" r="3" fill="#2e7d32"><ns0:title>bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=0: 2.0, 4</ns0:title></ns0:circle>
+<ns0:polyline data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=0" points="523.333,80.000 750.000,80.000" stroke="#2e7d32" fill="none" />
+<ns0:text x="560" y="378" fill="#2e7d32" font-family="sans-serif">bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=0</ns0:text>
+<ns0:circle data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=1" data-x="1.5" data-y="4" cx="523.333" cy="80.000" r="3" fill="#7b1fa2"><ns0:title>bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=1: 1.5, 4</ns0:title></ns0:circle>
+<ns0:circle data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=1" data-x="2.0" data-y="4" cx="750.000" cy="80.000" r="3" fill="#7b1fa2"><ns0:title>bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=1: 2.0, 4</ns0:title></ns0:circle>
+<ns0:polyline data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=1" points="523.333,80.000 750.000,80.000" stroke="#7b1fa2" fill="none" />
+<ns0:text x="70" y="398" fill="#7b1fa2" font-family="sans-serif">bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=1</ns0:text>
+</ns0:svg><ns0:svg width="820" height="445" viewBox="0 0 820 445" x="820" y="0">
+<ns0:rect width="100%" height="100%" fill="white" />
+<ns0:text x="70" y="26" font-family="sans-serif">CRDB Figure 7.8b inputs: p50 (ms)</ns0:text>
+<ns0:path d="M70 65V330H760" fill="none" stroke="black" />
+<ns0:text x="320" y="430" font-family="sans-serif">Achieved throughput (transactions/s)</ns0:text>
+<ns0:text x="5" y="53" font-family="sans-serif">p50 (ms)</ns0:text>
+<ns0:text x="8" y="330" font-family="sans-serif">0</ns0:text>
+<ns0:text x="70" y="350" font-family="sans-serif">0.5</ns0:text>
+<ns0:text x="8" y="280" font-family="sans-serif">0.8</ns0:text>
+<ns0:text x="206" y="350" font-family="sans-serif">0.8</ns0:text>
+<ns0:text x="8" y="230" font-family="sans-serif">1.6</ns0:text>
+<ns0:text x="342" y="350" font-family="sans-serif">1.1</ns0:text>
+<ns0:text x="8" y="180" font-family="sans-serif">2.4</ns0:text>
+<ns0:text x="478" y="350" font-family="sans-serif">1.4</ns0:text>
+<ns0:text x="8" y="130" font-family="sans-serif">3.2</ns0:text>
+<ns0:text x="614" y="350" font-family="sans-serif">1.7</ns0:text>
+<ns0:text x="8" y="80" font-family="sans-serif">4</ns0:text>
+<ns0:text x="750" y="350" font-family="sans-serif">2</ns0:text>
+<ns0:circle data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=0" data-x="0.5" data-y="4" cx="70.000" cy="80.000" r="3" fill="#1565c0"><ns0:title>bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=0: 0.5, 4</ns0:title></ns0:circle>
+<ns0:circle data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=0" data-x="1.0" data-y="4" cx="296.667" cy="80.000" r="3" fill="#1565c0"><ns0:title>bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=0: 1.0, 4</ns0:title></ns0:circle>
+<ns0:polyline data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=0" points="70.000,80.000 296.667,80.000" stroke="#1565c0" fill="none" />
+<ns0:text x="70" y="378" fill="#1565c0" font-family="sans-serif">bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=0</ns0:text>
+<ns0:circle data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=1" data-x="0.5" data-y="4" cx="70.000" cy="80.000" r="3" fill="#c62828"><ns0:title>bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=1: 0.5, 4</ns0:title></ns0:circle>
+<ns0:circle data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=1" data-x="1.0" data-y="4" cx="296.667" cy="80.000" r="3" fill="#c62828"><ns0:title>bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=1: 1.0, 4</ns0:title></ns0:circle>
+<ns0:polyline data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=1" points="70.000,80.000 296.667,80.000" stroke="#c62828" fill="none" />
+<ns0:text x="315" y="378" fill="#c62828" font-family="sans-serif">bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=1</ns0:text>
+<ns0:circle data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=0" data-x="1.5" data-y="4" cx="523.333" cy="80.000" r="3" fill="#2e7d32"><ns0:title>bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=0: 1.5, 4</ns0:title></ns0:circle>
+<ns0:circle data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=0" data-x="2.0" data-y="4" cx="750.000" cy="80.000" r="3" fill="#2e7d32"><ns0:title>bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=0: 2.0, 4</ns0:title></ns0:circle>
+<ns0:polyline data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=0" points="523.333,80.000 750.000,80.000" stroke="#2e7d32" fill="none" />
+<ns0:text x="560" y="378" fill="#2e7d32" font-family="sans-serif">bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=0</ns0:text>
+<ns0:circle data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=1" data-x="1.5" data-y="4" cx="523.333" cy="80.000" r="3" fill="#7b1fa2"><ns0:title>bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=1: 1.5, 4</ns0:title></ns0:circle>
+<ns0:circle data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=1" data-x="2.0" data-y="4" cx="750.000" cy="80.000" r="3" fill="#7b1fa2"><ns0:title>bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=1: 2.0, 4</ns0:title></ns0:circle>
+<ns0:polyline data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=1" points="523.333,80.000 750.000,80.000" stroke="#7b1fa2" fill="none" />
+<ns0:text x="70" y="398" fill="#7b1fa2" font-family="sans-serif">bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=1</ns0:text>
+</ns0:svg><ns0:svg width="820" height="445" viewBox="0 0 820 445" x="1640" y="0">
+<ns0:rect width="100%" height="100%" fill="white" />
+<ns0:text x="70" y="26" font-family="sans-serif">CRDB Figure 7.8b inputs: CC restarts / server KV commit</ns0:text>
+<ns0:path d="M70 65V330H760" fill="none" stroke="black" />
+<ns0:text x="320" y="430" font-family="sans-serif">Achieved throughput (transactions/s)</ns0:text>
+<ns0:text x="5" y="53" font-family="sans-serif">CC restarts / server KV commit</ns0:text>
+<ns0:text x="8" y="330" font-family="sans-serif">0</ns0:text>
+<ns0:text x="70" y="350" font-family="sans-serif">0.5</ns0:text>
+<ns0:text x="8" y="280" font-family="sans-serif">0.06</ns0:text>
+<ns0:text x="206" y="350" font-family="sans-serif">0.8</ns0:text>
+<ns0:text x="8" y="230" font-family="sans-serif">0.12</ns0:text>
+<ns0:text x="342" y="350" font-family="sans-serif">1.1</ns0:text>
+<ns0:text x="8" y="180" font-family="sans-serif">0.18</ns0:text>
+<ns0:text x="478" y="350" font-family="sans-serif">1.4</ns0:text>
+<ns0:text x="8" y="130" font-family="sans-serif">0.24</ns0:text>
+<ns0:text x="614" y="350" font-family="sans-serif">1.7</ns0:text>
+<ns0:text x="8" y="80" font-family="sans-serif">0.3</ns0:text>
+<ns0:text x="750" y="350" font-family="sans-serif">2</ns0:text>
+<ns0:circle data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=0" data-x="0.5" data-y="0.3" cx="70.000" cy="80.000" r="3" fill="#1565c0"><ns0:title>bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=0: 0.5, 0.3</ns0:title></ns0:circle>
+<ns0:circle data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=0" data-x="1.0" data-y="0.3" cx="296.667" cy="80.000" r="3" fill="#1565c0"><ns0:title>bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=0: 1.0, 0.3</ns0:title></ns0:circle>
+<ns0:polyline data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=0" points="70.000,80.000 296.667,80.000" stroke="#1565c0" fill="none" />
+<ns0:text x="70" y="378" fill="#1565c0" font-family="sans-serif">bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=0</ns0:text>
+<ns0:circle data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=1" data-x="0.5" data-y="0.3" cx="70.000" cy="80.000" r="3" fill="#c62828"><ns0:title>bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=1: 0.5, 0.3</ns0:title></ns0:circle>
+<ns0:circle data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=1" data-x="1.0" data-y="0.3" cx="296.667" cy="80.000" r="3" fill="#c62828"><ns0:title>bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=1: 1.0, 0.3</ns0:title></ns0:circle>
+<ns0:polyline data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=1" points="70.000,80.000 296.667,80.000" stroke="#c62828" fill="none" />
+<ns0:text x="315" y="378" fill="#c62828" font-family="sans-serif">bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; repeat=1</ns0:text>
+<ns0:circle data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=0" data-x="1.5" data-y="0.3" cx="523.333" cy="80.000" r="3" fill="#2e7d32"><ns0:title>bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=0: 1.5, 0.3</ns0:title></ns0:circle>
+<ns0:circle data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=0" data-x="2.0" data-y="0.3" cx="750.000" cy="80.000" r="3" fill="#2e7d32"><ns0:title>bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=0: 2.0, 0.3</ns0:title></ns0:circle>
+<ns0:polyline data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=0" points="523.333,80.000 750.000,80.000" stroke="#2e7d32" fill="none" />
+<ns0:text x="560" y="378" fill="#2e7d32" font-family="sans-serif">bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=0</ns0:text>
+<ns0:circle data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=1" data-x="1.5" data-y="0.3" cx="523.333" cy="80.000" r="3" fill="#7b1fa2"><ns0:title>bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=1: 1.5, 0.3</ns0:title></ns0:circle>
+<ns0:circle data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=1" data-x="2.0" data-y="0.3" cx="750.000" cy="80.000" r="3" fill="#7b1fa2"><ns0:title>bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=1: 2.0, 0.3</ns0:title></ns0:circle>
+<ns0:polyline data-series="bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=1" points="523.333,80.000 750.000,80.000" stroke="#7b1fa2" fill="none" />
+<ns0:text x="70" y="398" fill="#7b1fa2" font-family="sans-serif">bc899ba4ff; closed; observe-only calibration; setting=4cee90bc; environment=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; repeat=1</ns0:text>
+</ns0:svg></ns0:svg>
