@@ -1,5 +1,23 @@
 # CockroachDB experiment adapter
 
+## Python file entry
+
+From this system's reviewed checkout root, use the pinned Python environment:
+
+```sh
+python bench/run.py --help
+python bench/run.py plan --config /absolute/path/to/config.yaml --output /absolute/path/to/plan
+python bench/run.py run --config /absolute/path/to/config.yaml --output /absolute/path/to/batch --detach
+python bench/run.py status --output /absolute/path/to/batch
+python bench/run.py stop --output /absolute/path/to/batch
+python bench/run.py analyze --output /absolute/path/to/batch
+```
+
+`bench/run.py` directly calls the existing `crdb_bench` CLI in this checkout.
+All arguments, exit codes and cleanup behavior use the same implementation.
+The module and installed console entries below remain supported. Keep the
+checkout at the reviewed revision and follow the pinned installation instructions.
+
 `crdb-bench` is an independent Python integration backed by the system-owned Go SQL client in `sqlclient/`. It uses `experiment-common==0.1.0` for configuration, matrix expansion, allocation, local/SSH execution, owned-process cleanup, continuation, collection, and plots. It never imports a historical run directory or requires a juicer-project checkout.
 
 ## Run with existing dependencies
