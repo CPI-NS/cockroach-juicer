@@ -5,8 +5,12 @@
 Commit `768eaebb99e` adds SQL automatic retry **text-reason classification** at
 the actual retry increment, reset and terminal-export boundaries. It preserves
 the SQL total and distinct KV populations; unknown text and scrape discrepancies
-remain visible. Two native Bazel targets and 27 bench checks passed. Live HTTP
-capture from a binary containing this change is still pending. Native-looking
+remain visible. Two native Bazel targets and 27 bench checks passed. A subsequent
+two-second local SQL run using the actual rebuilt source verified all nine text
+classes and the total in raw HTTP capture, parser export, verified collection
+and owned-process cleanup. Counts were zero; this live check validates zero/null
+behavior, while the native tests cover nonzero retry paths. Receipts are under
+`build/sql-retry-observation/live-http/`. Native-looking
 forced retry text cannot be distinguished from an original KV cause; these are
 not structured-causality counters. See [the current observation contract](SQL-RETRY-TEXT-OBSERVATION.md).
 
