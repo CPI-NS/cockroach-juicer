@@ -585,6 +585,7 @@ class CRDBAdapter:
             metric_window="Client execution start and terminal completion both within measurement; server counters separate scrape window",
             security="Insecure SQL/RPC; use only isolated trusted experiment networks",
         )
+        plan.metadata["measurement_coordination"] = "native-gate-v1"
         return plan
 
     def parse_results(self, config, collected_dir):

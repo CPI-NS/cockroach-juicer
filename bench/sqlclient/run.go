@@ -104,7 +104,12 @@ func run(c config) error {
 		}
 		writerDone <- err
 	}()
-	start := time.Now()
+	start, gateErr := measurementStart(parent)
+	if gateErr != nil {
+		close(results)
+		<-writerDone
+		return gateErr
+	}
 	measure := start.Add(seconds(c.Warmup))
 	end := measure.Add(seconds(c.Duration))
 	ctx, cancel := context.WithDeadline(parent, end)
@@ -238,14 +243,13 @@ func run(c config) error {
 			case conn = <-available:
 			default:
 				wait := time.Now()
-				s.CapacityWait++
 				select {
 				case conn = <-available:
 				case <-ctx.Done():
-					s.CapacityWaitNS += time.Since(wait).Nanoseconds()
+					addCapacityWait(&s, wait, time.Now(), measure, end)
 					break schedule
 				}
-				s.CapacityWaitNS += time.Since(wait).Nanoseconds()
+				addCapacityWait(&s, wait, time.Now(), measure, end)
 			}
 			if ctx.Err() != nil {
 				break
@@ -280,5 +284,20 @@ func run(c config) error {
 	if !s.Complete {
 		return errors.New("measurement interrupted")
 	}
-	return nil
+	return measurementWindow(start, seconds(c.Warmup), seconds(c.Duration))
+}
+
+// Preserve native field names, counting only waits intersecting the actual
+// measurement interval. Warmup-only waits cannot mark a measured cell limited.
+func addCapacityWait(s *summary, begin, finish, measure, end time.Time) {
+	if begin.Before(measure) {
+		begin = measure
+	}
+	if finish.After(end) {
+		finish = end
+	}
+	if finish.After(begin) {
+		s.CapacityWait++
+		s.CapacityWaitNS += finish.Sub(begin).Nanoseconds()
+	}
 }
