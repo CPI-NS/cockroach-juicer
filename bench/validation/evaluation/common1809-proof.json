@@ -1,0 +1,23 @@
+{
+  "analysis_output": "/tmp/crdb-ticket11-common1809-report",
+  "analysis_sha256": "17ead43a482f000b04ed0ee0b8873dd5596698a48d6fc1e86bc7440fd3f948a0",
+  "common_checkout": "/home/lihan/Documents/code/cpi-ns/experiment-framework-worktrees/common",
+  "common_clean": true,
+  "common_commit": "1809fbd3c27a8e397b13659670447090b9c3714d",
+  "crdb_commit": "7db533379d29f46f4793ed0fcc92105a76d5559b",
+  "native_smoke_repeated": false,
+  "offline_lock_check": "uv lock --offline --check --project bench: resolved 3 packages, unchanged lock",
+  "required_integration": "747eb54e6db40c02abf6d981c4181fd87cc1dcb7",
+  "tests": {
+    "log": "tests-common1809.log",
+    "passed": 26,
+    "skipped": 1,
+    "total": 27
+  },
+  "unchanged": {
+    "calibration": true,
+    "cells": true,
+    "evidence": true,
+    "layout": true
+  }
+}
