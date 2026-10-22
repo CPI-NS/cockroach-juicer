@@ -13,6 +13,7 @@ import xml.etree.ElementTree as ET
 
 from experiment_common.analysis import merge_results
 from experiment_common.research_plot import plot_series
+from experiment_common.research import write_table
 from . import CRDBAdapter
 
 
@@ -85,6 +86,7 @@ def export_report(records, output):
     layers = []
     calibrations = {}
     layouts = {}
+    stability, stability_series = {}, []
     for record in records:
         c = record["config"]
         result = record["result"]
@@ -112,6 +114,7 @@ def export_report(records, output):
             if calibration
             else ("Juicer on" if c["juicer"]["enabled"] else "Juicer off")
         )
+        stability_state = d.get("stability", {}).get("status", "not_assessed")
         row = dict(
             cell_id=cell_id,
             batch_id=record["batch_id"],
@@ -121,8 +124,9 @@ def export_report(records, output):
                 "rate" if c["load"]["mode"] == "open" else "concurrency"
             ],
             condition_id=condition_id,
-            series=f"{condition_id}; {c['load']['mode']}; {treatment}; setting={setting_id}",
-            comparison_eligible=not calibration,
+            series=f"{condition_id}; {c['load']['mode']}; {treatment}; setting={setting_id}; stability={stability_state}",
+            stability_status=stability_state,
+            comparison_eligible=not calibration and stability_state not in ("unstable", "insufficient"),
             throughput_tps=m["throughput_tps"],
             p50_ms=m["latency_ms"]["p50"],
             p99_ms=m["latency_ms"]["p99"],
@@ -194,7 +198,12 @@ def export_report(records, output):
             server_windows=d["server_windows"],
             measurement=result["measurement"],
             files=result["files"],
+            stability=d.get("stability"),
         )
+        stability[cell_id] = d.get("stability")
+        for point in (d.get("stability") or {}).get("bins", []):
+            stability_series.append(dict(cell_id=cell_id, batch_id=record["batch_id"], repeat=record["repeat"],
+                                         stability_status=stability_state, **point))
         if "hold_calibration" in d:
             calibrations[cell_id] = d["hold_calibration"]
         if "layout" in d:
@@ -218,11 +227,16 @@ def export_report(records, output):
         figure_semantics="Achieved throughput and independently defined numerator/denominator windows; per-cell points, not a paired-block estimator",
         calibration=calibrations,
         layout=layouts,
+        stability=stability,
     )
     report["plots"] = _figure(output / "figure-7.8b.svg", cells)
     _write(output / "evaluation-report.json", report)
     _write(output / "hold-calibration.json", calibrations)
     _write(output / "layout.json", layouts)
+    _write(output / "stability.json", stability)
+    write_table(output / "stability-series.csv", stability_series,
+                ["cell_id", "batch_id", "repeat", "stability_status", "bin", "start_seconds", "end_seconds",
+                 "terminals", "commits", "errors", "exposure_seconds", "commit_rate_tps", "p99_ms"])
     for name, rows in [("figure-7.8b.csv", cells), ("retry-layers.csv", layers)]:
         with (output / name).open("w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=list(rows[0]), lineterminator="\n")

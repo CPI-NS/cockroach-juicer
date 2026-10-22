@@ -145,6 +145,10 @@ def _counter_layers(summaries, reasons):
 
 
 def parse_results(config, root):
+    from .stability import assess, validate_policy
+
+    stability_policy = validate_policy(config)
+    stability_processes = []
     reasons, files, summaries, latencies = [], [], [], []
     commits = attempts = attempt_errors = retries = visible = errors = slots = 0
     seen = set()
@@ -173,6 +177,7 @@ def parse_results(config, root):
             )
             observed_commits = observed_errors = 0
             event_ids = set()
+            stability_events, stability_clocks = [], set()
             for line in event_path.read_text().splitlines():
                 row = json.loads(line)
                 if row["id"] in event_ids:
@@ -211,11 +216,22 @@ def parse_results(config, root):
                 ):
                     raise ValueError("Latency disagrees with execution timestamps")
                 latencies.append(latency)
+                if stability_policy:
+                    monotonic = "complete_offset_ns" in row
+                    relative = (row["complete_offset_ns"] - round(config["measurement"].get("warmup_seconds", 0) * 1e9)
+                                if monotonic else row["complete_unix_ns"] - s["start_unix_ns"])
+                    stability_events.append(dict(complete_relative_ns=relative, terminal=row["terminal"], latency_ms=latency))
+                    stability_clocks.add("native_monotonic_offset" if monotonic else "native_window_relative_wall")
                 observed_commits += row["terminal"] == "committed"
                 observed_errors += row["terminal"] == "error"
             if observed_commits != s["commits"] or observed_errors != s["errors"]:
                 raise ValueError("Terminal event counts disagree with client summary")
             summaries.append(s)
+            if stability_policy:
+                stability_processes.append(dict(process_id=pid, summary=str(path.relative_to(root)),
+                    events_path=str(event_path.relative_to(root)), start_unix_ns=s["start_unix_ns"], end_unix_ns=s["end_unix_ns"],
+                    clock=next(iter(stability_clocks)) if len(stability_clocks) == 1 else "mixed_native_offsets_and_wall",
+                    events=stability_events))
             for name in (
                 "commits",
                 "attempts",
@@ -379,4 +395,5 @@ def parse_results(config, root):
     from .evaluation_metrics import enrich
 
     enrich(config, root, result, summaries)
+    result["diagnostics"]["stability"] = assess(config, stability_processes)
     return result

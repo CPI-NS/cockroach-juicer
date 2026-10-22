@@ -43,6 +43,76 @@ The source meter times first marker to commit/abort applied on that server/key. 
 
 `hold-calibration.json` includes the histogram, span/commit/abort counts, unresolved/untracked counts, selected native epoch behavior, source references, window policy, p50/p99 in microseconds, and a ceiling-to-milliseconds `juicer.env.MAX_HOLD_MS` override. Lost tracking, actual holding or missing evidence invalidates calibration. A recommendation from a functional smoke is not the scientific workload's calibrated default; run the separate stage at its frozen selected workpoint.
 
+## Explicit baseline stability (T-CR-00 / T-CR-01)
+
+The card templates require a site binding for `measurement.stability`; their
+literal `null` placeholder intentionally fails adapter validation. There is
+no adopted scientific threshold. Bind every field before running:
+
+| Field | Required binding / meaning |
+| --- | --- |
+| `criterion` | Explicitly choose `completion_bin_spread_v1` |
+| `bin_seconds` | Positive whole-nanosecond bin width dividing the measurement window exactly |
+| `min_bins` | Integer >= 2, no greater than the declared full-window bin count |
+| `min_terminals_per_bin` | Positive integer, minimum sample count in each bin before judging p99 spread |
+| `min_commit_rate_ratio` | Frozen lower bound in [0,1] for minimum / maximum bin commit rate |
+| `max_p99_ratio` | Frozen upper bound >= 1 for maximum / minimum bin p99 |
+| `stop_on_unstable_off` | Explicit `true` |
+
+These are method bindings, not recommended numerical values. Omitting the
+entire policy on a legacy/custom configuration reports `not_assessed`; it
+does not establish stability. Partially supplied, null or unsupported policies
+fail validation before execution. Thresholds remain in frozen configuration,
+logical continuation identity and each stability decision.
+
+The parser uses only native `measured` terminal events whose execution starts
+and completes within that client's measurement window. It bins by completion
+time relative to each process measurement start, preferring native monotonic
+offsets minus the declared warmup; old raw records use native wall timestamps
+relative to their own window start. Sources and clock modes are retained.
+Cross-host wall-clock alignment is not inferred. Warmup and unfinished events
+are excluded, including transactions that began inside but ended outside.
+
+Each full bin retains committed/error terminal counts, exposure seconds,
+commit rate, and nearest-rank p99 of the merged terminal event latencies.
+Clients' p99 values are never averaged; per-process counts/windows remain
+visible. P99 includes error terminals; rate counts commits only. Decision
+ratios retain their raw numerators and denominators. A ratio strictly beyond
+its frozen bound is `unstable`; equality passes. Insufficient samples or
+zero quantile/rate denominators produce `insufficient`, never fabricated zero
+latency. An observed commit-rate violation is unstable even when empty bins
+make p99 unavailable. Passing this configured spread criterion is not proof
+of stationarity, adequate client capacity, or an offered-rate plateau.
+Capacity waiting remains a separate native diagnostic and selection gate.
+
+Stability is independent of data integrity: an unstable or insufficient run
+retains `validity.valid=true` when its execution/collection/measurement passes
+those checks, and its attempt remains successful. Common stops before the
+next cell when a policy-bound **off** is not stable; treatment does not trigger
+this off-only stop. `summary.json` has status `stopped`, with structured reason
+and `stability-stop.json`. No higher-rate cell, new pair, extension or followup
+is launched after the stop. The existing AB/BA repeat order is preserved.
+On continuation, common rechecks verified results across all linked batches
+before any new cell/build; a prior unsafe off cannot be bypassed by supplying
+only the newest continuation batch. Missing prior stability evidence under
+a frozen policy is also insufficient. Threshold changes require a distinct
+logical plan and do not silently override this boundary.
+
+Selection still uses the existing explicitly frozen version-1 knee rules.
+Any unstable/insufficient repeat excludes that load and all higher loads;
+stable repeats cannot conceal the unsafe one. With sufficient safe evidence
+the existing knee may be recorded, but stopped runs never launch followups.
+Otherwise `selection.json` reports `insufficient_evidence` and a null selected
+load; stopping is not treated as proof that the last stable point is a knee.
+
+`diagnostics.stability` retains status, policy, bins, per-process counts,
+sources, populations, ratio numerators/denominators and reasons. The public
+`crdb_bench.evaluation` export adds `stability.json`, `stability-series.csv`
+and a `stability_status` column in Figure 7.8b inputs; curve labels distinguish
+the states. Unstable/insufficient measurements remain visible but are not
+marked comparison-eligible. Original source hashes and raw files are retained.
+See `stability-20261022/REPORT.md` for actual fixture validation and its limits.
+
 ## Defined retry and error layers
 
 `diagnostics.evaluation` preserves:

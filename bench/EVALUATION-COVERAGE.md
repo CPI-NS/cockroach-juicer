@@ -38,4 +38,17 @@ The source exposes a SQL automatic-retry **total**, but no dedicated per-cause S
 
 ## Committed common integration recheck
 
+Current T-CR-00/01 stability capability: `measurement.stability` explicitly
+binds completion-bin spread criteria and every numerical threshold; no
+scientific defaults are adopted. Native timestamps supply committed-rate and
+merged-terminal p99 time series with populations, counts and decision ratios.
+The public evaluation CLI retains `stability.json`, `stability-series.csv`
+and state-labelled Figure 7.8b inputs. A policy-bound unstable/insufficient off
+stops common dispatch, extensions and followups; linked continuation preserves
+that boundary, while unstable treatment does not trigger an off-only stop.
+The existing knee selector excludes unsafe loads/repeats and reports insufficient
+evidence honestly. Real campaign policy adoption/data remain outstanding.
+See [current stability report](stability-20261022/REPORT.md) for the 57-check
+fixture evidence; the historical recheck below is not evidence for this change.
+
 After the initial handback, common `1809fbd3c27a8e397b13659670447090b9c3714d` was checked from its clean committed checkout. The 27-test suite again reports 26 passed and one opt-in smoke skipped; offline lock verification still passes unchanged. Analysis of the existing native batch into `/tmp/crdb-ticket11-common1809-report` produces identical cells, metric evidence, layout and calibration. No native smoke was repeated. See [recheck proof](validation/evaluation/common1809-proof.json) and [test log](validation/evaluation/tests-common1809.log). CRDB integration `747eb54e6db40c02abf6d981c4181fd87cc1dcb7` is included by signed merge `7db533379d2`.

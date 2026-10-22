@@ -30,6 +30,9 @@ class CRDBAdapter:
     name = "crdb"
 
     def validate(self, config):
+        from .stability import validate_policy
+
+        validate_policy(config)
         if config.get("system") != self.name or config.get("mode") not in (
             "local",
             "ssh",
