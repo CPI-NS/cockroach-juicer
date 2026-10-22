@@ -17,7 +17,7 @@ include = ["crdb_bench*"]
 
 [tool.uv.sources]
 # Local immutable release artifact; provenance/hash in packaging/common-pin.json.
-experiment-common = { path = "vendor/8539f4ae31f8dd8992cc185b0299e87e192a3ce1/experiment_common-0.1.0-py3-none-any.whl" }
+experiment-common = { path = "vendor/3d324cbf3120a21ab1f8ab002844d2b85f026e13/experiment_common-0.1.0-py3-none-any.whl" }
 
 [project.entry-points."experiment_common.adapters"]
 crdb = "crdb_bench:CRDBAdapter"
