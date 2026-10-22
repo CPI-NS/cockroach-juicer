@@ -31,25 +31,24 @@ Record source/submodule or override-tree commits/hashes, dependency locks, exact
 
 `artifacts.cockroach_build` can supply an explicit `{argv,cwd,host_id?,env?}` recipe for common's build operation. `artifacts.client_source` enables the offline Go client recipe. Native executable flags are passed as argv arrays. Deployment is a separate common operation; do not build per measurement cell.
 
-## Existing Python environment and lock status
+## Pinned Python package installation
 
-`bench/pyproject.toml` pins `experiment-common==0.1.0`, and the uv source override expects common beside the system checkout (`../../common` from `bench`). Initial source tests used existing Python 3.12.7/PyYAML 6.0.1; final isolated dependency tests use cached Python 3.14.8/PyYAML 6.0.3. This avoids installing anything:
+Use [packaging/README.md](packaging/README.md) for the tested standalone
+prebuilt-wheel installation. `pyproject.toml` and `uv.lock` resolve a common
+wheel at a commit-specific `vendor/` path; `packaging/common-pin.json` records
+the source and artifact digests. Supply that verified wheel and the adapter
+wheel, plus existing Python/uv and the compatible PyYAML cache. No adjacent
+common checkout is required.
 
-```sh
-export PYTHONPATH="$PWD/bench:/absolute/path/to/experiment-common"
-/absolute/existing/python3.12 -m unittest discover -s bench/tests -v
-```
-
-The final `uv.lock` resolves common and PyYAML 6.0.3 offline. The explicit PyYAML dependency metadata in `pyproject.toml` is copied from the actual cached upstream wheel (`Requires-Python: >=3.8`, no `Requires-Dist`); it avoids a request for another platform's wheel metadata during universal resolution. It does not narrow the project's Python/platform support or invent a package hash.
-
-The executed dependency-only isolated validation used existing uv and cached Python/PyYAML:
+For source-only development checks, use an existing compatible interpreter:
 
 ```sh
-uv lock --offline --no-python-downloads --python /absolute/existing/python3.14 --project bench
-uv sync --offline --frozen --no-python-downloads --python /absolute/existing/python3.14 \
-  --project bench --no-install-project --no-install-package experiment-common
-PYTHONPATH="$PWD/bench:/absolute/path/to/experiment-common" bench/.venv/bin/python \
-  -m unittest discover -s bench/tests -v
+PYTHONPATH="$PWD/bench:/absolute/path/to/experiment-common" \
+  /absolute/existing/python -m unittest discover -s bench/tests -v
 ```
 
-This installs the cached external dependency into an isolated environment and uses local source packages. It is not a claim that a complete isolated build environment was downloaded or installed. Separately, the adapter wheel was built offline with the existing exact setuptools 75.1.0/wheel 0.44.0 toolchain, installed into the isolated environment, and its installed `crdb-bench validate` entry point passed with common supplied from its separate source checkout. Common's own wheel/build validation belongs to the common package.
+Source-only tests and native builds have separate acceptance from isolated
+installed-package checks. A fresh checkout still needs the verified release
+artifacts; remote delivery and build-isolated source installation are not yet
+accepted. An installed setuptools/wheel module is not evidence that uv has its
+corresponding distribution cached. Offline operations fail on missing inputs.

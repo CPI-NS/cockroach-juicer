@@ -4,25 +4,26 @@
 
 ## Run with existing dependencies
 
-Use Python 3.11+ with the common package and PyYAML already available. From this system checkout, the source-only equivalent is:
+Install the pinned wheels with [packaging/README.md](packaging/README.md),
+using existing Python 3.11+, uv and cached PyYAML. From this system checkout:
 
 ```sh
-export PYTHONPATH="$PWD/bench:/absolute/path/to/experiment-common"
-python3.12 -m crdb_bench validate --config bench/examples/local.json --output /tmp/crdb-validate
-python3.12 -m crdb_bench plan --config bench/examples/local.json --output /tmp/crdb-plan
-python3.12 -m crdb_bench build --config bench/examples/local.json --output /tmp/crdb-build
-python3.12 -m crdb_bench run --config bench/examples/local.json --output /tmp/crdb-batch-1
-python3.12 -m crdb_bench status --output /tmp/crdb-batch-1
-python3.12 -m crdb_bench analyze --output /tmp/crdb-batch-1
+source bench/.venv/bin/activate
+python -m crdb_bench validate --config bench/examples/local.json --output /tmp/crdb-validate
+python -m crdb_bench plan --config bench/examples/local.json --output /tmp/crdb-plan
+python -m crdb_bench build --config bench/examples/local.json --output /tmp/crdb-build
+python -m crdb_bench run --config bench/examples/local.json --output /tmp/crdb-batch-1
+python -m crdb_bench status --output /tmp/crdb-batch-1
+python -m crdb_bench analyze --output /tmp/crdb-batch-1
 ```
 
 Replace the example artifact paths and source revision with actual, audited values first. `--set key=value` changes public configuration fields, for example `--set workload.transaction_size=1`. The installed console command `crdb-bench` and the common CLI's `--adapter crdb_bench:CRDBAdapter` use the same implementation. The package also registers the `crdb` adapter entry point.
 
-Ctrl-C or `python3.12 -m crdb_bench stop --output /tmp/crdb-batch-1` stops new cells and cleans experiment-owned server/client process groups, including children. Other workloads are not selected by process name. Ordinary errors fail clearly and clean up; there is no adapter recovery framework. For a new batch that preserves valid completed cells:
+Ctrl-C or `python -m crdb_bench stop --output /tmp/crdb-batch-1` stops new cells and cleans experiment-owned server/client process groups, including children. Other workloads are not selected by process name. Ordinary errors fail clearly and clean up; there is no adapter recovery framework. For a new batch that preserves valid completed cells:
 
 ```sh
-python3.12 -m crdb_bench run --config bench/examples/local.json --output /tmp/crdb-batch-2 --previous /tmp/crdb-batch-1
-python3.12 -m crdb_bench analyze --output /tmp/crdb-joint --previous /tmp/crdb-batch-1 --previous /tmp/crdb-batch-2
+python -m crdb_bench run --config bench/examples/local.json --output /tmp/crdb-batch-2 --previous /tmp/crdb-batch-1
+python -m crdb_bench analyze --output /tmp/crdb-joint --previous /tmp/crdb-batch-1 --previous /tmp/crdb-batch-2
 ```
 
 The configuration and source/artifact identity must remain compatible. An interrupted cell is rerun in full. SVG plots, CSV, and JSON are written by common analysis; never average client quantiles.
