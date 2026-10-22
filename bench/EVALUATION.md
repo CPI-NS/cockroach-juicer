@@ -96,3 +96,6 @@ The maintained code uses source semantics from the current fork rather than old-
 | Server-side attempted 1PC success/failure | `pkg/kv/kvserver/metrics.go`; failed attempts divided by success plus failure. |
 
 The cached binary's full source manifest is retained with the native proof. No historical Python runner or experiment directory is imported at runtime.
+
+
+The S3/F5 follow-up preserves environment/repeat identities through the report CLI and uses common's public plotting renderer. Parsed capacity-wait evidence now reaches automatic selection through `diagnostics.capacity_limited`. See [REVIEW-FIXES.md](REVIEW-FIXES.md) for regression evidence and the F2 coordination note about legacy warmup counters.

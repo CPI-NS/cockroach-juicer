@@ -321,6 +321,7 @@ class EvaluationArtifacts(unittest.TestCase):
                         cell_id="known",
                         repeat=0,
                         batch_id="fixture",
+                        environment_hash="fixture-environment",
                         config=c,
                         result=result,
                         source_result_hash="fixture",

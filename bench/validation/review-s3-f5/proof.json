@@ -1,0 +1,31 @@
+{
+  "base": "0ef8863913314dbe1806fb361847019675ddeb68",
+  "common_checkout": "/home/lihan/Documents/code/cpi-ns/experiment-common",
+  "common_commit": "396e3c155ca7fb497d7fd82e1c52efacdeac3ddb",
+  "common_plot_sha256": "40752655602a579e919ab693760215805583ae241c6191754cd7b96a62241249",
+  "environment_hash": "88edeeca8d54328c212204c4add7a011b387ffbe3507f461ace41fb9cc5ccd53",
+  "files": {
+    "population-cells.csv": "70635e47123cf28ed4d26ab257cbf7999903ddef57777063f819ca5157b94f98",
+    "population-curves.svg": "750d9a7bc52d0ee500b653437764f7d3408716cbd53f878cd0af96de2cc4b02a",
+    "tests.log": "4b1e58a091e00ed46599e89e68be3f510587a31af5e43afbce297f6a3df59c76"
+  },
+  "native_batch": "/tmp/crdb-ticket11-native-2",
+  "native_smoke_repeated": false,
+  "repeat": 0,
+  "replay_report": "/tmp/crdb-review-s3-f5-replay/evaluation-report.json",
+  "replay_sha256": "c9dd9d99648f20c6d9b540cd727430e906d69cc4ac9780212ccd2a7589a28484",
+  "source_sha256": {
+    "evaluation.py": "86dece571744aa15dd18abdb24ffd6e75ed7fca7f9c8145cbe39e06c4ad9e360",
+    "results.py": "ca8eb474f527328529296fabbbc40ae039976dd01bc20947313f9e33dc9b1270",
+    "test_review.py": "8c293f48e90935c0e2f5ad09c832ab622a157561a8196ae78e516ec8bc7bfb12"
+  },
+  "tests": {
+    "passed": 18,
+    "total": 18
+  },
+  "unchanged": {
+    "calibration": true,
+    "layout": true,
+    "retry_layers": true
+  }
+}

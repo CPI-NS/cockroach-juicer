@@ -352,6 +352,10 @@ def parse_results(config, root):
             retry_layers=layers,
             server_counter_deltas=counters,
             server_windows=windows,
+            capacity_limited=any(
+                s.get("capacity_wait_count", 0) > 0 or s.get("capacity_wait_ns", 0) > 0
+                for s in summaries
+            ),
             capacity_wait_count=sum(s.get("capacity_wait_count", 0) for s in summaries),
             capacity_wait_ns=sum(s.get("capacity_wait_ns", 0) for s in summaries),
             unavailable={

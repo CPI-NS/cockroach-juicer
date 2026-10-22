@@ -1,0 +1,9 @@
+cell_id,batch_id,repeat,environment_hash,configured_load,condition_id,series,comparison_eligible,throughput_tps,p50_ms,p99_ms,cc_restarts_per_commit,sql_auto_retries_per_commit,uncertainty_per_commit,one_pc_fallback
+load-1-r0,first,0,aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,1,bc899ba4ff,bc899ba4ff; closed; observe-only calibration; setting=4cee90bc,False,0.5,4,4,0.3,0.5,0.2,0.6
+load-1-r1,first,1,aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,1,bc899ba4ff,bc899ba4ff; closed; observe-only calibration; setting=4cee90bc,False,0.5,4,4,0.3,0.5,0.2,0.6
+load-2-r0,first,0,aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,2,bc899ba4ff,bc899ba4ff; closed; observe-only calibration; setting=4cee90bc,False,1.0,4,4,0.3,0.5,0.2,0.6
+load-2-r1,first,1,aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,2,bc899ba4ff,bc899ba4ff; closed; observe-only calibration; setting=4cee90bc,False,1.0,4,4,0.3,0.5,0.2,0.6
+load-3-r0,continuation,0,bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,3,bc899ba4ff,bc899ba4ff; closed; observe-only calibration; setting=4cee90bc,False,1.5,4,4,0.3,0.5,0.2,0.6
+load-3-r1,continuation,1,bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,3,bc899ba4ff,bc899ba4ff; closed; observe-only calibration; setting=4cee90bc,False,1.5,4,4,0.3,0.5,0.2,0.6
+load-4-r0,continuation,0,bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,4,bc899ba4ff,bc899ba4ff; closed; observe-only calibration; setting=4cee90bc,False,2.0,4,4,0.3,0.5,0.2,0.6
+load-4-r1,continuation,1,bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,4,bc899ba4ff,bc899ba4ff; closed; observe-only calibration; setting=4cee90bc,False,2.0,4,4,0.3,0.5,0.2,0.6
