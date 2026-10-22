@@ -1,0 +1,16 @@
+[
+  {
+    "card": "cr00",
+    "cell_count": 12,
+    "logical_plan_id": "c9978822e8527f6b3167f98bc647648e4308e1911674f7b9e3b9fd416d716e48",
+    "output": "/tmp/crdb-ticket11-plan-cr00",
+    "plan_sha256": "cf9c1806c9f687275d0baee30a57e44930b596c44322eaf34c6490ebf79af607"
+  },
+  {
+    "card": "cr01",
+    "cell_count": 36,
+    "logical_plan_id": "b6b7a6031c3263ccf61ef85297cc36c7706724ea46b2ac8e1478acdd8f4c17e2",
+    "output": "/tmp/crdb-ticket11-plan-cr01",
+    "plan_sha256": "1270cb6893e76062b03f37bbe0f2612c28b06032ff1ddf7c51a4253d6df94a94"
+  }
+]

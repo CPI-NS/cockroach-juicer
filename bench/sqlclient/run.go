@@ -36,23 +36,24 @@ type result struct {
 	Measured    bool    `json:"measured"`
 }
 type summary struct {
-	Schema         int        `json:"schema_version"`
-	Complete       bool       `json:"complete"`
-	Start          int64      `json:"start_unix_ns"`
-	End            int64      `json:"end_unix_ns"`
-	Duration       float64    `json:"duration_seconds"`
-	Config         config     `json:"config"`
-	Commits        uint64     `json:"commits"`
-	Attempts       uint64     `json:"attempts"`
-	AttemptErrors  uint64     `json:"attempt_errors"`
-	ClientRetries  uint64     `json:"client_retries"`
-	Visible40001   uint64     `json:"visible_40001"`
-	Errors         uint64     `json:"errors"`
-	Dispatched     uint64     `json:"dispatched"`
-	CapacityWait   uint64     `json:"capacity_wait_count"`
-	CapacityWaitNS int64      `json:"capacity_wait_ns"`
-	Dropped        int        `json:"dropped"`
-	Counters       []snapshot `json:"counter_snapshots"`
+	AttemptStates  map[string]uint64 `json:"attempt_sqlstates"`
+	Schema         int               `json:"schema_version"`
+	Complete       bool              `json:"complete"`
+	Start          int64             `json:"start_unix_ns"`
+	End            int64             `json:"end_unix_ns"`
+	Duration       float64           `json:"duration_seconds"`
+	Config         config            `json:"config"`
+	Commits        uint64            `json:"commits"`
+	Attempts       uint64            `json:"attempts"`
+	AttemptErrors  uint64            `json:"attempt_errors"`
+	ClientRetries  uint64            `json:"client_retries"`
+	Visible40001   uint64            `json:"visible_40001"`
+	Errors         uint64            `json:"errors"`
+	Dispatched     uint64            `json:"dispatched"`
+	CapacityWait   uint64            `json:"capacity_wait_count"`
+	CapacityWaitNS int64             `json:"capacity_wait_ns"`
+	Dropped        int               `json:"dropped"`
+	Counters       []snapshot        `json:"counter_snapshots"`
 }
 
 func run(c config) error {
@@ -108,7 +109,7 @@ func run(c config) error {
 	end := measure.Add(seconds(c.Duration))
 	ctx, cancel := context.WithDeadline(parent, end)
 	defer cancel()
-	s := summary{Schema: 1, Start: measure.UnixNano(), End: end.UnixNano(), Duration: c.Duration, Config: c}
+	s := summary{AttemptStates: map[string]uint64{}, Schema: 1, Start: measure.UnixNano(), End: end.UnixNano(), Duration: c.Duration, Config: c}
 	var mu sync.Mutex
 	var fatal error
 	var dispatched atomic.Uint64
@@ -159,6 +160,11 @@ func run(c config) error {
 				s.Attempts++
 				if err != nil {
 					s.AttemptErrors++
+					code := state(err)
+					if code == "" {
+						code = "non_sql_error"
+					}
+					s.AttemptStates[code]++
 					if state(err) == "40001" {
 						s.Visible40001++
 					}

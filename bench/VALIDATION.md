@@ -39,5 +39,5 @@ The prior full suite also passed with a race-instrumented Go client; the additio
 
 - Native macOS arm64 build/execution is **untested and explicitly deferred**. Portable paths and native offline recipes are supplied; Linux does not prove Mac support.
 - Real SSH execution was not run against an external inventory. SSH plans, worker destinations and multi-URL global allocation are tested; SSH lifecycle implementation is common's responsibility.
-- Layout/lease calibration and the remaining evaluation-level metric definitions are tracked by the coordinator's ticket11, CR-LAYOUT/CR-METRICS. Basic per-cell reset/load, replica configuration and explicit range splits are present; pinned lease placement/calibration is not claimed complete here.
+- This file records the base Issue04 run. Ticket11 now implements layout/lease placement, observe-only calibration and defined evaluation metrics; see [EVALUATION-COVERAGE.md](EVALUATION-COVERAGE.md) for its separate native evidence and source capability limits.
 - RootQ57 remains preserved: every blind-write input draw is emitted; duplicates are not merged. The retained 1PC layer reports raw failed/successful 1PC batch counters and `failures / (failures + successes)`, separate from concurrency-control restarts, SQL retries and visible client errors.

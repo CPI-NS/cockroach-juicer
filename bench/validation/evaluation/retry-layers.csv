@@ -1,0 +1,17 @@
+cell_id,batch_id,layer,value,numerator,denominator,window,denominator_population
+4dec8f5bfc1f3e71827c-r000,6a075fbb0f61473bb38335a9722db4ad,cc_restarts_per_commit,0.001091703056768559,1.0,916.0,"""server_counter_scrapes""",server KV commits
+4dec8f5bfc1f3e71827c-r000,6a075fbb0f61473bb38335a9722db4ad,sql_auto_retries_per_commit,0.04912663755458515,45.0,916.0,"""server_counter_scrapes""",server KV commits
+4dec8f5bfc1f3e71827c-r000,6a075fbb0f61473bb38335a9722db4ad,uncertainty_per_commit,0.048034934497816595,44.0,916.0,"""server_counter_scrapes""",server KV commits
+4dec8f5bfc1f3e71827c-r000,6a075fbb0f61473bb38335a9722db4ad,deadlocks_per_commit,0.001091703056768559,1.0,916.0,"""server_counter_scrapes""",server KV commits
+4dec8f5bfc1f3e71827c-r000,6a075fbb0f61473bb38335a9722db4ad,one_pc_fallback,0.0,0.0,4.0,"""server_counter_scrapes""",1PC batches
+4dec8f5bfc1f3e71827c-r000,6a075fbb0f61473bb38335a9722db4ad,visible_40001_per_client_attempt,0.0,0,380,"""client SQL attempts fully inside measurement""",client
+4dec8f5bfc1f3e71827c-r000,6a075fbb0f61473bb38335a9722db4ad,terminal_40001_per_client_terminal,0.0,0,380,"""client logical transactions fully inside measurement""",client
+4dec8f5bfc1f3e71827c-r000,6a075fbb0f61473bb38335a9722db4ad,kv_restart_txnaborted,0.001091703056768559,1.0,916.0,server_counter_scrapes,server KV commits
+4dec8f5bfc1f3e71827c-r000,6a075fbb0f61473bb38335a9722db4ad,kv_restart_writetooold,0.0,0.0,916.0,server_counter_scrapes,server KV commits
+4dec8f5bfc1f3e71827c-r000,6a075fbb0f61473bb38335a9722db4ad,kv_restart_serializable,0.0,0.0,916.0,server_counter_scrapes,server KV commits
+4dec8f5bfc1f3e71827c-r000,6a075fbb0f61473bb38335a9722db4ad,kv_restart_txnpush,0.0,0.0,916.0,server_counter_scrapes,server KV commits
+4dec8f5bfc1f3e71827c-r000,6a075fbb0f61473bb38335a9722db4ad,kv_restart_readwithinuncertainty,0.048034934497816595,44.0,916.0,server_counter_scrapes,server KV commits
+4dec8f5bfc1f3e71827c-r000,6a075fbb0f61473bb38335a9722db4ad,kv_restart_asyncwritefailure,0.0,0.0,916.0,server_counter_scrapes,server KV commits
+4dec8f5bfc1f3e71827c-r000,6a075fbb0f61473bb38335a9722db4ad,kv_restart_commitdeadlineexceeded,0.0,0.0,916.0,server_counter_scrapes,server KV commits
+4dec8f5bfc1f3e71827c-r000,6a075fbb0f61473bb38335a9722db4ad,kv_restart_exclusionviolation,0.0,0.0,916.0,server_counter_scrapes,server KV commits
+4dec8f5bfc1f3e71827c-r000,6a075fbb0f61473bb38335a9722db4ad,kv_restart_unknown,0.0,0.0,916.0,server_counter_scrapes,server KV commits

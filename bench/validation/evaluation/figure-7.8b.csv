@@ -1,0 +1,2 @@
+cell_id,batch_id,repeat,condition_id,series,comparison_eligible,throughput_tps,p50_ms,p99_ms,cc_restarts_per_commit,sql_auto_retries_per_commit,uncertainty_per_commit,one_pc_fallback
+4dec8f5bfc1f3e71827c-r000,6a075fbb0f61473bb38335a9722db4ad,0,c7c69d28e8,c7c69d28e8; closed; observe-only calibration; setting=d4b10262,False,126.66666666666667,20.526125,75.290691,0.001091703056768559,0.04912663755458515,0.048034934497816595,0.0

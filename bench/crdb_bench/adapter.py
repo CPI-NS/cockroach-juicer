@@ -73,7 +73,11 @@ class CRDBAdapter:
         if "scramble" in w and not isinstance(w["scramble"], bool):
             raise ValueError("scramble must be boolean")
         t = config["topology"]
-        _fields(t, "nodes replicas splits cache_size max_sql_memory", "topology")
+        _fields(
+            t,
+            "nodes replicas splits cache_size max_sql_memory layout metrics",
+            "topology",
+        )
         hosts = {h["id"]: h for h in config["inventory"]}
         if not t["nodes"]:
             raise ValueError("At least one CRDB node is required")
@@ -109,10 +113,51 @@ class CRDBAdapter:
         _number(t.get("splits", 0), "topology.splits", 0, True)
         if t.get("splits", 0) >= w["keys"]:
             raise ValueError("splits must be smaller than keys")
+        if "layout" in t:
+            layout = t["layout"]
+            _fields(
+                layout,
+                "hot_ranks lease_nodes disable_rebalancing monitor_interval_seconds",
+                "topology.layout",
+            )
+            _number(layout["hot_ranks"], "layout.hot_ranks", 1, True)
+            if layout["hot_ranks"] > w["keys"]:
+                raise ValueError("Hot ranks exceed accessed keys")
+            if (
+                not isinstance(layout["lease_nodes"], list)
+                or len(set(layout["lease_nodes"])) != len(layout["lease_nodes"])
+                or set(layout["lease_nodes"]) != ids
+                or t.get("replicas", min(3, len(ids))) != len(ids)
+            ):
+                raise ValueError(
+                    "Fixed layout requires every configured node as a voter and lease target"
+                )
+            if layout.get("disable_rebalancing") is not True:
+                raise ValueError("Fixed layout requires disable_rebalancing=true")
+            _number(
+                layout.get("monitor_interval_seconds", 1),
+                "layout.monitor_interval_seconds",
+                0.05,
+            )
+        if "metrics" in t:
+            _fields(t["metrics"], "require_retry_identity", "topology.metrics")
+            if not isinstance(t["metrics"].get("require_retry_identity", False), bool):
+                raise ValueError("metrics.require_retry_identity must be boolean")
         j = config["juicer"]
-        _fields(j, "enabled env", "juicer")
+        _fields(j, "enabled env hold_calibration", "juicer")
         if not isinstance(j.get("enabled"), bool):
             raise ValueError("juicer.enabled must be boolean")
+        calibration = j.get("hold_calibration", False)
+        if not isinstance(calibration, bool):
+            raise ValueError("juicer.hold_calibration must be boolean")
+        if calibration and (
+            not j["enabled"]
+            or str(j.get("env", {}).get("AW", "false")).lower() != "false"
+            or j.get("env", {}).get("MANUAL_QUEUE_KEYS")
+        ):
+            raise ValueError(
+                "Hold calibration requires the enabled observe-only interceptor without AW/manual queues"
+            )
         # This allowlist follows pkg/rpc/juicer_spi.go and juicer_spec.go.
         allowed = {
             "RULES",
@@ -268,7 +313,12 @@ class CRDBAdapter:
         ]
         metrics = [f'http://{endpoint(n,"http_port")}/_status/vars' for n in t["nodes"]]
         joins = ",".join(endpoint(n, "rpc_port") for n in t["nodes"])
-        env = {"COCKROACH_JUICER": str(config["juicer"]["enabled"]).lower()}
+        env = {
+            "COCKROACH_JUICER": str(config["juicer"]["enabled"]).lower(),
+            "COCKROACH_JUICER_HOLD_CALIBRATION": str(
+                config["juicer"].get("hold_calibration", False)
+            ).lower(),
+        }
         env.update(
             {
                 f"COCKROACH_JUICER_{k}": (
@@ -357,6 +407,9 @@ class CRDBAdapter:
                 rate=p.get("rate", 0),
                 slots=p["slots"],
                 urls=urls,
+                node_ids=[n["id"] for n in t["nodes"]],
+                layout=t.get("layout"),
+                hold_calibration=config["juicer"].get("hold_calibration", False),
                 warmup_seconds=config["measurement"].get("warmup_seconds", 0),
                 duration_seconds=config["measurement"]["duration_seconds"],
                 request_timeout_seconds=w.get("request_timeout_seconds", 30),
@@ -481,6 +534,43 @@ class CRDBAdapter:
             plan.collect.setdefault(p["host_id"], []).extend(
                 str(root / f"client-{pid}.{suffix}")
                 for suffix in ("events.jsonl", "summary.json")
+            )
+        if "layout" in t:
+            first = allocation[0]
+            host = first["host_id"]
+            prefix = root / f"client-{first['process_id']}"
+            path = str(prefix) + ".json"
+            plan.readiness.append(
+                Command(
+                    [client, "layout", "--config", path, "--timeout", str(timeout)],
+                    host_id=host,
+                    name="place-hot-ranges",
+                    timeout_seconds=timeout,
+                )
+            )
+            plan.observers.append(
+                Command(
+                    [client, "watch-layout", "--config", path],
+                    host_id=host,
+                    name="verify-live-layout",
+                    timeout_seconds=timeout,
+                )
+            )
+            plan.finalize.append(
+                Command(
+                    [client, "layout-check", "--config", path],
+                    host_id=host,
+                    name="verify-final-layout",
+                    timeout_seconds=timeout,
+                )
+            )
+            plan.collect.setdefault(host, []).extend(
+                str(prefix) + suffix
+                for suffix in (
+                    ".layout.json",
+                    ".layout-monitor.jsonl",
+                    ".layout-final.json",
+                )
             )
         plan.metadata = dict(
             adapter="crdb_bench",

@@ -1,0 +1,6 @@
+test_ctrl_c_reaps_layout_observer_and_its_child (test_cli.StopCLI.test_ctrl_c_reaps_layout_observer_and_its_child) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 1.465s
+
+OK

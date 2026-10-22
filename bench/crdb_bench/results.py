@@ -109,6 +109,11 @@ def _counter_layers(summaries, reasons):
             denominator_counter="txn_commits",
             window="server_counter_scrapes",
             unit="events per server KV commit",
+            reason=(
+                None
+                if numerator is not None and denominator
+                else "Missing counter or no server KV commit denominator"
+            ),
         )
 
     layers = dict(
@@ -134,6 +139,7 @@ def _counter_layers(summaries, reasons):
         ],
         window="server_counter_scrapes",
         unit="failed 1PC batches per attempted 1PC batch",
+        reason=None if total else "No observed 1PC attempts or a missing 1PC counter",
     )
     return layers, dict(totals), windows
 
@@ -320,7 +326,7 @@ def parse_results(config, root):
                     bytes=path.stat().st_size,
                 )
             )
-    return dict(
+    result = dict(
         schema_version=1,
         metrics=dict(
             throughput_tps=(
@@ -365,3 +371,8 @@ def parse_results(config, root):
         validity=dict(valid=not reasons, reasons=reasons),
         files=files,
     )
+
+    from .evaluation_metrics import enrich
+
+    enrich(config, root, result, summaries)
+    return result

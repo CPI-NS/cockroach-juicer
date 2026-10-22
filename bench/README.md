@@ -89,3 +89,7 @@ Unavailable optional counters are null with reasons. Missing required retry coun
 ## Native builds and verification
 
 See [BUILD.md](BUILD.md) for offline Linux and Apple Silicon recipes, [MIGRATION.md](MIGRATION.md) for the source reuse audit, and [VALIDATION.md](VALIDATION.md) for actual evidence and platform limits.
+
+## Evaluation layout and calibration
+
+See [EVALUATION.md](EVALUATION.md) for fixed hot-rank range/lease placement, common-owned runtime verification, observe-only hold calibration, defined retry-layer exports and the Figure 7.8b input report. Actual native output paths are in [EVALUATION-COVERAGE.md](EVALUATION-COVERAGE.md).

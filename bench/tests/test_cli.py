@@ -19,10 +19,10 @@ from test_adapter import config
 FAKE = r"""
 import json,os,pathlib,subprocess,sys,time
 op=sys.argv[1]
-if op in ('start','run'):
-    if op=='run':
+if op in ('start','run','watch-layout'):
+    if op in ('run','watch-layout'):
         c=json.loads(pathlib.Path(sys.argv[sys.argv.index('--config')+1]).read_text())
-        name=pathlib.Path(c['output']).name
+        name='observer' if op=='watch-layout' else pathlib.Path(c['output']).name
     else: name='server'
     child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(600)'])
     marker=pathlib.Path(os.environ['CRDB_TEST_MARKERS'])/(name+'.json')
@@ -44,7 +44,7 @@ def running(pid):
 
 
 class StopCLI(unittest.TestCase):
-    def exercise_stop(self, explicit):
+    def exercise_stop(self, explicit, layout=False):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             markers = root / "markers"
@@ -66,6 +66,14 @@ class StopCLI(unittest.TestCase):
                 deadline_seconds=90, cleanup_margin_seconds=5, max_attempts=1
             )
             c["matrix"] = dict(axes={"workload.read_fraction": [0.5, 0.9]})
+            if layout:
+                c["topology"]["layout"] = dict(
+                    hot_ranks=16,
+                    lease_nodes=["n1"],
+                    disable_rebalancing=True,
+                    monitor_interval_seconds=0.5,
+                )
+            expected_processes = 4 if layout else 3
             path = root / "config.json"
             path.write_text(json.dumps(c))
             output = root / "batch"
@@ -96,14 +104,14 @@ class StopCLI(unittest.TestCase):
                     )
                     deadline = time.monotonic() + 10
                     while (
-                        len(list(markers.glob("*.json"))) < 3
+                        len(list(markers.glob("*.json"))) < expected_processes
                         and time.monotonic() < deadline
                         and process.poll() is None
                     ):
                         time.sleep(0.05)
                     self.assertEqual(
                         len(list(markers.glob("*.json"))),
-                        3,
+                        expected_processes,
                         (root / "stderr.log").read_text(),
                     )
                     if explicit:
@@ -143,7 +151,32 @@ class StopCLI(unittest.TestCase):
                 )
                 if os.environ.get("CRDB_STOP_EVIDENCE"):
                     target = Path(os.environ["CRDB_STOP_EVIDENCE"]) / (
-                        "explicit-stop" if explicit else "ctrl-c"
+                        "explicit-stop"
+                        if explicit
+                        else ("ctrl-c-layout" if layout else "ctrl-c")
+                    )
+                    (root / "stop-proof.json").write_text(
+                        json.dumps(
+                            dict(
+                                driver_returncode=process.returncode,
+                                batch_status=summary["status"],
+                                cells_started=len(summary["cells"]),
+                                planned_cells=2,
+                                owned_pids={
+                                    m.name: {
+                                        str(pid): running(pid)
+                                        for pid in json.loads(m.read_text()).values()
+                                    }
+                                    for m in markers.glob("*.json")
+                                },
+                                unrelated_sentinel_running=sentinel.poll() is None,
+                                cleanup_errors=json.loads(attempts[0].read_text())[
+                                    "cleanup_errors"
+                                ],
+                            ),
+                            indent=2,
+                        )
+                        + "\n"
                     )
                     shutil.copytree(root, target)
             finally:
@@ -158,3 +191,6 @@ class StopCLI(unittest.TestCase):
 
     def test_explicit_stop_stops_owned_servers_clients_and_children(self):
         self.exercise_stop(True)
+
+    def test_ctrl_c_reaps_layout_observer_and_its_child(self):
+        self.exercise_stop(False, layout=True)

@@ -1,0 +1,362 @@
+{
+  "4dec8f5bfc1f3e71827c-r000": {
+    "aborts": 1,
+    "commits": 125,
+    "config_override": {
+      "juicer.env.MAX_HOLD_MS": 140
+    },
+    "excluded_epoch_key_rows": 3,
+    "histogram_upper_us": {
+      "11263": 1,
+      "13311": 1,
+      "14335": 2,
+      "147455": 1,
+      "16383": 3,
+      "163839": 1,
+      "18431": 8,
+      "20479": 8,
+      "22527": 8,
+      "24575": 10,
+      "26623": 7,
+      "28671": 9,
+      "30719": 10,
+      "32767": 7,
+      "36863": 11,
+      "40959": 17,
+      "45055": 3,
+      "49151": 6,
+      "53247": 6,
+      "57343": 1,
+      "7167": 2,
+      "8191": 1,
+      "9215": 3
+    },
+    "observe_only_behavior": [
+      {
+        "end_unix_ns": 1792625775117716000,
+        "epoch": 34,
+        "file": "local/n1.evidence.json",
+        "held": 0,
+        "holds_created": 0,
+        "queued": 0,
+        "start_unix_ns": 1792625774867834000
+      },
+      {
+        "end_unix_ns": 1792625775367467000,
+        "epoch": 35,
+        "file": "local/n1.evidence.json",
+        "held": 0,
+        "holds_created": 0,
+        "queued": 0,
+        "start_unix_ns": 1792625775117716000
+      },
+      {
+        "end_unix_ns": 1792625775618209000,
+        "epoch": 36,
+        "file": "local/n1.evidence.json",
+        "held": 0,
+        "holds_created": 0,
+        "queued": 0,
+        "start_unix_ns": 1792625775367467000
+      },
+      {
+        "end_unix_ns": 1792625775867430000,
+        "epoch": 37,
+        "file": "local/n1.evidence.json",
+        "held": 0,
+        "holds_created": 0,
+        "queued": 0,
+        "start_unix_ns": 1792625775618209000
+      },
+      {
+        "end_unix_ns": 1792625776117580000,
+        "epoch": 38,
+        "file": "local/n1.evidence.json",
+        "held": 0,
+        "holds_created": 0,
+        "queued": 0,
+        "start_unix_ns": 1792625775867430000
+      },
+      {
+        "end_unix_ns": 1792625776367611000,
+        "epoch": 39,
+        "file": "local/n1.evidence.json",
+        "held": 0,
+        "holds_created": 0,
+        "queued": 0,
+        "start_unix_ns": 1792625776117580000
+      },
+      {
+        "end_unix_ns": 1792625776617437000,
+        "epoch": 40,
+        "file": "local/n1.evidence.json",
+        "held": 0,
+        "holds_created": 0,
+        "queued": 0,
+        "start_unix_ns": 1792625776367611000
+      },
+      {
+        "end_unix_ns": 1792625776869303000,
+        "epoch": 41,
+        "file": "local/n1.evidence.json",
+        "held": 0,
+        "holds_created": 0,
+        "queued": 0,
+        "start_unix_ns": 1792625776617437000
+      },
+      {
+        "end_unix_ns": 1792625777117632000,
+        "epoch": 42,
+        "file": "local/n1.evidence.json",
+        "held": 0,
+        "holds_created": 0,
+        "queued": 0,
+        "start_unix_ns": 1792625776869303000
+      },
+      {
+        "end_unix_ns": 1792625775125044000,
+        "epoch": 34,
+        "file": "local/n2.evidence.json",
+        "held": 0,
+        "holds_created": 0,
+        "queued": 0,
+        "start_unix_ns": 1792625774875320000
+      },
+      {
+        "end_unix_ns": 1792625775375439000,
+        "epoch": 35,
+        "file": "local/n2.evidence.json",
+        "held": 0,
+        "holds_created": 0,
+        "queued": 0,
+        "start_unix_ns": 1792625775125044000
+      },
+      {
+        "end_unix_ns": 1792625775625073000,
+        "epoch": 36,
+        "file": "local/n2.evidence.json",
+        "held": 0,
+        "holds_created": 0,
+        "queued": 0,
+        "start_unix_ns": 1792625775375439000
+      },
+      {
+        "end_unix_ns": 1792625775874922000,
+        "epoch": 37,
+        "file": "local/n2.evidence.json",
+        "held": 0,
+        "holds_created": 0,
+        "queued": 0,
+        "start_unix_ns": 1792625775625073000
+      },
+      {
+        "end_unix_ns": 1792625776125355000,
+        "epoch": 38,
+        "file": "local/n2.evidence.json",
+        "held": 0,
+        "holds_created": 0,
+        "queued": 0,
+        "start_unix_ns": 1792625775874922000
+      },
+      {
+        "end_unix_ns": 1792625776374934000,
+        "epoch": 39,
+        "file": "local/n2.evidence.json",
+        "held": 0,
+        "holds_created": 0,
+        "queued": 0,
+        "start_unix_ns": 1792625776125355000
+      },
+      {
+        "end_unix_ns": 1792625776625570000,
+        "epoch": 40,
+        "file": "local/n2.evidence.json",
+        "held": 0,
+        "holds_created": 0,
+        "queued": 0,
+        "start_unix_ns": 1792625776374934000
+      },
+      {
+        "end_unix_ns": 1792625776875745000,
+        "epoch": 41,
+        "file": "local/n2.evidence.json",
+        "held": 0,
+        "holds_created": 0,
+        "queued": 0,
+        "start_unix_ns": 1792625776625570000
+      },
+      {
+        "end_unix_ns": 1792625777125727000,
+        "epoch": 42,
+        "file": "local/n2.evidence.json",
+        "held": 0,
+        "holds_created": 0,
+        "queued": 0,
+        "start_unix_ns": 1792625776875745000
+      },
+      {
+        "end_unix_ns": 1792625775120295000,
+        "epoch": 34,
+        "file": "local/n3.evidence.json",
+        "held": 0,
+        "holds_created": 0,
+        "queued": 0,
+        "start_unix_ns": 1792625774870797000
+      },
+      {
+        "end_unix_ns": 1792625775370793000,
+        "epoch": 35,
+        "file": "local/n3.evidence.json",
+        "held": 0,
+        "holds_created": 0,
+        "queued": 0,
+        "start_unix_ns": 1792625775120295000
+      },
+      {
+        "end_unix_ns": 1792625775620039000,
+        "epoch": 36,
+        "file": "local/n3.evidence.json",
+        "held": 0,
+        "holds_created": 0,
+        "queued": 0,
+        "start_unix_ns": 1792625775370793000
+      },
+      {
+        "end_unix_ns": 1792625775870489000,
+        "epoch": 37,
+        "file": "local/n3.evidence.json",
+        "held": 0,
+        "holds_created": 0,
+        "queued": 0,
+        "start_unix_ns": 1792625775620039000
+      },
+      {
+        "end_unix_ns": 1792625776120229000,
+        "epoch": 38,
+        "file": "local/n3.evidence.json",
+        "held": 0,
+        "holds_created": 0,
+        "queued": 0,
+        "start_unix_ns": 1792625775870489000
+      },
+      {
+        "end_unix_ns": 1792625776370106000,
+        "epoch": 39,
+        "file": "local/n3.evidence.json",
+        "held": 0,
+        "holds_created": 0,
+        "queued": 0,
+        "start_unix_ns": 1792625776120229000
+      },
+      {
+        "end_unix_ns": 1792625776620496000,
+        "epoch": 40,
+        "file": "local/n3.evidence.json",
+        "held": 0,
+        "holds_created": 0,
+        "queued": 0,
+        "start_unix_ns": 1792625776370106000
+      },
+      {
+        "end_unix_ns": 1792625776871014000,
+        "epoch": 41,
+        "file": "local/n3.evidence.json",
+        "held": 0,
+        "holds_created": 0,
+        "queued": 0,
+        "start_unix_ns": 1792625776620496000
+      },
+      {
+        "end_unix_ns": 1792625777120576000,
+        "epoch": 42,
+        "file": "local/n3.evidence.json",
+        "held": 0,
+        "holds_created": 0,
+        "queued": 0,
+        "start_unix_ns": 1792625776871014000
+      }
+    ],
+    "p50_us": 27647,
+    "p99_us": 139263,
+    "population": "First marker on a nominated server/key to commit or abort applied there; spans completing in selected native epochs. Individual span starts are not logged; read-only/unresolved spans are not imputed",
+    "reason": null,
+    "recommended_max_hold_ms": 140,
+    "sources": [
+      {
+        "epoch": 34,
+        "file": "local/n1.evidence.json",
+        "key": "-6298405883007080494",
+        "spans": 11
+      },
+      {
+        "epoch": 35,
+        "file": "local/n1.evidence.json",
+        "key": "-6298405883007080494",
+        "spans": 11
+      },
+      {
+        "epoch": 36,
+        "file": "local/n1.evidence.json",
+        "key": "-6298405883007080494",
+        "spans": 8
+      },
+      {
+        "epoch": 37,
+        "file": "local/n1.evidence.json",
+        "key": "-6298405883007080494",
+        "spans": 16
+      },
+      {
+        "epoch": 38,
+        "file": "local/n1.evidence.json",
+        "key": "-6298405883007080494",
+        "spans": 13
+      },
+      {
+        "epoch": 39,
+        "file": "local/n1.evidence.json",
+        "key": "-6298405883007080494",
+        "spans": 10
+      },
+      {
+        "epoch": 40,
+        "file": "local/n1.evidence.json",
+        "key": "-6298405883007080494",
+        "spans": 12
+      },
+      {
+        "epoch": 41,
+        "file": "local/n1.evidence.json",
+        "key": "-6298405883007080494",
+        "spans": 16
+      },
+      {
+        "epoch": 42,
+        "file": "local/n1.evidence.json",
+        "key": "-6298405883007080494",
+        "spans": 9
+      },
+      {
+        "epoch": 34,
+        "file": "local/n3.evidence.json",
+        "key": "-6296756615565142444",
+        "spans": 12
+      },
+      {
+        "epoch": 35,
+        "file": "local/n3.evidence.json",
+        "key": "-6296756615565142444",
+        "spans": 8
+      }
+    ],
+    "spans": 126,
+    "unresolved": 102,
+    "untracked": 0,
+    "valid": true,
+    "window": {
+      "end_unix_ns": 1792625777771872035,
+      "policy": "Complete epochs bracketed by consecutive observed native epoch-summary timestamps inside the intersection of client measurement windows",
+      "start_unix_ns": 1792625774783950101
+    }
+  }
+}

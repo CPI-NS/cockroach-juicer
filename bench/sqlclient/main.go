@@ -15,35 +15,45 @@ import (
 	"os"
 )
 
+type layoutConfig struct {
+	HotRanks           int      `json:"hot_ranks"`
+	LeaseNodes         []string `json:"lease_nodes"`
+	DisableRebalancing bool     `json:"disable_rebalancing"`
+	MonitorInterval    float64  `json:"monitor_interval_seconds"`
+}
+
 type config struct {
-	Keys           int64             `json:"keys"`
-	Ops            int               `json:"ops_per_txn"`
-	Theta          float64           `json:"zipf_theta"`
-	Seed           uint64            `json:"seed"`
-	ReadPct        float64           `json:"read_txn_pct"`
-	Duplicates     bool              `json:"duplicates"`
-	Scramble       bool              `json:"scramble"`
-	Mode           string            `json:"mode"`
-	Arrival        string            `json:"arrival"`
-	Rate           float64           `json:"rate"`
-	Slots          int               `json:"slots"`
-	Warmup         float64           `json:"warmup_seconds"`
-	Duration       float64           `json:"duration_seconds"`
-	URLs           []string          `json:"urls"`
-	MetricsURLs    []string          `json:"metrics_urls"`
-	Output         string            `json:"output"`
-	RequestTimeout float64           `json:"request_timeout_seconds"`
-	MaxRetries     int               `json:"max_retries"`
-	RetryBackoff   float64           `json:"retry_backoff_seconds"`
-	LoadBatch      int64             `json:"load_batch_rows"`
-	Replicas       int               `json:"replicas"`
-	Splits         int               `json:"splits"`
-	ArtifactPaths  map[string]string `json:"artifact_paths"`
-	ArtifactHashes map[string]string `json:"artifact_sha256"`
-	SourceRevision string            `json:"source_revision"`
-	SourceManifest string            `json:"source_manifest"`
-	LogDir         string            `json:"log_dir"`
-	JuicerEnabled  bool              `json:"juicer_enabled"`
+	Keys            int64             `json:"keys"`
+	Ops             int               `json:"ops_per_txn"`
+	Theta           float64           `json:"zipf_theta"`
+	Seed            uint64            `json:"seed"`
+	ReadPct         float64           `json:"read_txn_pct"`
+	Duplicates      bool              `json:"duplicates"`
+	Scramble        bool              `json:"scramble"`
+	Mode            string            `json:"mode"`
+	Arrival         string            `json:"arrival"`
+	Rate            float64           `json:"rate"`
+	Slots           int               `json:"slots"`
+	Warmup          float64           `json:"warmup_seconds"`
+	Duration        float64           `json:"duration_seconds"`
+	NodeIDs         []string          `json:"node_ids"`
+	Layout          *layoutConfig     `json:"layout"`
+	HoldCalibration bool              `json:"hold_calibration"`
+	URLs            []string          `json:"urls"`
+	MetricsURLs     []string          `json:"metrics_urls"`
+	Output          string            `json:"output"`
+	RequestTimeout  float64           `json:"request_timeout_seconds"`
+	MaxRetries      int               `json:"max_retries"`
+	RetryBackoff    float64           `json:"retry_backoff_seconds"`
+	LoadBatch       int64             `json:"load_batch_rows"`
+	Replicas        int               `json:"replicas"`
+	Splits          int               `json:"splits"`
+	ArtifactPaths   map[string]string `json:"artifact_paths"`
+	ArtifactHashes  map[string]string `json:"artifact_sha256"`
+	SourceRevision  string            `json:"source_revision"`
+	SourceManifest  string            `json:"source_manifest"`
+	LogDir          string            `json:"log_dir"`
+	JuicerEnabled   bool              `json:"juicer_enabled"`
 }
 
 func readConfig(path string) (config, error) {
@@ -196,7 +206,7 @@ func main() {
 }
 func entry(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: crdb-sql-client trace|ready|load|run --config FILE")
+		return errors.New("usage: crdb-sql-client trace|ready|load|run|layout-plan|layout|watch-layout|layout-check|verify|evidence --config FILE")
 	}
 	fs := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	path := fs.String("config", "", "validated JSON config")
@@ -213,6 +223,18 @@ func entry(args []string) error {
 		return e
 	}
 	switch args[0] {
+	case "layout":
+		return layout(c, *timeout)
+	case "watch-layout":
+		return inspectLayout(c, true)
+	case "layout-check":
+		return inspectLayout(c, false)
+	case "layout-plan":
+		p, e := desiredLayout(c)
+		if e != nil {
+			return e
+		}
+		return json.NewEncoder(os.Stdout).Encode(p)
 	case "trace":
 		if *count < 1 {
 			return errors.New("count must be positive")

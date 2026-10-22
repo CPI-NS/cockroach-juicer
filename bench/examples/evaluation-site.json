@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "system": "crdb",
+  "mode": "ssh",
+  "inventory": [
+    {
+      "id": "s1",
+      "address": "192.0.2.10",
+      "user": "ubuntu",
+      "roles": [
+        "server"
+      ],
+      "cpus": 8,
+      "max_client_processes": 1,
+      "work_dir": "/tmp/crdb-experiments"
+    },
+    {
+      "id": "c1",
+      "address": "192.0.2.20",
+      "user": "ubuntu",
+      "roles": [
+        "client"
+      ],
+      "cpus": 8,
+      "max_client_processes": 8,
+      "work_dir": "/tmp/crdb-experiments"
+    },
+    {
+      "id": "s2",
+      "address": "192.0.2.11",
+      "user": "ubuntu",
+      "roles": [
+        "server"
+      ],
+      "cpus": 8,
+      "max_client_processes": 1,
+      "work_dir": "/tmp/crdb-experiments"
+    },
+    {
+      "id": "c2",
+      "address": "192.0.2.21",
+      "user": "ubuntu",
+      "roles": [
+        "client"
+      ],
+      "cpus": 8,
+      "max_client_processes": 8,
+      "work_dir": "/tmp/crdb-experiments"
+    },
+    {
+      "id": "s3",
+      "address": "192.0.2.12",
+      "user": "ubuntu",
+      "roles": [
+        "server"
+      ],
+      "cpus": 8,
+      "max_client_processes": 1,
+      "work_dir": "/tmp/crdb-experiments"
+    },
+    {
+      "id": "c3",
+      "address": "192.0.2.22",
+      "user": "ubuntu",
+      "roles": [
+        "client"
+      ],
+      "cpus": 8,
+      "max_client_processes": 8,
+      "work_dir": "/tmp/crdb-experiments"
+    }
+  ],
+  "topology": {
+    "nodes": [
+      {
+        "id": "n1",
+        "host_id": "s1",
+        "rpc_port": 26257,
+        "sql_port": 26258,
+        "http_port": 8080
+      },
+      {
+        "id": "n2",
+        "host_id": "s2",
+        "rpc_port": 26257,
+        "sql_port": 26258,
+        "http_port": 8080
+      },
+      {
+        "id": "n3",
+        "host_id": "s3",
+        "rpc_port": 26257,
+        "sql_port": 26258,
+        "http_port": 8080
+      }
+    ],
+    "replicas": 3,
+    "layout": {
+      "hot_ranks": 16,
+      "lease_nodes": [
+        "n1",
+        "n2",
+        "n3"
+      ],
+      "disable_rebalancing": true,
+      "monitor_interval_seconds": 10
+    },
+    "metrics": {
+      "require_retry_identity": false
+    }
+  },
+  "artifacts": {
+    "cockroach": {
+      "path": "/control/artifacts/cockroach-short",
+      "deploy_to": "/workers/bin/cockroach-short",
+      "hosts": [
+        "s1",
+        "c1",
+        "s2",
+        "c2",
+        "s3",
+        "c3"
+      ]
+    },
+    "sql_client": {
+      "path": "/control/artifacts/crdb-sql-client",
+      "deploy_to": "/workers/bin/crdb-sql-client",
+      "hosts": [
+        "s1",
+        "c1",
+        "s2",
+        "c2",
+        "s3",
+        "c3"
+      ]
+    },
+    "source_revision": "REPLACE_WITH_VERIFIED_FORK_COMMIT",
+    "common_revision": "REPLACE_WITH_COMMON_COMMIT"
+  }
+}

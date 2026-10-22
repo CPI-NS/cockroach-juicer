@@ -262,5 +262,51 @@ class WorkloadCLI(ClientCLI):
         self.assertEqual(keys[0]["keys"], [(k * 13) % 20 for k in ranks[0]["keys"]])
 
 
+class LayoutPlanCLI(ClientCLI):
+    def test_top_hot_rank_plan_uses_distinct_ranges_and_balanced_node_targets(self):
+        cfg = dict(
+            keys=1000,
+            ops_per_txn=5,
+            zipf_theta=0.99,
+            seed=42,
+            read_txn_pct=90,
+            duplicates=True,
+            scramble=True,
+            mode="closed",
+            slots=3,
+            warmup_seconds=0,
+            duration_seconds=3,
+            replicas=3,
+            node_ids=["east", "west", "central"],
+            urls=[
+                "postgresql://root@n1/defaultdb",
+                "postgresql://root@n2/defaultdb",
+                "postgresql://root@n3/defaultdb",
+            ],
+            layout=dict(
+                hot_ranks=16,
+                lease_nodes=["east", "west", "central"],
+                disable_rebalancing=True,
+                monitor_interval_seconds=0.5,
+            ),
+        )
+        path = Path(self.temp.name) / "layout.json"
+        path.write_text(json.dumps(cfg))
+        proc = subprocess.run(
+            [self.binary, "layout-plan", "--config", str(path)],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        result = json.loads(proc.stdout)
+        self.assertEqual([r["key"] for r in result["hot_keys"][:4]], [0, 733, 466, 199])
+        self.assertEqual(
+            [r["target_node"] for r in result["hot_keys"][:4]],
+            ["east", "west", "central", "east"],
+        )
+        self.assertEqual(len(set(r["key"] for r in result["hot_keys"])), 16)
+        self.assertIn(734, result["split_keys"])
+
+
 if __name__ == "__main__":
     unittest.main()

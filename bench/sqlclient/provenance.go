@@ -112,9 +112,18 @@ func evidence(c config) error {
 			enabled = true
 		}
 	}
-	out := map[string]any{"schema_version": 1, "expected_enabled": c.JuicerEnabled, "interception_observed": enabled, "valid": enabled == c.JuicerEnabled, "juicer_log_lines": banners, "logs": files}
+	calibrationObserved := false
+	for _, line := range banners {
+		if strings.Contains(line, "HOLD CALIBRATION mode:") {
+			calibrationObserved = true
+		}
+	}
+	out := map[string]any{"hold_calibration": c.HoldCalibration, "calibration_observed": calibrationObserved, "schema_version": 1, "expected_enabled": c.JuicerEnabled, "interception_observed": enabled, "valid": enabled == c.JuicerEnabled, "juicer_log_lines": banners, "logs": files}
 	if e := writeJSON(c.Output+".evidence.json", out); e != nil {
 		return e
+	}
+	if c.HoldCalibration && !calibrationObserved {
+		return errors.New("observe-only hold calibration declaration missing")
 	}
 	if enabled != c.JuicerEnabled {
 		return errors.New("Juicer interception evidence disagrees with requested configuration")
