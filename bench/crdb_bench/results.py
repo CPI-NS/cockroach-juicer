@@ -37,7 +37,76 @@ def _series(raw):
     return values
 
 
-def _counter_layers(summaries, reasons):
+SQL_RETRY_TEXT_PREFIX = "sql_txn_auto_retry_text_reason_"
+
+
+def _sql_retry_text_window(rows):
+    """Validate SQL text classes before label aggregation, using existing scrapes."""
+    from .evaluation_metrics import RESTART_CAUSES
+
+    names = ["sql_txn_auto_retry_count"] + [
+        SQL_RETRY_TEXT_PREFIX + cause + "_count" for cause in RESTART_CAUSES
+    ]
+    issues, samples = [], []
+    if len(rows) < 2 or rows[0]["end_unix_ns"] > rows[-1]["start_unix_ns"]:
+        issues.append("SQL scrape boundaries are not distinct nonoverlapping samples")
+    for row in rows:
+        if row["end_unix_ns"] < row["start_unix_ns"]:
+            issues.append("SQL scrape ends before it starts")
+        series = _series(row["raw"])
+        selected = {
+            name: {k: v for k, v in series.items() if k[0] == name} for name in names
+        }
+        # Native counters have one stable series per node. Reject incomplete or
+        # additional label populations rather than summing whatever survived.
+        total_labels = {k[1] for k in selected[names[0]]}
+        for name, values in selected.items():
+            raw_count = sum(
+                1
+                for line in row["raw"].splitlines()
+                if (m := SAMPLE.match(line)) and m[1].lower() == name
+            )
+            if len(values) != 1 or raw_count != 1:
+                issues.append(f"Missing, duplicate or multiple series: {name}")
+            elif {k[1] for k in values} != total_labels:
+                issues.append(f"SQL counter label identity differs: {name}")
+            if any(v < 0 or not v.is_integer() for v in values.values()):
+                issues.append(f"Invalid SQL counter value: {name}")
+        uptime = {k: v for k, v in series.items() if k[0] == "sys_uptime"}
+        if len(uptime) != 1 or any(v < 0 for v in uptime.values()):
+            issues.append("Process uptime unavailable or ambiguous")
+        samples.append((selected, uptime))
+    for previous, current in zip(samples, samples[1:]):
+        for name in names:
+            if previous[0][name].keys() != current[0][name].keys():
+                issues.append(f"SQL series changed inside window: {name}")
+            elif any(current[0][name][k] < v for k, v in previous[0][name].items()):
+                issues.append(f"SQL counter reset inside window: {name}")
+        if previous[1].keys() != current[1].keys() or any(
+            current[1].get(k, -1) < v for k, v in previous[1].items()
+        ):
+            issues.append("Process uptime reset or identity changed inside window")
+    first, last = samples[0][0], samples[-1][0]
+    deltas = {}
+    for name in names:
+        if (
+            len(first[name]) == len(last[name]) == 1
+            and first[name].keys() == last[name].keys()
+        ):
+            key = next(iter(first[name]))
+            deltas[name] = last[name][key] - first[name][key]
+    return dict(
+        complete=not issues,
+        issues=sorted(set(issues)),
+        counter_deltas=deltas,
+        source="Existing full /_status/vars raw scrape payloads",
+        first_raw_sha256=hashlib.sha256(rows[0]["raw"].encode()).hexdigest(),
+        last_raw_sha256=hashlib.sha256(rows[-1]["raw"].encode()).hexdigest(),
+        uptime_samples=[list(uptime.values()) for _, uptime in samples],
+    )
+
+
+def _counter_layers(summaries, reasons, captured_rows=None):
     by_url = defaultdict(list)
     for s in summaries:
         for row in s.get("counter_snapshots") or []:
@@ -64,9 +133,10 @@ def _counter_layers(summaries, reasons):
                 ("txn_", "sql_txn_", "txnwaitqueue_")
             ) and not name.endswith("_bucket"):
                 if key not in before:
-                    reasons.append(
-                        f"Counter series appeared inside measurement: {url}: {key}"
-                    )
+                    if not name.startswith(SQL_RETRY_TEXT_PREFIX):
+                        reasons.append(
+                            f"Counter series appeared inside measurement: {url}: {key}"
+                        )
                     continue
                 diff = end - before[key]
                 if diff < 0:
@@ -83,6 +153,46 @@ def _counter_layers(summaries, reasons):
                 reasons.append(f"Required retry counter unavailable: {url}: {name}")
         for name, value in delta.items():
             totals[name] += value
+        text_rows = rows
+        capture_issues = []
+        if captured_rows is not None:
+            text_rows = sorted(
+                (
+                    row
+                    for row in captured_rows
+                    if row.get("url") == url
+                    and not row.get("error")
+                    and row["start_unix_ns"] >= first["start_unix_ns"]
+                    and row["end_unix_ns"] <= last["end_unix_ns"]
+                ),
+                key=lambda row: row["start_unix_ns"],
+            )
+            identity = lambda row: (
+                row["start_unix_ns"],
+                row["end_unix_ns"],
+                row["raw"],
+            )
+            if (
+                not text_rows
+                or identity(text_rows[0]) != identity(first)
+                or identity(text_rows[-1]) != identity(last)
+            ):
+                capture_issues.append(
+                    "Raw capture does not match summary scrape boundaries"
+                )
+                text_rows = rows
+        try:
+            text_observation = _sql_retry_text_window(text_rows)
+        except (KeyError, ValueError, TypeError) as exc:
+            text_observation = _sql_retry_text_window(rows)
+            capture_issues.append(f"Invalid SQL raw scrape: {exc}")
+        text_observation["validation_samples"] = len(text_rows)
+        text_observation["validation_source"] = (
+            "raw capture" if captured_rows is not None else "summary raw boundaries"
+        )
+        if capture_issues:
+            text_observation["complete"] = False
+            text_observation["issues"].extend(capture_issues)
         windows[url] = dict(
             first_start_unix_ns=first["start_unix_ns"],
             first_end_unix_ns=first["end_unix_ns"],
@@ -90,6 +200,7 @@ def _counter_layers(summaries, reasons):
             last_end_unix_ns=last["end_unix_ns"],
             duration_seconds=(last["end_unix_ns"] - first["end_unix_ns"]) / 1e9,
             counter_deltas=dict(delta),
+            sql_retry_text_observation=text_observation,
         )
     denominator = totals.get("txn_commits")
 
@@ -218,20 +329,45 @@ def parse_results(config, root):
                 latencies.append(latency)
                 if stability_policy:
                     monotonic = "complete_offset_ns" in row
-                    relative = (row["complete_offset_ns"] - round(config["measurement"].get("warmup_seconds", 0) * 1e9)
-                                if monotonic else row["complete_unix_ns"] - s["start_unix_ns"])
-                    stability_events.append(dict(complete_relative_ns=relative, terminal=row["terminal"], latency_ms=latency))
-                    stability_clocks.add("native_monotonic_offset" if monotonic else "native_window_relative_wall")
+                    relative = (
+                        row["complete_offset_ns"]
+                        - round(config["measurement"].get("warmup_seconds", 0) * 1e9)
+                        if monotonic
+                        else row["complete_unix_ns"] - s["start_unix_ns"]
+                    )
+                    stability_events.append(
+                        dict(
+                            complete_relative_ns=relative,
+                            terminal=row["terminal"],
+                            latency_ms=latency,
+                        )
+                    )
+                    stability_clocks.add(
+                        "native_monotonic_offset"
+                        if monotonic
+                        else "native_window_relative_wall"
+                    )
                 observed_commits += row["terminal"] == "committed"
                 observed_errors += row["terminal"] == "error"
             if observed_commits != s["commits"] or observed_errors != s["errors"]:
                 raise ValueError("Terminal event counts disagree with client summary")
             summaries.append(s)
             if stability_policy:
-                stability_processes.append(dict(process_id=pid, summary=str(path.relative_to(root)),
-                    events_path=str(event_path.relative_to(root)), start_unix_ns=s["start_unix_ns"], end_unix_ns=s["end_unix_ns"],
-                    clock=next(iter(stability_clocks)) if len(stability_clocks) == 1 else "mixed_native_offsets_and_wall",
-                    events=stability_events))
+                stability_processes.append(
+                    dict(
+                        process_id=pid,
+                        summary=str(path.relative_to(root)),
+                        events_path=str(event_path.relative_to(root)),
+                        start_unix_ns=s["start_unix_ns"],
+                        end_unix_ns=s["end_unix_ns"],
+                        clock=(
+                            next(iter(stability_clocks))
+                            if len(stability_clocks) == 1
+                            else "mixed_native_offsets_and_wall"
+                        ),
+                        events=stability_events,
+                    )
+                )
             for name in (
                 "commits",
                 "attempts",
@@ -264,8 +400,35 @@ def parse_results(config, root):
         reasons.append("Collected slots differ from global allocation")
     if not latencies:
         reasons.append("No completed terminal transactions in measurement")
+    # Reuse the existing full raw stream to detect intermediate SQL series loss
+    # or resets. Legacy summaries still carry their exact two raw boundaries.
+    captured_rows, capture_error = None, None
+    capture_paths = list(root.rglob("client-*.metrics.jsonl"))
+    if capture_paths:
+        captured_rows = []
+        try:
+            for path in capture_paths:
+                for line in path.read_text().splitlines():
+                    row = json.loads(line)
+                    if (
+                        not isinstance(row, dict)
+                        or not isinstance(row.get("url"), str)
+                        or not isinstance(row.get("start_unix_ns"), int)
+                        or not isinstance(row.get("end_unix_ns"), int)
+                        or not isinstance(row.get("raw"), str)
+                    ):
+                        raise ValueError("Malformed raw scrape row")
+                    captured_rows.append(row)
+        except (ValueError, OSError) as exc:
+            capture_error = f"Invalid SQL raw metrics capture: {exc}"
+            captured_rows = None
     try:
-        layers, counters, windows = _counter_layers(summaries, reasons)
+        layers, counters, windows = _counter_layers(summaries, reasons, captured_rows)
+        if capture_error:
+            for window in windows.values():
+                observation = window["sql_retry_text_observation"]
+                observation["complete"] = False
+                observation["issues"].append(capture_error)
     except (KeyError, ValueError, TypeError) as exc:
         reasons.append(f"Invalid server counters: {exc}")
         layers, counters, windows = {}, {}, {}

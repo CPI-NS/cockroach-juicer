@@ -4543,6 +4543,9 @@ func (ex *connExecutor) recordTransactionFinish(
 	ex.metrics.EngineMetrics.SQLTxnLatency.RecordValue(elapsedTime.Nanoseconds(),
 		ex.sessionData().Database, ex.sessionData().ApplicationName)
 	ex.metrics.EngineMetrics.TxnRetryCount.Inc(int64(ex.state.mu.autoRetryCounter))
+	for cause, count := range ex.state.mu.autoRetryTextCounts {
+		ex.metrics.EngineMetrics.TxnRetryTextReasonCounts[cause].Inc(count)
+	}
 
 	ex.txnIDCacheWriter.Record(contentionpb.ResolvedTxnID{
 		TxnID:            ev.txnID,

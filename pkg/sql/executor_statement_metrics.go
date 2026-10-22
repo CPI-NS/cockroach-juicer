@@ -79,6 +79,10 @@ type EngineMetrics struct {
 	// have occurred.
 	TxnRetryCount *metric.Counter
 
+	// TxnRetryTextReasonCounts classifies retained retry wrapper text at the same
+	// terminal boundary as TxnRetryCount, including error terminals and unknowns.
+	TxnRetryTextReasonCounts [sqlRetryTextCauseCount]*metric.Counter
+
 	// StatementRetryCount counts the number of automatic statement retries that
 	// have occurred under READ COMMITTED isolation.
 	StatementRetryCount *metric.Counter
@@ -375,4 +379,18 @@ func (ex *connExecutor) updateOptCounters(planFlags planFlags) {
 // We only want to keep track of DML (Data Manipulation Language) statements in our latency metrics.
 func shouldIncludeStmtInLatencyMetrics(stmt *Statement) bool {
 	return stmt.AST.StatementType() == tree.TypeDML
+}
+
+// makeTxnRetryTextReasonCounters uses the same internal/external distinction as
+// the SQL total. Registry.AddMetricStruct registers each fixed array element.
+func makeTxnRetryTextReasonCounters(internal bool) (counters [sqlRetryTextCauseCount]*metric.Counter) {
+	for cause := range counters {
+		counters[cause] = metric.NewCounter(getMetricMeta(metric.Metadata{
+			Name:        sqlRetryTextMetricName(sqlRetryTextCause(cause)),
+			Help:        "SQL automatic retries classified by retained wrapper text (not structured causality): " + sqlRetryTextCauseNames[cause],
+			Measurement: "SQL Retries",
+			Unit:        metric.Unit_COUNT,
+		}, internal))
+	}
+	return counters
 }

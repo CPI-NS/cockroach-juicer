@@ -182,6 +182,115 @@ def calibration_report(root, summaries):
     )
 
 
+def sql_retry_text_attribution(config, windows):
+    """SQL text-reason deltas divided by their own SQL total, node by node."""
+    hosts = {host["id"]: host for host in config["inventory"]}
+    expected = {}
+    for node in config["topology"]["nodes"]:
+        address = node.get(
+            "advertise_address", hosts[node["host_id"]].get("address", "localhost")
+        )
+        if ":" in address and not address.startswith("["):
+            address = f"[{address}]"
+        expected[f'http://{address}:{node["http_port"]}/_status/vars'] = node["id"]
+    prefix = "sql_txn_auto_retry_text_reason_"
+    per_server = {}
+    for url, node_id in expected.items():
+        window = windows.get(url)
+        observation = (window or {}).get("sql_retry_text_observation", {})
+        deltas = observation.get("counter_deltas", {})
+        counts = {
+            cause: deltas.get(prefix + cause + "_count") for cause in RESTART_CAUSES
+        }
+        total = deltas.get("sql_txn_auto_retry_count")
+        complete = observation.get("complete", False)
+        cause_sum = (
+            sum(counts.values())
+            if all(v is not None for v in counts.values())
+            else None
+        )
+        residual = (
+            total - cause_sum if total is not None and cause_sum is not None else None
+        )
+        status = (
+            "available"
+            if complete and residual == 0
+            else "invalid" if complete else "unavailable"
+        )
+        issues = list(observation.get("issues", []))
+        if not window:
+            issues.append("Configured server has no complete scrape window")
+        elif not observation:
+            issues.append("SQL text-reason observation unavailable")
+        if complete and residual != 0:
+            issues.append(
+                "SQL text-reason sum differs from own SQL total; scrapes are not atomic"
+            )
+        per_server[url] = dict(
+            node_id=node_id,
+            status=status,
+            reasons=issues,
+            counts=counts,
+            sql_auto_retries=total,
+            reason_sum=cause_sum,
+            residual_sql_minus_text_reasons=residual,
+            fractions={
+                cause: value / total if status == "available" and total else None
+                for cause, value in counts.items()
+            },
+            window={
+                k: v
+                for k, v in (window or {}).items()
+                if k not in ("counter_deltas", "sql_retry_text_observation")
+            },
+            observation=observation,
+        )
+    unexpected = sorted(set(windows) - set(expected))
+    available = (
+        bool(per_server)
+        and not unexpected
+        and all(row["status"] == "available" for row in per_server.values())
+    )
+    pooled = None
+    if available:
+        total = sum(row["sql_auto_retries"] for row in per_server.values())
+        counts = {
+            cause: sum(row["counts"][cause] for row in per_server.values())
+            for cause in RESTART_CAUSES
+        }
+        pooled = dict(
+            counts=counts,
+            sql_auto_retries=total,
+            fractions={
+                cause: value / total if total else None
+                for cause, value in counts.items()
+            },
+        )
+    return dict(
+        status=(
+            "available"
+            if available
+            else (
+                "invalid"
+                if any(row["status"] == "invalid" for row in per_server.values())
+                else "unavailable"
+            )
+        ),
+        classification="TEXT CLASSIFICATION; not structured SQL causality",
+        source="SQL prepareTxnForRetryWithRewind retained retry-wrapper MsgRedactable/Msg; exported with TxnRetryCount at recordTransactionFinish",
+        numerator="sql_txn_auto_retry_text_reason_<reason>_count delta",
+        denominator="sql_txn_auto_retry_count delta on the same node and identical first/last raw scrapes",
+        per_server=per_server,
+        pooled=pooled,
+        unexpected_servers=unexpected,
+        reason=(
+            None
+            if available
+            else "Incomplete or inconsistent SQL text-reason evidence; no pooled attribution"
+        ),
+    )
+
+
 def enrich(config, root, result, summaries):
     diagnostics = result["diagnostics"]
     reasons = result["validity"]["reasons"]
@@ -231,6 +340,7 @@ def enrich(config, root, result, summaries):
             reason=None if d else "No denominator population",
         )
 
+    attribution = sql_retry_text_attribution(config, diagnostics["server_windows"])
     report = dict(
         cc_restarts_per_commit=layers["cc_restarts_per_server_commit"],
         sql_auto_retries_per_commit=layers["sql_auto_retries_per_server_commit"],
@@ -239,8 +349,8 @@ def enrich(config, root, result, summaries):
         one_pc_fallback=layers["one_pc_fallback_per_attempt"],
         sql_retry_cause_identity=identity,
         kv_restart_causes=by_reason,
-        sql_retry_cause_attribution=None,
-        attribution_reason="SQL source has a total retry counter, not a per-cause SQL counter; KV cause counts are separately named even when the identity holds",
+        sql_retry_cause_attribution=attribution,
+        attribution_reason=attribution["reason"],
         visible_40001_per_client_attempt=client_ratio(
             client["visible_40001"],
             client["attempts"],

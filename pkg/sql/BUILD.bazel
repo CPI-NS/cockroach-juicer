@@ -279,6 +279,7 @@ go_library(
         "txn_fingerprint_id_cache.go",
         "txn_instrumentation.go",
         "txn_state.go",
+        "txn_retry_reason.go",
         "type_change.go",
         "unary.go",
         "unimplemented.go",
@@ -1071,5 +1072,50 @@ disallowed_imports_test(
     disallow_cdeps = False,
     disallowed_list = [
         "//pkg/testutils",
+    ],
+)
+
+# Focused native observation tests; do not compile the enormous sql_test suite.
+go_test(
+    name = "txn_retry_reason_test",
+    size = "small",
+    srcs = ["txn_retry_reason.go", "txn_retry_reason_test.go"],
+    deps = [
+        "//pkg/kv/kvpb",
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "txn_retry_observation_test",
+    size = "small",
+    srcs = ["txn_retry_reason_test.go", "txn_retry_observation_test.go"],
+    embed = [":sql"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/concurrency/isolation",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/sql/contentionpb",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/sessiondatapb",
+        "@com_github_cockroachdb_crlib//crtime",
+        "//pkg/util/fsm",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/mon",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+        "//pkg/util/tracing",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )

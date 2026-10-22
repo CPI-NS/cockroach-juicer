@@ -696,6 +696,7 @@ func prepareTxnForRetryWithRewind(args fsm.Args) error {
 		defer ts.mu.Unlock()
 		ts.mu.autoRetryReason = pl.err
 		ts.mu.autoRetryCounter++
+		ts.mu.autoRetryTextCounts[classifySQLRetryText(pl.err)]++
 		return ts.mu.txn.PrepareForRetry(ts.Ctx)
 	}()
 	if err != nil {

@@ -75,6 +75,9 @@ type txnState struct {
 		// stateOpen.
 		autoRetryCounter int32
 
+		// autoRetryTextCounts shares the total's lifetime and terminal export.
+		autoRetryTextCounts sqlRetryTextCounts
+
 		hasSavepoints bool
 	}
 
@@ -286,6 +289,7 @@ func (ts *txnState) resetForNewSQLTxn(
 		sp.SetTag("txn", attribute.StringValue(txnID.String()))
 		ts.mu.txnStart = crtime.NowMono()
 		ts.mu.autoRetryCounter = 0
+		ts.mu.autoRetryTextCounts = sqlRetryTextCounts{}
 		ts.mu.autoRetryReason = nil
 		return txnID
 	}()

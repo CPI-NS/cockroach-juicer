@@ -665,6 +665,7 @@ func makeMetrics(internal bool, sv *settings.Values) Metrics {
 			FullTableOrIndexScanCount:         aggmetric.NewSQLCounter(getMetricMeta(MetaFullTableOrIndexScan, internal)),
 			FullTableOrIndexScanRejectedCount: metric.NewCounter(getMetricMeta(MetaFullTableOrIndexScanRejected, internal)),
 			TxnRetryCount:                     metric.NewCounter(getMetricMeta(MetaTxnRetry, internal)),
+			TxnRetryTextReasonCounts:          makeTxnRetryTextReasonCounters(internal),
 			StatementRetryCount:               metric.NewCounter(getMetricMeta(MetaStatementRetry, internal)),
 			StatementRowsRead:                 metric.NewCounter(getMetricMeta(MetaStatementRowsRead, internal)),
 			StatementBytesRead:                metric.NewCounter(getMetricMeta(MetaStatementBytesRead, internal)),
