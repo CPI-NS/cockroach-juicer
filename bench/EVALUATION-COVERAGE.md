@@ -1,5 +1,21 @@
 # Ticket11 coverage and retained evidence
 
+## Current observation update
+
+Commit `768eaebb99e` adds SQL automatic retry **text-reason classification** at
+the actual retry increment, reset and terminal-export boundaries. It preserves
+the SQL total and distinct KV populations; unknown text and scrape discrepancies
+remain visible. Two native Bazel targets and 27 bench checks passed. Live HTTP
+capture from a binary containing this change is still pending. Native-looking
+forced retry text cannot be distinguished from an original KV cause; these are
+not structured-causality counters. See [the current observation contract](SQL-RETRY-TEXT-OBSERVATION.md).
+
+The original bench-only report below predates this instrumentation and retains
+its older binary/test identities. Its claims about absent SQL counters and
+untested external SSH describe that snapshot, not all later framework work.
+
+## Original ticket evidence
+
 Implemented on `codex/ef-crdb-evaluation` from signed base `bc72c507e8fac5f83d4d6c75e70d63450028e396`. Scope is `bench/` only. No historical results, database concurrency-control code, shared common API or dependency set changed. Independent integration review remains the coordinator's step.
 
 | Coverage | Maintained implementation | Actual public output/evidence |
