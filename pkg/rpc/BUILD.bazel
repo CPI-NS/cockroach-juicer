@@ -141,7 +141,7 @@ go_test(
         "stream_pool_test.go",
         "tls_test.go",
     ],
-    data = glob(["testdata/**"]),
+    data = glob(["testdata/**"]) + ["@org_golang_google_grpc//juicer:spec_conformance_testdata"],
     embed = [":rpc"],
     exec_properties = select({
         "//build/toolchains:is_heavy": {"test.Pool": "large"},
@@ -149,6 +149,7 @@ go_test(
     }),
     deps = [
         "//pkg/base",
+        "//pkg/build/bazel",
         "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv/kvpb",
@@ -206,7 +207,7 @@ go_test(
         "@io_storj_drpc//drpcserver",
         "@org_golang_google_grpc//:grpc",
         "@org_golang_google_grpc//juicer",
-        "@org_golang_google_grpc//juicer/conformance",
+        "@org_golang_google_grpc//juicer/spectest",
         "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//credentials",
         "@org_golang_google_grpc//health/grpc_health_v1",

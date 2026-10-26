@@ -93,6 +93,9 @@ load("//:DEPS.bzl", "go_deps")
 # of the dependencies to any that might be pulled in via functions like
 # `go_rules_dependencies`, `gazelle_dependencies`, etc.
 # gazelle:repository_macro DEPS.bzl%go_deps
+# The local gRPC repository has no importpath attribute; retain its import
+# mapping for Gazelle without reintroducing a fetched go_repository.
+# gazelle:repository go_repository name=org_golang_google_grpc importpath=google.golang.org/grpc
 go_deps()
 
 ####### THIRD-PARTY DEPENDENCIES #######

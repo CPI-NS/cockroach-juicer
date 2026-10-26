@@ -18,8 +18,67 @@ RESTART_CAUSES = (
     "unknown",
 )
 CALIBRATION_ROW = re.compile(
-    r"hold calibration: epoch=(\d+) key=(.*?) spans=(\d+) commits=(\d+) aborts=(\d+) p50=(\d+)us p99=(\d+)us unresolved=(\d+) untracked=(\d+) hist=(\S+)"
+    r"hold calibration: epoch=(?P<epoch>\d+) key=(?P<key>.*?) "
+    r"spans=(?P<spans>\d+) commits=(?P<commits>\d+) aborts=(?P<aborts>\d+) "
+    r"p50=(?P<p50>\d+)us p99=(?P<p99>\d+)us unresolved=(?P<unresolved>\d+)"
+    r"(?: open=(?P<open>\d+))? untracked=(?P<untracked>\d+)"
+    r"(?: overflow=(?P<overflow>\d+))? hist=(?P<hist>\S+)"
 )
+CALIBRATION_TOP_US = (1 << 20) - 1
+
+
+def _epoch_summary(line):
+    """Return the epoch and native boundary, never an inferred zero timestamp."""
+    shared = re.search(r"juicer-epoch: (.*)", line)
+    if shared:
+        epoch = re.search(r"\bepoch=(\d+)", shared[1])
+        native = re.search(r"\bunix_ns=(\d+)", shared[1])
+        if epoch and native:
+            return int(epoch[1]), int(native[1]), shared[0], True
+        return None
+    epoch = re.search(r"epoch summary: epoch=(\d+)", line)
+    stamp = re.match(r"^[IWEF](\d{6}) (\d{2}:\d{2}:\d{2}\.\d{6})", line)
+    if epoch and stamp:
+        dt = datetime.datetime.strptime(
+            stamp[1] + " " + stamp[2], "%y%m%d %H:%M:%S.%f"
+        ).replace(tzinfo=datetime.timezone.utc)
+        return (
+            int(epoch[1]),
+            int(dt.timestamp()) * 1_000_000_000 + dt.microsecond * 1000,
+            line[line.index("epoch summary:") :],
+            False,
+        )
+    return None
+
+
+def _observe_only_counts(line, shared):
+    if shared:
+        holds = re.search(r"\| holds created=(\d+) [^|]*\blive=(\d+) \|", line)
+        messages = re.search(
+            r"\| msgs intercepted=\d+ direct=\d+ queued=(\d+) dropped=\d+ "
+            r"\(cumulative intercepted=\d+ direct=\d+ queued=\d+ dropped=\d+ held=(\d+)\)",
+            line,
+        )
+        if holds and messages:
+            return dict(
+                holds_created=int(holds[1]),
+                holds_live=int(holds[2]),
+                queued=int(messages[1]),
+                held=int(messages[2]),
+            )
+    else:
+        holds = re.search(r"holds_created=(\d+)", line)
+        messages = re.search(
+            r"messages\{intercepted=(\d+) direct=(\d+) queued=(\d+) dropped=(\d+) held=(\d+)\}",
+            line,
+        )
+        if holds and messages:
+            return dict(
+                holds_created=int(holds[1]),
+                queued=int(messages[3]),
+                held=int(messages[5]),
+            )
+    return None
 
 
 def calibration_report(root, summaries):
@@ -29,43 +88,45 @@ def calibration_report(root, summaries):
     behavior = []
     behavior_complete = True
     buckets = Counter()
-    spans = commits = aborts = unresolved = untracked = 0
+    spans = commits = aborts = unresolved = untracked = overflow = 0
     seen = {}
     sources = []
     flags = []
     for path in sorted(root.rglob("*.evidence.json")):
         proof = json.loads(path.read_text())
-        lines = proof.get("juicer_log_lines", [])
+        lines = [
+            line.replace("‹", "").replace("›", "")
+            for line in proof.get("juicer_log_lines", [])
+        ]
         observed = proof.get(
             "calibration_observed",
-            any("HOLD CALIBRATION mode:" in line for line in lines),
+            any(
+                "HOLD CALIBRATION mode:" in line
+                or re.search(r"juicer-config: .*\bholdCalibration=true\b", line)
+                for line in lines
+            ),
         )
         flags.append(observed)
         boundaries = {}
         epoch_lines = {}
         for raw in lines:
-            stamp = re.match(r"^[IWEF](\d{6}) (\d{2}:\d{2}:\d{2}\.\d{6})", raw)
-            epoch = re.search(r"epoch summary: epoch=(\d+)", raw)
-            if stamp and epoch:
-                dt = datetime.datetime.strptime(
-                    stamp[1] + " " + stamp[2], "%y%m%d %H:%M:%S.%f"
-                ).replace(tzinfo=datetime.timezone.utc)
-                boundaries[int(epoch[1])] = (
-                    int(dt.timestamp()) * 1_000_000_000 + dt.microsecond * 1000
-                )
-                epoch_lines[int(epoch[1])] = raw
+            summary = _epoch_summary(raw)
+            if summary:
+                epoch, end, line, shared = summary
+                if epoch in boundaries and (
+                    boundaries[epoch] != end or epoch_lines[epoch] != (line, shared)
+                ):
+                    raise ValueError("Conflicting native epoch-summary records")
+                boundaries[epoch] = end
+                epoch_lines[epoch] = line, shared
         node_behavior = []
         for epoch, end in sorted(boundaries.items()):
             left = boundaries.get(epoch - 1)
-            if left is None or left < window_start or end > window_end:
+            if left is None or not window_start <= left < end <= window_end:
                 continue
-            line = epoch_lines[epoch].replace("‹", "").replace("›", "")
-            holds = re.search(r"holds_created=(\d+)", line)
-            messages = re.search(
-                r"messages\{intercepted=(\d+) direct=(\d+) queued=(\d+) dropped=(\d+) held=(\d+)\}",
-                line,
-            )
-            if not holds or not messages:
+            line, shared = epoch_lines[epoch]
+            counts = _observe_only_counts(line, shared)
+            if counts is None:
                 behavior_complete = False
                 continue
             node_behavior.append(
@@ -74,27 +135,36 @@ def calibration_report(root, summaries):
                     epoch=epoch,
                     start_unix_ns=left,
                     end_unix_ns=end,
-                    holds_created=int(holds[1]),
-                    queued=int(messages[3]),
-                    held=int(messages[5]),
+                    **counts,
                 )
             )
         if not node_behavior:
             behavior_complete = False
         behavior.extend(node_behavior)
         for raw in lines:
-            line = raw.replace("‹", "").replace("›", "")
-            match = CALIBRATION_ROW.search(line)
+            match = CALIBRATION_ROW.search(raw)
             if not match:
+                # Do not certify partial evidence after silently dropping a
+                # malformed key row from a selected measurement epoch.
+                key_row = re.search(r"hold calibration: epoch=(\d+) key=", raw)
+                if key_row:
+                    left = boundaries.get(int(key_row[1]) - 1)
+                    right = boundaries.get(int(key_row[1]))
+                    if (
+                        left is not None
+                        and right is not None
+                        and window_start <= left < right <= window_end
+                    ):
+                        behavior_complete = False
                 continue
-            epoch, key, n, commit, abort, p50, p99, pending, lost, hist = match.groups()
+            fields = match.groupdict()
+            epoch, key, hist = fields["epoch"], fields["key"], fields["hist"]
             left = boundaries.get(int(epoch) - 1)
             right = boundaries.get(int(epoch))
             if (
                 left is None
                 or right is None
-                or left < window_start
-                or right > window_end
+                or not window_start <= left < right <= window_end
             ):
                 excluded += 1
                 continue
@@ -108,21 +178,47 @@ def calibration_report(root, summaries):
             if hist != "-":
                 for item in hist.split(","):
                     bound, count = item.split(":")
+                    if (
+                        not count.isdigit()
+                        or (
+                            bound != ">top"
+                            and (
+                                not bound.isdigit()
+                                or not 1 <= int(bound) <= CALIBRATION_TOP_US
+                            )
+                        )
+                    ):
+                        raise ValueError("Invalid calibration histogram bucket")
                     row[bound] += int(count)
-            n, commit, abort, pending, lost = map(
-                int, (n, commit, abort, pending, lost)
+            n, commit, abort, pending, lost = (
+                int(fields[name])
+                for name in ("spans", "commits", "aborts", "unresolved", "untracked")
             )
             if sum(row.values()) != n or commit + abort != n:
                 raise ValueError("Calibration histogram/span/terminal counts disagree")
+            row_overflow = row.get(">top", 0)
+            if (
+                fields["overflow"] is not None
+                and int(fields["overflow"]) != row_overflow
+            ):
+                raise ValueError("Calibration histogram/overflow counts disagree")
             buckets.update(row)
             spans += n
             commits += commit
             aborts += abort
             unresolved += pending
             untracked += lost
+            overflow += row_overflow
             sources.append(
                 dict(
-                    file=str(path.relative_to(root)), epoch=int(epoch), key=key, spans=n
+                    file=str(path.relative_to(root)),
+                    epoch=int(epoch),
+                    key=key,
+                    spans=n,
+                    unresolved=pending,
+                    untracked=lost,
+                    overflow=row_overflow,
+                    open=int(fields["open"]) if fields["open"] is not None else None,
                 )
             )
 
@@ -147,7 +243,10 @@ def calibration_report(root, summaries):
         and p99 is not None
         and behavior_complete
         and all(
-            row["holds_created"] == 0 and row["held"] == 0 and row["queued"] == 0
+            row["holds_created"] == 0
+            and row["held"] == 0
+            and row["queued"] == 0
+            and row.get("holds_live", 0) == 0
             for row in behavior
         )
     )
@@ -158,6 +257,7 @@ def calibration_report(root, summaries):
         aborts=aborts,
         unresolved=unresolved,
         untracked=untracked,
+        overflow=overflow,
         p50_us=quantile(0.5),
         p99_us=p99,
         histogram_upper_us=dict(buckets),
@@ -173,7 +273,7 @@ def calibration_report(root, summaries):
             end_unix_ns=window_end,
             policy="Complete epochs bracketed by consecutive observed native epoch-summary timestamps inside the intersection of client measurement windows",
         ),
-        population="First marker on a nominated server/key to commit or abort applied there; spans completing in selected native epochs. Individual span starts are not logged; read-only/unresolved spans are not imputed",
+        population="First marker on a nominated server/key to commit or abort applied there; spans completing in selected native epochs. Individual span starts are not logged; read-only/unresolved spans are not imputed. Open is a per-key/epoch gauge, not summed across epochs",
         reason=(
             None
             if valid

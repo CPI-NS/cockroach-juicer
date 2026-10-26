@@ -180,8 +180,8 @@ func manualTestKey(k int64) roachpb.Key {
 // hashes the request keys, the interceptor turns each hash into the queue-key
 // string, and the queue manager creates a queue only for the listed key. The
 // same traffic through a normal-mode interceptor creates no queue at all
-// (nothing has been selected by the filters yet) but does feed the reorder
-// filter. These are the snapshot fields the experiment's treatment-identity
+// (nothing has been selected by the filters yet). L2 observes the key only
+// after epoch-end L1 nomination. These are the snapshot fields the experiment's treatment-identity
 // checks rely on, so the JSON is logged verbatim.
 //
 // No leaktest here: the fork's interceptor owns background reporter goroutines
@@ -207,6 +207,7 @@ func TestJuicerManualModeSnapshotThroughCRDBSPI(t *testing.T) {
 			endTxn(true)),
 	}
 	run := func(cfg grpc.JuicerConfig) grpc.JuicerMetricsSnapshot {
+		cfg.Stepped = !cfg.SkipTracking
 		ji := grpc.NewJuicerInterceptorWithConfig(newCRDBJuicerSPI(), cfg)
 		defer ji.Stop()
 		method := juicerUnaryBatchPaths[0]
@@ -220,10 +221,22 @@ func TestJuicerManualModeSnapshotThroughCRDBSPI(t *testing.T) {
 				t.Fatalf("batch %d: %v", i, err)
 			}
 		}
+		if !cfg.SkipTracking {
+			if got := ji.SnapshotMetrics().L2.UpdateCount; got != 0 {
+				t.Fatalf("L2 sampled unselected keys before nomination: %d updates", got)
+			}
+			step := ji.Stepper()
+			step.Level1Abort(30, []string{hotQueueKey})
+			step.EndEpoch()
+			if _, err := intercept(context.Background(), traffic[0], info, handler); err != nil {
+				t.Fatalf("post-nomination read: %v", err)
+			}
+		}
 		return ji.SnapshotMetrics()
 	}
 	common := grpc.JuicerConfig{
-		FilterK: 1000, FilterS: 100,
+		Diagnostics: true,
+		FilterK:     1000, FilterS: 100,
 		WaitStrategy: juicer.WaitStrategyFixed, FixedWait: 0,
 	}
 

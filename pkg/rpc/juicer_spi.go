@@ -347,7 +347,7 @@ func parseJuicerManualQueueKeys(raw string) ([]string, error) {
 type juicerRules string
 
 const (
-	juicerRulesConflictTable juicerRules = juicer.ConflictTableName
+	juicerRulesConflictTable juicerRules = juicer.ConflictTableRulesName
 	juicerRulesGate          juicerRules = "gate"
 	juicerRulesWrites        juicerRules = "writes"
 	juicerRulesWriteGate     juicerRules = "writegate"
@@ -668,7 +668,7 @@ func juicerServerOptions() []grpc.ServerOption {
 	if juicerEpochMillis <= 0 || juicerIdleEpochs <= 0 {
 		panic("Juicer requires positive COCKROACH_JUICER_EPOCH_MS and COCKROACH_JUICER_IDLE_EPOCHS")
 	}
-	if _, ok := juicer.ParseLatePolicy(juicerLatePolicy); !ok || juicerLatePolicy == "" {
+	if _, err := juicer.ParseLatePolicy(juicerLatePolicy); err != nil || juicerLatePolicy == "" {
 		panic("invalid COCKROACH_JUICER_LATE_POLICY (want queue or bypass): " + juicerLatePolicy)
 	}
 	manualKeys := juicerManualQueueKeysOrPanic()
@@ -1377,20 +1377,27 @@ func (crdbJuicerSPI) BuildRules() juicer.DependencyRules {
 		lockingOp := func(o juicer.OperationType) bool {
 			return o == juicer.OpSet || o == juicer.OpGetForPut
 		}
-		return juicer.ConflictTableRules(maxHold, lockingOp, lockingOp)
+		rules := juicer.ConflictTableRules(maxHold)
+		controlRelease := rules.Releases
+		rules.Releases = func(held juicer.OpRef, event juicer.Event) bool {
+			return controlRelease(held, event) ||
+				(!lockingOp(held.OpType) && juicer.ReleasedOnOwnResponse(held, event))
+		}
+		rules.HoldEnds = "Get: own response; Set/GetForPut: txn commit/abort applied; any: own request failed; TTL maxHold"
+		return rules
 	case juicerRulesOff:
 		// Zero value: DependencyRules.Enabled() is false and the fork's
 		// enforcerFactory returns nil, leaving the queues in sorting-only mode.
 		return juicer.DependencyRules{}
 	case juicerRulesGate:
-		return juicer.GateRules(maxHold)
+		return crdbCompletionGate(maxHold)
 	case juicerRulesNoReadRead:
 		// The campaign #19c probe: gate minus the read-read pair. Blocks is
 		// wrapped rather than rewritten so the derived hold population and
 		// the release relation stay the gate's verbatim — reads still hold
 		// (writes must still wait behind them); only the read-behind-read
 		// wait is deleted, for any transaction pair.
-		rules := juicer.GateRules(maxHold)
+		rules := crdbCompletionGate(maxHold)
 		gateBlocks := rules.Blocks
 		rules.Blocks = func(h, hd juicer.OpRef) bool {
 			if h.OpType == juicer.OpGet && hd.OpType == juicer.OpGet {
@@ -1638,5 +1645,17 @@ func (crdbJuicerSPI) BuildRules() juicer.DependencyRules {
 		// nothing there, so it no longer enters the set (sfu counter values
 		// are not comparable with pre--21 rounds).
 		MaxHold: maxHold,
+	}
+}
+
+// crdbCompletionGate declares the legacy completion-gate diagnostic relation;
+// the shared enforcer still owns all queueing and hold lifecycle behavior.
+func crdbCompletionGate(maxHold time.Duration) juicer.DependencyRules {
+	return juicer.DependencyRules{
+		Blocks: func(juicer.OpRef, juicer.OpRef) bool { return true },
+		Releases: func(held juicer.OpRef, event juicer.Event) bool {
+			return event.Kind == juicer.RespReturned && event.TxnID == held.TxnID
+		},
+		MaxHold: maxHold, AdmitUnbound: true,
 	}
 }

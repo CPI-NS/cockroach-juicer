@@ -10,3 +10,6 @@
 [submodule "c-deps/proj"]
 	path = c-deps/proj
 	url = https://github.com/cockroachdb/PROJ.git
+[submodule "juicer-grpc-go"]
+	path = juicer-grpc-go
+	url = git@github.com:CPI-NS/juicer-grpc-go.git

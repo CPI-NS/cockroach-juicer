@@ -11216,14 +11216,11 @@ def go_deps():
             "https://storage.googleapis.com/cockroach-godeps/gomod/google.golang.org/genproto/googleapis/rpc/org_golang_google_genproto_googleapis_rpc-v0.0.0-20230530153820-e85fd2cbaebc.zip",
         ],
     )
-    go_repository(
+    # Go and Bazel consume the same pinned, in-checkout submodule. Its BUILD
+    # metadata is maintained in the shared gRPC repository.
+    native.local_repository(
         name = "org_golang_google_grpc",
-        build_file_proto_mode = "disable_global",
-        importpath = "google.golang.org/grpc",
-        replace = "github.com/CPI-NS/juicer-grpc-go",
-        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
-        sum = "h1:g7Gnxy/zv31Xfoj8NkbIyAIuBqqUdg0e6cLXZlhYb74=",
-        version = "v1.57.2-juicer-22",
+        path = "juicer-grpc-go",
     )
     go_repository(
         name = "org_golang_google_grpc_cmd_protoc_gen_go_grpc",

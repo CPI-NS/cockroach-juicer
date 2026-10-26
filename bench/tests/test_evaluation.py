@@ -5,6 +5,7 @@ from pathlib import Path
 import unittest
 import tempfile
 from crdb_bench import CRDBAdapter
+from crdb_bench.evaluation_metrics import calibration_report
 from test_adapter import config
 
 
@@ -138,6 +139,223 @@ def collected_fixture(root, sql_retries=10):
         )
     )
     return c
+
+
+# These spellings follow the canonical juicer/hold_calibration.go,
+# juicer/epoch_summary.go and root juicer_banner.go format strings. They are
+# literals so the maintained standalone CRDB tests need no adjacent checkout.
+SHARED_CALIBRATION_BANNER = (
+    "juicer-config: spec=1.2 queued=Get,Set,GetForPut observed=Prepare,Commit,Abort "
+    "cancel=withdraw level1Aborts=failed-reply,abort-message-keys "
+    "level1Count=once-per-txn-key latePolicy=queue queueRemoval=drain "
+    "skipQueueing=false skipTracking=false fifo=false holdCalibration=true"
+)
+
+
+def shared_epoch_line(epoch, unix_ns, messages=20):
+    # The logger prefix is deliberately outside the measurement window:
+    # the shared native observation timestamp is the epoch boundary.
+    cumulative = messages * (epoch + 1)
+    created = "2[k,q]" if epoch == 0 else "0[]"
+    return (
+        f"I700101 00:00:09.000000 juicer-epoch: unix_ns={unix_ns} "
+        f"state_seq=2 live_keys=[k,q] epoch={epoch} "
+        "managed=[k{W=0s r=1 n=10 arrivals=10 queued=0} "
+        "q{W=0s r=1 n=10 arrivals=10 queued=0}] "
+        f"queues live=2 max=2 mean=2.00 created={created} draining=0[] "
+        "deleted=0[] cancelledRemoval=0[] drainPassthrough=0 | late queued=0 "
+        "bypassed=0 | holds created=0 ended event=0 expiry=0 cancel=0 evicted=0 "
+        "expiryShare=0.0% life p50<=0s p99<=0s live=0 | markers cancelled=0 | "
+        f"msgs intercepted={messages} direct={messages} queued=0 dropped=0 "
+        f"(cumulative intercepted={cumulative} direct={cumulative} queued=0 dropped=0 held=0)"
+    )
+
+
+def shared_collected_fixture(root):
+    c = collected_fixture(root)
+    path = root / "n1.evidence.json"
+    proof = json.loads(path.read_text())
+    proof.pop("calibration_observed")  # Require the real banner, not a flag.
+    proof["juicer_log_lines"] = [
+        SHARED_CALIBRATION_BANNER,
+        shared_epoch_line(0, 1_250_000_000),
+        "hold calibration: epoch=1 key=k spans=3 commits=2 aborts=1 p50=16us "
+        "p99=16us unresolved=2 open=1 untracked=0 overflow=0 hist=1:1,17:2",
+        "hold calibration: epoch=1 key=q (queue removed) spans=1 commits=1 "
+        "aborts=0 p50=3967us p99=3967us unresolved=0 open=0 untracked=0 "
+        "overflow=0 hist=4095:1",
+        "hold calibration: epoch=1 pooled keys=2 spans=4 commits=3 aborts=1 "
+        "p50=16us p99=3967us unresolved=2 open=1 untracked=0 overflow=0 "
+        "(H candidate = pooled p99, rounded up to whole ms, at least 1 ms)",
+        shared_epoch_line(1, 1_500_000_000),
+    ]
+    path.write_text(json.dumps(proof))
+    return c
+
+
+class SharedCalibrationLogs(unittest.TestCase):
+    def meter(self, root):
+        summary = json.loads((root / "client-0.summary.json").read_text())
+        return calibration_report(root, [summary])
+
+    def rewrite(self, root, transform):
+        path = root / "n1.evidence.json"
+        proof = json.loads(path.read_text())
+        proof["juicer_log_lines"] = transform(proof["juicer_log_lines"])
+        path.write_text(json.dumps(proof))
+
+    def test_actual_shared_formats_work_through_adapter(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            c = shared_collected_fixture(root)
+            result = CRDBAdapter().parse_results(c, root)
+            self.assertTrue(result["validity"]["valid"], result["validity"])
+            meter = result["diagnostics"]["hold_calibration"]
+            self.assertTrue(meter["valid"], meter)
+            self.assertEqual((meter["spans"], meter["commits"], meter["aborts"]), (4, 3, 1))
+            self.assertEqual((meter["p50_us"], meter["p99_us"]), (16, 3967))
+            self.assertEqual(meter["recommended_max_hold_ms"], 4)
+            self.assertEqual(meter["overflow"], 0)
+            self.assertEqual(meter["unresolved"], 2)
+            self.assertEqual(len(meter["sources"]), 2)  # Never double-count pooled.
+            self.assertEqual(meter["sources"][0]["open"], 1)
+            self.assertEqual(meter["sources"][1]["key"], "q (queue removed)")
+            behavior = meter["observe_only_behavior"][0]
+            self.assertEqual((behavior["start_unix_ns"], behavior["end_unix_ns"]), (1_250_000_000, 1_500_000_000))
+
+    def test_shared_boundaries_use_intersection_of_client_windows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            shared_collected_fixture(root)
+            summary = json.loads((root / "client-0.summary.json").read_text())
+            second = dict(summary, start_unix_ns=1_300_000_000)
+            meter = calibration_report(root, [summary, second])
+            self.assertFalse(meter["valid"])
+            self.assertEqual(meter["spans"], 0)
+            self.assertEqual(meter["excluded_epoch_key_rows"], 2)
+            self.assertIsNone(meter["p99_us"])
+            self.assertIsNone(meter["recommended_max_hold_ms"])
+
+    def test_shared_incomplete_or_missing_behavior_is_not_zero(self):
+        replacements = (
+            ("holds created=0 ended", "holds ended"),
+            ("p99<=0s live=0", "p99<=0s"),
+            (" dropped=0 held=0)", " dropped=0)"),
+            ("unix_ns=1500000000 ", ""),
+        )
+        for old, new in replacements:
+            with self.subTest(missing=old), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                shared_collected_fixture(root)
+                self.rewrite(root, lambda lines: [line.replace(old, new) for line in lines])
+                meter = self.meter(root)
+                self.assertFalse(meter["valid"], meter)
+                self.assertIsNone(meter["recommended_max_hold_ms"])
+
+    def test_shared_actual_holds_queueing_and_lost_tracking_are_invalid(self):
+        replacements = (
+            ("holds created=0 ended", "holds created=1 ended"),
+            ("p99<=0s live=0", "p99<=0s live=1"),
+            ("msgs intercepted=20 direct=20 queued=0", "msgs intercepted=20 direct=19 queued=1"),
+            (" dropped=0 held=0)", " dropped=0 held=1)"),
+            ("untracked=0 overflow=0 hist=1:1,17:2", "untracked=1 overflow=0 hist=1:1,17:2"),
+        )
+        for old, new in replacements:
+            with self.subTest(violation=old), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                shared_collected_fixture(root)
+                self.rewrite(root, lambda lines: [line.replace(old, new) for line in lines])
+                meter = self.meter(root)
+                self.assertFalse(meter["valid"], meter)
+                self.assertEqual(meter["spans"], 4)
+
+    def test_shared_overflow_is_pooled_and_only_finite_p99_is_eligible(self):
+        for overflow, finite in ((1, True), (2, False)):
+            with self.subTest(overflow=overflow), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                shared_collected_fixture(root)
+
+                def replace_rows(lines):
+                    rows = []
+                    totals = (
+                        "spans=100 commits=99 aborts=1 p50=991us "
+                        f"p99={991 if finite else 1048576}us unresolved=0 "
+                        f"open=0 untracked=0 overflow={overflow}"
+                    )
+                    for line in lines:
+                        if "key=k " in line:
+                            line = (
+                                f"hold calibration: epoch=1 key=k {totals} "
+                                f"hist=1023:{100-overflow},>top:{overflow}"
+                            )
+                        elif "key=q " in line:
+                            line = (
+                                "hold calibration: epoch=1 key=q spans=0 commits=0 "
+                                "aborts=0 p50=0us p99=0us unresolved=0 open=0 "
+                                "untracked=0 overflow=0 hist=-"
+                            )
+                        elif "pooled keys=" in line:
+                            line = (
+                                f"hold calibration: epoch=1 pooled keys=2 {totals} "
+                                "(H candidate = pooled p99, rounded up to whole ms, at least 1 ms)"
+                            )
+                        elif "juicer-epoch:" in line:
+                            epoch = 0 if "epoch=0 " in line else 1
+                            line = shared_epoch_line(
+                                epoch, 1_250_000_000 if epoch == 0 else 1_500_000_000,
+                                messages=100,
+                            )
+                        rows.append(line)
+                    return rows
+
+                self.rewrite(root, replace_rows)
+                meter = self.meter(root)
+                self.assertEqual(meter["spans"], 100)
+                self.assertEqual(meter["overflow"], overflow)
+                self.assertEqual(meter["valid"], finite, meter)
+                self.assertEqual(meter["p99_us"], 991 if finite else None)
+                self.assertEqual(meter["recommended_max_hold_ms"], 1 if finite else None)
+
+    def test_shared_explicit_overflow_must_match_histogram(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            shared_collected_fixture(root)
+            self.rewrite(root, lambda lines: [line.replace("overflow=0 hist=1:1,17:2", "overflow=1 hist=1:1,17:2") for line in lines])
+            with self.assertRaisesRegex(ValueError, "overflow counts disagree"):
+                self.meter(root)
+
+    def test_shared_zero_spans_or_malformed_key_row_cannot_certify(self):
+        for empty in (True, False):
+            with self.subTest(empty=empty), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                shared_collected_fixture(root)
+                def rewrite_rows(lines):
+                    if empty:
+                        return [line for line in lines if "hold calibration:" not in line]
+                    return [line.replace("open=1 untracked=0", "open=1 missing_untracked=0") for line in lines]
+                self.rewrite(root, rewrite_rows)
+                meter = self.meter(root)
+                self.assertFalse(meter["valid"], meter)
+                self.assertIsNone(meter["recommended_max_hold_ms"])
+
+    def test_shared_duplicate_rows_deduplicate_but_conflicting_boundaries_fail(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            shared_collected_fixture(root)
+            self.rewrite(root, lambda lines: lines + [lines[2], lines[-1]])
+            self.assertEqual(self.meter(root)["spans"], 4)
+            self.rewrite(root, lambda lines: lines + [lines[-1].replace("holds created=0 ended", "holds created=1 ended")])
+            with self.assertRaisesRegex(ValueError, "Conflicting native epoch-summary"):
+                self.meter(root)
+
+    def test_shared_redaction_and_explicit_disabled_declaration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            shared_collected_fixture(root)
+            self.rewrite(root, lambda lines: [line.replace("epoch=1", "epoch=‹1›").replace("open=1", "open=‹1›") for line in lines])
+            self.assertTrue(self.meter(root)["valid"])
+            self.rewrite(root, lambda lines: [line.replace("holdCalibration=true", "holdCalibration=false") for line in lines])
+            self.assertFalse(self.meter(root)["valid"])
 
 
 class EvaluationMetrics(unittest.TestCase):
