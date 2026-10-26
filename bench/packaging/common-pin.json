@@ -2,12 +2,12 @@
   "schema_version": 1,
   "distribution": "experiment-common",
   "version": "0.1.0",
-  "git_commit": "f4c38901712f5f63e05da062f27b285f8493d972",
-  "git_tree": "382ad1efec2cdc1b1caad7de9570ed7dd581b6e3",
-  "source_archive_sha256": "fdd2e3e22e6ac8db44b560a09300377f0a7a71bb5749be41039e1f13b7a1e40e",
-  "source_date_epoch": 1793051328,
-  "wheel": "vendor/f4c38901712f5f63e05da062f27b285f8493d972/experiment_common-0.1.0-py3-none-any.whl",
-  "wheel_sha256": "687ec66f740f9ea9e40e1462cd2a09cc9c62c0146b3ab859eb24e4b12fe9e673",
+  "git_commit": "14b4bd8f812bd6b527b8138d49f609d515ef9a8a",
+  "git_tree": "f80a36bc64fa20ba655ff04f4f9fac20f0ff2c1b",
+  "source_archive_sha256": "e9bb5a504343b9efed08318ad1e8b21feee698d4cbe75d15ff3b03d8b1b3b927",
+  "source_date_epoch": 1793054700,
+  "wheel": "vendor/14b4bd8f812bd6b527b8138d49f609d515ef9a8a/experiment_common-0.1.0-py3-none-any.whl",
+  "wheel_sha256": "ff0b8cebc0a5aa9313a4891b935e7516a2e4fce7d360090e7ad68e317d88991d",
   "build_system": {
     "setuptools": "75.1.0",
     "wheel": "0.44.0"

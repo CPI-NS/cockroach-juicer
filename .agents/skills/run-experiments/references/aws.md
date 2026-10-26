@@ -14,9 +14,12 @@ Default to one cluster. Multiple independent clusters can run in parallel when r
 
 Build fixed versions on control, then distribute verified artifacts. Keep control-driven execution independent of the initiating laptop. Before load, verify the temporary workers' independent deadline cleanup. Do not install a self-destruct timer on shared control.
 
-Reserve time and budget for collection and cleanup. Near the limit, start no new cells. Estimates are not instantaneous billing guarantees. Neither an unattended instruction nor an infrastructure retry expands the approved budget.
+Reserve time and budget for collection and cleanup using the measured schedule
+and [recovery assessment](recovery.md). Near the limit, start no new cells.
+Estimates are not instantaneous billing guarantees. Neither an unattended
+instruction nor an infrastructure retry expands the approved budget.
 
-Collection is two-stage: workers to control, then the initiator retrieves control results to the configured durable destination. Verify file manifests, sizes and hashes at both stages; data remaining only on temporary instances is not durably saved. Collection failure gets bounded retries, stops new work and produces a clear report before the resource deadline. The initiator releases exact owned workers and audits the result; retain usable control. Never mark missing data as a successful run to satisfy cleanup.
+Collection is two-stage: workers to control, then the initiator retrieves control results to the configured durable destination. Maintained collection transfers tar bundles with per-file manifests, verifies them before publication and cleans temporary archives on normal interruption. Verify file manifests, sizes and hashes at both stages; data remaining only on temporary instances is not durably saved. Collection failure gets bounded retries, stops new work and produces a clear report before the resource deadline. The initiator releases exact owned workers and audits the result; retain usable control. Never mark missing data as a successful run to satisfy cleanup.
 
 ## Named reusable clusters
 
@@ -26,6 +29,10 @@ remain available after a named run until explicit delete or their fixed creation
 deadline. For Skill-driven execution, explicitly choose and record the maximum
 release lifetime and pass `--deadline-seconds`; release workers at task completion
 and retain usable control. A new experiment never extends the existing deadline.
+An individual cell failure triggers recovery assessment, not immediate cluster
+deletion. Keep healthy workers available for an authorized useful retry within
+their lifetime. Release on task completion, an explicit abandonment/stop decision,
+or the resource boundary; report the reason and verify the actual release.
 In guided mode the user runs AWS commands and the agent reviews returned output.
 
 Keep source selection out of AWS site and cluster settings. Put `sources` with
