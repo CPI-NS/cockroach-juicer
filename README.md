@@ -14,9 +14,9 @@ Juicer SQL YCSBT experiments. Prepare the approved Python packages and native
 artifacts, and bind the example's artifact paths as documented there:
 
 ```sh
-python -m crdb_bench plan --config bench/examples/local.json --output bench/results/plan
-python -m crdb_bench run --config bench/examples/local.json --output bench/results/batch-1
-python -m crdb_bench stop --output bench/results/batch-1
+python -m crdb_bench plan --config bench/examples/local.json --output juicer-exp-runs/run-id/plan
+python -m crdb_bench run --config bench/examples/local.json --output juicer-exp-runs/run-id/batch-1
+python -m crdb_bench stop --output juicer-exp-runs/run-id/batch-1
 ```
 
 The adapter uses experiment-common and does not require a juicer-project
@@ -24,9 +24,8 @@ checkout. For AWS, `python -m experiment_common.infra` manages resources on the
 initiating host; a separate EC2 control builds and executes through SSH without
 AWS credentials. See [agent instructions](AGENTS.md),
 [evaluation coverage](bench/EVALUATION-COVERAGE.md) and the bench guide's current
-installation limits. New experiments use configurations with the maintained
-entry instead of copying a historical round launcher. Upstream product and
-development documentation remains below.
+installation limits. Experiments use configurations with the maintained entry. Product and
+development documentation is provided below.
 
 - [What is CockroachDB?](#what-is-cockroachdb)
 - [Docs](#docs)

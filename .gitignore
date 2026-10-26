@@ -80,3 +80,16 @@ CLAUDE.local.md
 .claude
 .playwright-mcp
 juicer-docs
+
+# Per-run experiment output, relative to the launch directory.
+juicer-exp-runs/
+
+# Shared repository-local Skill discovery.
+!/.claude/
+!/.claude/skills/
+!/.claude/skills/run-experiments
+
+# Local Python environments and generated package artifacts.
+.venv*/
+/bench/vendor/
+*.whl

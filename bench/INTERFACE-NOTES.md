@@ -1,15 +1,23 @@
-# Issue04 integration handback
+# CRDB adapter interface
 
-Import `crdb_bench:CRDBAdapter`; its standalone entry is `python -m crdb_bench`. It consumes canonical CONTRACT workload names and requires `read_mode=per_transaction`. Native SQL names appear only in generated private client JSON. The common package is the only lifecycle/SSH/cleanup/continuation executor.
+`crdb_bench:CRDBAdapter` implements the shared adapter contract. The standalone
+entry is `python bench/run.py` or installed `python -m crdb_bench`. Public
+configuration uses the canonical workload fields and `read_mode=per_transaction`.
+Generated private SQL-client JSON uses the native field names.
 
-`experiment_common.build.artifact_path` resolves all runtime and build paths. Dictionary artifacts use control `path` for builds/local and `deploy_to` on SSH workers; string shorthand is explicitly preinstalled. The client build command uses `host_id=local` for current control. Both executables are deployed to participating server/client hosts, because the Go helper performs preparation, provenance and finalization. Workers need no adapter installation.
+The common package owns lifecycle, SSH, process cleanup, batching, continuation,
+collection and plotting. Dictionary artifacts use control `path` for builds and
+`deploy_to` on workers; a string declares a preinstalled artifact. The SQL helper
+runs preparation, provenance and finalization as well as client traffic, so deploy
+it to all participating hosts. Workers need the declared executable and stdlib
+Python, not the adapter package.
 
-`CellPlan.readiness` initializes the cluster, probes SQL and resets/loads after servers launch. Finalizers preserve and validate per-node Juicer startup evidence. Collection contains exact generated output paths. The SQL client owns only its bounded SQL request scheduler; common owns subprocess groups.
+Readiness initializes/probes the cluster and resets/loads data after servers
+start. Finalizers validate node-level Juicer identity. `topology.layout`,
+`topology.metrics` and `juicer.hold_calibration` configure layout and measurement
+helpers. `python -m crdb_bench.evaluation` analyzes verified batches without a
+second lifecycle runner.
 
-The package pins common 0.1.0 and uses the coordinated PyYAML 6.0.3 dependency via common. `uv.lock` was generated offline using exact dependency metadata from the cached upstream wheel. Isolated cached-dependency tests and offline adapter wheel/installed console validation passed. No current packaging blocker remains; a complete fresh common build environment was not installed by this worker.
-
-See VALIDATION.md and validation/evidence.json for real closed/off and Poisson-open/on CLI smoke, regular-open evidence, real Ctrl-C exit130/PID cleanup, executable-fixture Ctrl-C/explicit-stop tests with grandchildren and unrelated sentinel, sample/retry/duplicate correctness tests, and exported CSV/JSON/SVGs. Source binary provenance records the older cached fork honestly. Mac is explicitly deferred/untested; external SSH inventory execution is untested.
-
-Base Issue04 is ready for integration. The base handback deferred CR-LAYOUT and remaining evaluation metrics to ticket11; that extension is documented below. There is no known source capability gap for preserving duplicate blind-write inputs or collecting the existing 1PC success/failure counters: both are retained with their separate numerator/denominator semantics. This branch does not change CC code or database algorithms.
-
-Ticket11 adds topology.layout/topology.metrics and juicer.hold_calibration without changing common APIs. Native layout helpers and observer run from the same declared SQL client binary. Independent system analysis is `python -m crdb_bench.evaluation`; it reuses common verified-batch deduplication, never adds a lifecycle runner. See EVALUATION-COVERAGE.md for the three-node native evidence and the explicit SQL per-cause instrumentation limit.
+Package versions and wheel identity are defined by `common-pin.json`, `uv.lock`
+and the selected release artifacts. See [BUILD.md](BUILD.md),
+[VALIDATION.md](VALIDATION.md) and [EVALUATION-COVERAGE.md](EVALUATION-COVERAGE.md).

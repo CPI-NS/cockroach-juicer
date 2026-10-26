@@ -1,18 +1,21 @@
-# SQL client migration audit
+# SQL client implementation responsibilities
 
-The SQL module is owned and maintained here. Historical files were read as migration input, never imported or executed at runtime. The old source was `juicer-project/crdb-exp/sql-p50-openloop-20260923/client/`; that checkout is not a runtime dependency.
+The system-owned `bench/sqlclient/` module generates SQL transactions and records
+client measurements. `crdb_bench` maps experiment configuration to SQL-client and
+server commands and interprets system metrics. Experiment-common owns execution,
+process cleanup, batching, continuation, collection and plotting.
 
-| Audited function or entry | Destination | Retained behavior and change | Verification |
-|---|---|---|---|
-| `pgExecutor.Execute`, `sqlState` (`main.go`) | `sqlclient/sql.go: execute`, `state` | Retain pgx SQLSTATE handling, one-wave read/blind UPSERT, parameterized values and affected-row validation. Render SQL for configurable transaction size; SELECT expects distinct rows, UPSERT counts repeated input rows, matching current `pkg/workload/ycsbt/ycsbt.go: runReadOnly/runBlind`. | Real SQL 100-key read/write smoke; pgx wire fixture visible-40001 retry test. |
-| `buildPools` | `sqlclient/run.go: run` and `sql.go: connect` | Replace per-URL pools with exactly one dedicated connection per configured slot, round-robin URLs. Use pgx simple protocol so slot connection acquisition and statement preparation do not introduce a hidden queue. | Generated two-URL plan preserves three slots; wire cap test and real multi-process smoke. |
-| `newZipf`, `zipfGenerator.Uint64` (`trace.go`) | `sqlclient/main.go: newGenerator`, `key` | Reuse Gray/YCSB transform; compute normalizer once per process. Parameterize key space/theta, add uniform and one-key cases; use a coprime scramble for arbitrary key counts. | Deterministic 10M-key Zipf trace, five draws, legal bounds and distinct option. |
-| `virtualStream.nextEvent`, `containsKey` | `sqlclient/main.go: next` | Preserve seeded transaction mix and random write values. Remove implicit deduplication unless `distinct_keys=true`; explicit unique sampling uses the existing bounded-rejection/fallback idea. | One-key five-draw duplicate test; distinct-key trace test. |
-| `writeTrace`, `readTrace` | `sqlclient trace` CLI | Replace fixed 1000/10-key full-trace memory allocation with parameterized diagnostic streaming. Runtime generates requests only when admitted. Native trace schema is diagnostic, not a public config alias. | Regular exact offsets, Poisson offsets and seed repeatability. |
-| `runOpenLoop` worker/queue/drain loop | `sqlclient/run.go: run` | Replace drop-on-full queue, offered-to-done latency and post-offer drain with closed/open schedulers, wait-on-capacity, no catch-up, bounded slots and end-of-window cancellation. Keep one buffered result writer and terminal accounting. | Real pgx wire boundary with capacity pressure, retries and unfinished-at-cutoff requests; real closed, Poisson, and regular SQL smokes. |
-| `eventResult`, `runSummary`, `percentile` | Event/summary files; `crdb_bench/results.py` | Retain raw timestamps and SQL state; use execution-to-terminal monotonic latency, separate attempt and terminal windows. Merge samples before quantiles; layered retries are never summed as one percentage. | Known merged sample example p50=2, p99=100; restart/commit=1.5; missing-process/treatment-evidence rejection. |
-| `procSnapshot`, `/proc` helpers | Not migrated | OS-specific sampling was not needed for this adapter; no fake zeros on macOS. Process ownership and progress come from common. | Portable Python/Go paths; Mac explicitly untested. |
-| Historical Prometheus scrape/parser algorithms | `sqlclient/metrics.go`, `crdb_bench/results.py` | Reimplement small stdlib HTTP/Prometheus boundary with original raw payloads/timestamps. Server counter deltas and denominators have a separate bounded scrape window. Current source `pkg/kv/kvclient/kvcoord/txn_metrics.go` and `pkg/kv/kvserver/metrics.go` define retry and 1PC counters. | Real fork counter evidence; known numerator/denominator fixture; no averaging per-client quantiles. |
-| Historical shell cluster/cell drivers | Not migrated | The common executor exclusively owns lifecycle, SSH, cleanup, batching, continuation, collection and analysis. Adapter returns validated commands/files and parser output. | Public CLI Ctrl-C and explicit-stop tests include owned grandchildren and an unrelated sentinel. |
+| Component | Responsibility |
+|---|---|
+| `sqlclient/sql.go` | Parameterized pgx statements, SQLSTATE handling and row validation |
+| `sqlclient/workload.go` | Key draws, transaction size and read/write semantics |
+| `sqlclient/run.go` | Global allocation, open/closed-loop scheduling and measurement |
+| `sqlclient/metrics.go` | Native metric acquisition |
+| `crdb_bench/results.py` | Retry layers, latency distributions and merged results |
+| `crdb_bench/evaluation_metrics.py` | Observe-only hold calibration and window checks |
+| `experiment-common` | Generic lifecycle and analysis |
 
-The old client requested pgx v5.7.2; this module pins the already cached v5.5.5 with cached transitive dependencies. No module was downloaded. This is an explicit dependency change, not a claim that the old dependency version was available. The retained pgx SQL API path is exercised against both a wire fixture and the actual fork.
+Use [README.md](README.md) for commands, [BUILD.md](BUILD.md) for pinned native
+builds and [EVALUATION.md](EVALUATION.md) for evaluation-specific operations.
+The client module's `go.mod` and `go.sum` define its pgx dependency. Offline
+builds require the pinned dependency cache.

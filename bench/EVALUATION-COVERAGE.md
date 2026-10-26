@@ -1,74 +1,32 @@
-# Ticket11 coverage and retained evidence
+# CRDB evaluation capabilities
 
-## Current observation update
+The maintained adapter supplies SQL YCSBT execution and the analysis interfaces
+below. Capability availability is distinct from a successful scientific campaign.
+Use [EVALUATION.md](EVALUATION.md) for configuration and
+[VALIDATION.md](VALIDATION.md) for verification procedures.
 
-Commit `768eaebb99e` adds SQL automatic retry **text-reason classification** at
-the actual retry increment, reset and terminal-export boundaries. It preserves
-the SQL total and distinct KV populations; unknown text and scrape discrepancies
-remain visible. Two native Bazel targets and 27 bench checks passed. A subsequent
-two-second local SQL run using the actual rebuilt source verified all nine text
-classes and the total in raw HTTP capture, parser export, verified collection
-and owned-process cleanup. Counts were zero; this live check validates zero/null
-behavior, while the native tests cover nonzero retry paths. Receipts are under
-`build/sql-retry-observation/live-http/`. Native-looking
-forced retry text cannot be distinguished from an original KV cause; these are
-not structured-causality counters. See [the current observation contract](SQL-RETRY-TEXT-OBSERVATION.md).
+| Capability | Implementation and boundary |
+|---|---|
+| Hot-rank layout | Discover node/store identities, split hot keys, check voters and place leases with SQL receipts |
+| Runtime layout checks | Observe placement/settings through measurement and finalization; snapshots cannot exclude moves between samples |
+| Hold calibration | Observe nominated-key spans without holding/queueing; merge complete native epochs within the client-window intersection |
+| Calibration validity | Check zero queueing/holds, missing spans and histogram overflow; unresolved/read-only spans are not imputed |
+| KV retry layers | Report named restart reasons, CC subset, uncertainty and their declared server denominator |
+| SQL retry text | Report classifications observed at automatic-retry increments and reset/export boundaries; text is not structured causal identity |
+| Client errors | Separate visible 40001, terminal failures and deadlocks using their declared populations |
+| 1PC | Report native success/failure counters and failures divided by total attempts |
+| Stability | Explicit configured thresholds, completion bins, p99 series and insufficient/unstable states |
+| Knee selection | Exclude unsafe/invalid loads and preserve off-only stability stop behavior across continuation |
+| Figure inputs | Export state-labelled throughput/latency data and source/environment/repeat identities |
 
-The original bench-only report below predates this instrumentation and retains
-its older binary/test identities. Its claims about absent SQL counters and
-untested external SSH describe that snapshot, not all later framework work.
+The shared Juicer core supplies observe-only calibration. Server/key spans end
+when commit/abort is applied there; individual start times and read-only terminal
+events are not inferred. A finite reported p99 is required for a hold-cap choice.
 
-## Original ticket evidence
+Read [SQL-RETRY-TEXT-OBSERVATION.md](SQL-RETRY-TEXT-OBSERVATION.md) before using
+text classes. SQL totals, KV causes, histogram populations, 1PC and visible errors
+remain separate. Matching totals do not prove identical causes.
 
-Implemented on `codex/ef-crdb-evaluation` from signed base `bc72c507e8fac5f83d4d6c75e70d63450028e396`. Scope is `bench/` only. No historical results, database concurrency-control code, shared common API or dependency set changed. Independent integration review remains the coordinator's step.
-
-| Coverage | Maintained implementation | Actual public output/evidence |
-|---|---|---|
-| CR-LAYOUT: top-16 placement | Native `layout` discovers actual node/store identities, splits the current ycsbt hot keys, waits for complete owned voters, disables automatic lease movement and relocates leases with checked SQL receipts. | [initial raw proof](validation/evaluation/client-0.layout.json), [summary](validation/evaluation/layout.json). The three-node native run placed 16 hot ranks in distinct ranges and balanced all 21 table ranges 7/7/7. Role n2 was actual node/store 3, and role n3 was 2: placement did not assume ordinal identities. |
-| CR-LAYOUT: runtime verification | Common-owned `watch-layout` and finalizer; parser independently checks maps, replicas, settings and measurement coverage. | [runtime JSONL](validation/evaluation/client-0.layout-monitor.jsonl), [final proof](validation/evaluation/client-0.layout-final.json): nine runtime snapshots, six in measurement, final map unchanged. Discrete observation cannot exclude a move away and back between samples. |
-| CR-LAYOUT: hold calibration | Existing native observe-only meter, checked zero holding/queueing, complete native epochs inside the client-window intersection, merged original histograms and a finite p99-to-H override. | [calibration](validation/evaluation/hold-calibration.json): 126 completed spans (125 commits/1 abort), 102 unresolved, zero untracked; p50 27647 us, p99 139263 us; functional recommendation 140 ms. Selected epochs have zero created holds, queued and held messages. This is not an adopted scientific default. Individual start timestamps are unavailable; the population is explicitly completion epochs. |
-| CR-METRICS: internal causes and windows | Nine individually named KV reasons, main four-reason CC numerator, uncertainty and SQL retry totals per server KV commit; per-node counter completeness; SQL/KV identity residual; histogram count and sum remain distinct. | [report](validation/evaluation/evaluation-report.json), [layer CSV](validation/evaluation/retry-layers.csv): main CC 1/916; uncertainty 44/916; SQL retries 45/916; KV cause sum 45 versus SQL total 45, residual 0. The histogram transaction count is 39, epoch sum 44; neither substitutes for the 45 cause events. |
-| CR-METRICS: visible errors/deadlocks/1PC | Visible 40001/client SQL attempt; terminal 40001/completed logical transaction; deadlocks/server commit; failed 1PC batch/(success+failure). Raw states, windows, null reasons and populations are exported. | Same report/CSV: native 1PC numerator 0, denominator 4, ratio 0; fixture tests verify nonzero 3/(2+3), distinct client/server denominators and strict identity disagreement. No generic abort percentage replaces these layers. |
-| RootQ57 | Repeated blind writes remain separate VALUES rows; original affected-row checks remain. | Native mixed SQL used 20 keys, five operations, `distinct_keys=false`; the real pgx wire test verifies five identical input keys are emitted unmerged. Race-instrumented proof is [tests-race.log](validation/evaluation/tests-race.log). |
-| Card report / Figure 7.8b inputs | Public `python -m crdb_bench.evaluation` verifies common batches and reparses immutable raw collection into a separate report. Achieved throughput, p99, p50 and defined CC ratios preserve conditions, settings and repeats. | [CSV](validation/evaluation/figure-7.8b.csv), [SVG](validation/evaluation/figure-7.8b.svg). Calibration is explicitly labelled observe-only and comparison-ineligible. These are per-cell inputs; shared paired-block/min-max research estimation remains common's responsibility. |
-| Ctrl-C / cleanup | Public CLI interruption includes the added observer and all owned children; common owns process groups. | [Ctrl-C proof](validation/evaluation/ctrl-c-layout.json): exit 130, one of two planned cells started, all eight owned fixture PIDs inactive, unrelated sentinel alive, cleanup errors empty. Native successful cleanup checked all 21 command records and their supervisors inactive: [native proof](validation/evaluation/native-proof.json). The base also retains actual SQL interruption [proof](validation/real-ctrl-c.json) and explicit-stop tests. |
-
-## Native run and provenance
-
-The actual batch is `/tmp/crdb-ticket11-native-2`; raw events, server logs/metrics, source provenance, command exits and hash-verified transfer manifest remain under `cells/4dec8f5bfc1f3e71827c-r000/attempt-001-e057c568/`. Three local CRDB nodes, three client processes/global slots, 20 keys, five operations, 50% read-only transactions, Zipf .99 and repeated draws exercised init/reset/multi-batch load/layout/calibration/collection. Warmup was one second and measurement three seconds. This is a functional smoke, not an efficacy or scale result. Observation work and server background work belong to the retained server counters, not the 380 client commits.
-
-The native executable is the previously cached Juicer fork: CRDB `1a2f996bd33530f96f022ed797842a760a43f0a0`, gRPC `2d0f58eb5e0719569e5fb39997298560723dbb10`, binary SHA-256 `86bdaa026f8261af1b1d8408d97f4cfba7a8a238bd8e87a7218ff8005f8df0cb`. The calibration source revision is an ancestor of that binary. [Collected provenance](validation/evaluation/client-0.provenance.json) retains its original source manifest and the maintained helper's actual binary hash. The helper was built offline from this change's working tree; subsequent formatting and signal cancellation changes did not alter the exercised SQL/workload semantics. Parser source hashes identify the exact derived report code, even though generation preceded its commit.
-
-An initial batch `/tmp/crdb-ticket11-native` failed because this fork gates administrative catalog access behind session `allow_unsafe_internals`. That ordinary failure was retained and cleaned. The maintained fix sets this session flag on catalog-inspection connections only; workload connections retain their normal defaults. No cluster override or recovery state machine was added.
-
-Reproduce the **analysis only**, without rerunning SQL:
-
-```sh
-PYTHONPATH=bench:../common bench/.venv/bin/python -m crdb_bench.evaluation \
-  --batch /tmp/crdb-ticket11-native-2 --output /tmp/crdb-ticket11-report
-```
-
-Shared T-CR-00 and T-CR-01 templates accepted the maintained site example at the public plan seam (12 and 36 cells respectively), with plans at `/tmp/crdb-ticket11-plan-cr00` and `/tmp/crdb-ticket11-plan-cr01`. [Plan summaries](validation/evaluation/plan-proof.json) retain logical IDs and frozen input hashes. Those plans were not run. Real external SSH and native macOS remain untested; no AWS resources or network dependencies were used.
-
-## Verification and remaining source capability
-
-The final suite reports **27 tests: 26 passed, one opt-in real-system test skipped**; actual native SQL was run separately above. [Full test log](validation/evaluation/tests-python314.log). Three relevant native SQL-wire/scheduler/layout tests also pass with Go race instrumentation. `go vet`, offline readonly Go build, cached formatting, `git diff --check`, and `uv lock --offline --check --project bench` pass. The uv check resolves three existing packages and leaves the coordinated PyYAML 6.0.3 lock unchanged; no dependencies were added or installed for this ticket.
-
-The source exposes a SQL automatic-retry **total**, but no dedicated per-cause SQL automatic-retry counters. The report therefore exposes KV causes separately and retains `sql_retry_cause_attribution=null` with a precise reason, even when the measured totals reconcile. Exact SQL per-cause attribution would require database instrumentation outside this bench-only scope. This limitation does not block layout, observe-only calibration, defined layered ratios, reconciliation or the actual native evidence above. Shared coverage should distinguish this source limit from implemented CR-LAYOUT/CR-METRICS behavior; scientific card runs and common research estimators are not claimed complete.
-
-## Committed common integration recheck
-
-Current T-CR-00/01 stability capability: `measurement.stability` explicitly
-binds completion-bin spread criteria and every numerical threshold; no
-scientific defaults are adopted. Native timestamps supply committed-rate and
-merged-terminal p99 time series with populations, counts and decision ratios.
-The public evaluation CLI retains `stability.json`, `stability-series.csv`
-and state-labelled Figure 7.8b inputs. A policy-bound unstable/insufficient off
-stops common dispatch, extensions and followups; linked continuation preserves
-that boundary, while unstable treatment does not trigger an off-only stop.
-The existing knee selector excludes unsafe loads/repeats and reports insufficient
-evidence honestly. Real campaign policy adoption/data remain outstanding.
-See [current stability report](stability-20261022/REPORT.md) for the 57-check
-fixture evidence; the historical recheck below is not evidence for this change.
-
-After the initial handback, common `1809fbd3c27a8e397b13659670447090b9c3714d` was checked from its clean committed checkout. The 27-test suite again reports 26 passed and one opt-in smoke skipped; offline lock verification still passes unchanged. Analysis of the existing native batch into `/tmp/crdb-ticket11-common1809-report` produces identical cells, metric evidence, layout and calibration. No native smoke was repeated. See [recheck proof](validation/evaluation/common1809-proof.json) and [test log](validation/evaluation/tests-common1809.log). CRDB integration `747eb54e6db40c02abf6d981c4181fd87cc1dcb7` is included by signed merge `7db533379d2`.
+Bind all scientific thresholds in the reviewed configuration. Native execution,
+external SSH, installation, platform support and every evaluation card need their
+own evidence; synthetic fixtures establish parser behavior only.

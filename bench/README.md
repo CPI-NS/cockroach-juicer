@@ -1,16 +1,35 @@
 # CockroachDB experiment adapter
 
+For separate cluster creation and reuse, see [MANUAL-AWS.md](MANUAL-AWS.md).
+
+## Output configuration
+
+Set the destination in the experiment configuration:
+
+```yaml
+output_root: juicer-exp-runs
+run_id: example-001
+```
+
+`output_root` defaults to `juicer-exp-runs`, relative to the launch directory.
+The run directory is `<output_root>/<run_id>/`. A standalone system can fall back
+to `experiment_id` when `run_id` is omitted. Choose a new `run_id` for a new
+execution. No environment variable is required; explicit `--output` overrides
+this configuration. `status` and `stop` accept the same `--config`.
+For a named cluster, also pass `--cluster <name>`.
+
+
 ## Python file entry
 
 From this system's reviewed checkout root, use the pinned Python environment:
 
 ```sh
 python bench/run.py --help
-python bench/run.py plan --config /absolute/path/to/config.yaml --output /absolute/path/to/plan
-python bench/run.py run --config /absolute/path/to/config.yaml --output /absolute/path/to/batch --detach
-python bench/run.py status --output /absolute/path/to/batch
-python bench/run.py stop --output /absolute/path/to/batch
-python bench/run.py analyze --output /absolute/path/to/batch
+python bench/run.py plan --config /absolute/path/to/config.yaml --output /absolute/launch/juicer-exp-runs/run-id/plan
+python bench/run.py run --config /absolute/path/to/config.yaml --output /absolute/launch/juicer-exp-runs/run-id/batch --detach
+python bench/run.py status --output /absolute/launch/juicer-exp-runs/run-id/batch
+python bench/run.py stop --output /absolute/launch/juicer-exp-runs/run-id/batch
+python bench/run.py analyze --output /absolute/launch/juicer-exp-runs/run-id/batch
 ```
 
 `bench/run.py` directly calls the existing `crdb_bench` CLI in this checkout.
@@ -18,7 +37,7 @@ All arguments, exit codes and cleanup behavior use the same implementation.
 The module and installed console entries below remain supported. Keep the
 checkout at the reviewed revision and follow the pinned installation instructions.
 
-`crdb-bench` is an independent Python integration backed by the system-owned Go SQL client in `sqlclient/`. It uses `experiment-common==0.1.0` for configuration, matrix expansion, allocation, local/SSH execution, owned-process cleanup, continuation, collection, and plots. It never imports a historical run directory or requires a juicer-project checkout.
+`crdb-bench` is an independent Python integration backed by the system-owned Go SQL client in `sqlclient/`. It uses `experiment-common==0.1.0` for configuration, matrix expansion, allocation, local/SSH execution, owned-process cleanup, continuation, collection, and plots. It operates independently of a juicer-project checkout.
 
 ## Run with existing dependencies
 
@@ -27,21 +46,21 @@ using existing Python 3.11+, uv and cached PyYAML. From this system checkout:
 
 ```sh
 source bench/.venv/bin/activate
-python -m crdb_bench validate --config bench/examples/local.json --output /tmp/crdb-validate
-python -m crdb_bench plan --config bench/examples/local.json --output /tmp/crdb-plan
-python -m crdb_bench build --config bench/examples/local.json --output /tmp/crdb-build
-python -m crdb_bench run --config bench/examples/local.json --output /tmp/crdb-batch-1
-python -m crdb_bench status --output /tmp/crdb-batch-1
-python -m crdb_bench analyze --output /tmp/crdb-batch-1
+python -m crdb_bench validate --config bench/examples/local.json --output /absolute/launch/juicer-exp-runs/run-id/crdb-validate
+python -m crdb_bench plan --config bench/examples/local.json --output /absolute/launch/juicer-exp-runs/run-id/crdb-plan
+python -m crdb_bench build --config bench/examples/local.json --output /absolute/launch/juicer-exp-runs/run-id/crdb-build
+python -m crdb_bench run --config bench/examples/local.json --output /absolute/launch/juicer-exp-runs/run-id/crdb-batch-1
+python -m crdb_bench status --output /absolute/launch/juicer-exp-runs/run-id/crdb-batch-1
+python -m crdb_bench analyze --output /absolute/launch/juicer-exp-runs/run-id/crdb-batch-1
 ```
 
 Replace the example artifact paths and source revision with actual, audited values first. `--set key=value` changes public configuration fields, for example `--set workload.transaction_size=1`. The installed console command `crdb-bench` and the common CLI's `--adapter crdb_bench:CRDBAdapter` use the same implementation. The package also registers the `crdb` adapter entry point.
 
-Ctrl-C or `python -m crdb_bench stop --output /tmp/crdb-batch-1` stops new cells and cleans experiment-owned server/client process groups, including children. Other workloads are not selected by process name. Ordinary errors fail clearly and clean up; there is no adapter recovery framework. For a new batch that preserves valid completed cells:
+Ctrl-C or `python -m crdb_bench stop --output /absolute/launch/juicer-exp-runs/run-id/crdb-batch-1` stops new cells and cleans experiment-owned server/client process groups, including children. Other workloads are not selected by process name. Ordinary errors fail clearly and clean up; there is no adapter recovery framework. For a new batch that preserves valid completed cells:
 
 ```sh
-python -m crdb_bench run --config bench/examples/local.json --output /tmp/crdb-batch-2 --previous /tmp/crdb-batch-1
-python -m crdb_bench analyze --output /tmp/crdb-joint --previous /tmp/crdb-batch-1 --previous /tmp/crdb-batch-2
+python -m crdb_bench run --config bench/examples/local.json --output /absolute/launch/juicer-exp-runs/run-id/crdb-batch-2 --previous /absolute/launch/juicer-exp-runs/run-id/crdb-batch-1
+python -m crdb_bench analyze --output /absolute/launch/juicer-exp-runs/run-id/crdb-joint --previous /absolute/launch/juicer-exp-runs/run-id/crdb-batch-1 --previous /absolute/launch/juicer-exp-runs/run-id/crdb-batch-2
 ```
 
 The configuration and source/artifact identity must remain compatible. An interrupted cell is rerun in full. SVG plots, CSV, and JSON are written by common analysis; never average client quantiles.
@@ -52,7 +71,7 @@ The configuration and source/artifact identity must remain compatible. An interr
 |---|---|
 | `name` | `ycsbt`; other workloads fail validation |
 | `keys` | Accessed and loaded integer keys `0..keys-1`; supports the 10,000,000-key evaluation configuration |
-| `transaction_size` | Number of draws in each logical transaction; five is represented as five, rather than the historical fixed ten |
+| `transaction_size` | Number of draws in each logical transaction; five means five draws |
 | `zipf` | Gray/YCSB Zipf theta in `[0,1)`; zero is uniform |
 | `distinct_keys` | False permits repeated draws; true rejects impossible transaction sizes and samples distinct keys |
 | `read_fraction` | Probability that a whole transaction is read-only, including fractional percentages |
@@ -107,7 +126,7 @@ Unavailable optional counters are null with reasons. Missing required retry coun
 
 ## Native builds and verification
 
-See [BUILD.md](BUILD.md) for offline Linux and Apple Silicon recipes, [MIGRATION.md](MIGRATION.md) for the source reuse audit, and [VALIDATION.md](VALIDATION.md) for actual evidence and platform limits.
+See [BUILD.md](BUILD.md) for offline Linux and Apple Silicon recipes, [MIGRATION.md](MIGRATION.md) for module responsibilities, and [VALIDATION.md](VALIDATION.md) for actual evidence and platform limits.
 
 ## Evaluation layout and calibration
 

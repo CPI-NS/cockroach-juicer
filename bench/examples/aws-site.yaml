@@ -1,0 +1,57 @@
+# One-time site configuration. Bind every REPLACE/null before creating resources.
+# Resource creation only. Use explicit baseline bootstrap for software setup.
+region: us-east-1
+output_root: juicer-exp-runs
+infra:
+  schema_version: 1
+  account_id: 'REPLACE_ACCOUNT_ID'
+  aws: {executable: aws}
+  control:
+    region: us-east-1
+    cpus: 8
+    work_dir: /srv/experiment-control
+    host:
+      user: ubuntu
+      ssh_options: [-i, /absolute/local/path/to/experiment.pem]
+    worker_key_path: /home/ubuntu/.ssh/experiment.pem
+    create:
+      image_id: ami-REPLACE_PREPARED_IMAGE
+      instance_type: REPLACE_CONTROL_TYPE
+      subnet_id: subnet-REPLACE
+      security_group_ids: [sg-REPLACE]
+      key_name: REPLACE_EXISTING_KEYPAIR
+      user: ubuntu
+      cpus: 8
+      hourly_usd: null # Frozen all-in estimate; bind before use.
+      address_type: public
+      disk_gib: 100
+  budget:
+    deadline_seconds: 3600
+    cleanup_margin_seconds: 120
+    hard_release_margin_seconds: 10
+    max_cost_usd: 10
+    max_instances: 32
+    max_vcpus: 256
+    min_free_bytes: 1073741824
+  max_attempts: 3
+worker:
+  image_id: ami-REPLACE_PREPARED_IMAGE
+  security_group_ids: [sg-REPLACE]
+  key_name: REPLACE_EXISTING_KEYPAIR
+  user: ubuntu
+  work_dir: /srv/experiment-worker
+  disk_gib: 32
+  address_type: private
+  ssh_address_type: public
+  ssh_options: [-i, /absolute/local/path/to/experiment.pem]
+instance_types:
+  c5.2xlarge:
+    cpus: 8
+    hourly_usd: null # Frozen all-in estimate; preflight checks actual CPUs.
+placements:
+  same-az:
+    all: [{subnet_id: subnet-REPLACE}]
+  mixed-az:
+    server: [{subnet_id: subnet-REPLACE-A}, {subnet_id: subnet-REPLACE-B}, {subnet_id: subnet-REPLACE-C}]
+    client: [{subnet_id: subnet-REPLACE-A}, {subnet_id: subnet-REPLACE-B}, {subnet_id: subnet-REPLACE-C}]
+# Optional placement maps may also supply placement: {GroupName: EXISTING_GROUP}.

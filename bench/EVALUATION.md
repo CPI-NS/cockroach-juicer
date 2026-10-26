@@ -1,6 +1,6 @@
-# CRDB evaluation integration: ticket11
+# CRDB evaluation interface
 
-This extends the base adapter with maintained layout placement, observe-only hold calibration, cause-specific metric reconciliation and card-specific exports. It does not change database concurrency control, import a historical harness, merge repeated blind-write inputs, or create cloud resources. Native Mac validation remains deferred.
+The adapter provides layout placement, observe-only hold calibration, metric reconciliation and card exports. Repeated input draws remain intact. Native Mac operation requires separate validation.
 
 ## Configuring and inspecting the layout
 
@@ -27,9 +27,9 @@ After reset/load, the native helper computes the same coprime multiplier as curr
 
 It then sets and verifies `kv.allocator.load_based_rebalancing='off'` and `kv.lease_queue.enabled=false`, keeping the normal replication queue active. Top ranks map round-robin over the explicitly ordered target list. Remaining ranges fill the least-loaded target so the **complete** table lease count also differs by at most one. Every transfer checks its returned range ID and `result='ok'`; actual initial raw boundaries, clipped logical table spans, replica roles, leases and SQL receipts are retained.
 
-Administrative connections set session `allow_unsafe_internals=true`, required by this fork for catalog inspection. This is not a cluster override or a workload-session/concurrency-control change. `SET CLUSTER SETTING` executes as its own statement, avoiding the historical multi-statement transaction restriction.
+Administrative connections set session `allow_unsafe_internals=true`, required by this fork for catalog inspection. This is not a cluster override or a workload-session/concurrency-control change. `SET CLUSTER SETTING` executes as its own statement, as required by the database statement boundary.
 
-A common-owned `watch-layout` observer verifies the full map during the workload. A final check runs after client completion. Both confirm table coverage, complete own voters, the configured hot-key/lease mapping and disabled automatic lease movement. The parser independently checks all collected maps and does not trust a `valid=true` field alone. Changes cause a normal failed cell and owned-process cleanup. Verification is by discrete snapshots; an unobserved move away and back is not excluded. Freeze the sampling interval and account for its SQL/CPU cost. The research site example uses ten seconds, consistent with the source harness; the small native smoke uses a shorter interval only for functional evidence.
+A common-owned `watch-layout` observer verifies the full map during the workload. A final check runs after client completion. Both confirm table coverage, complete own voters, the configured hot-key/lease mapping and disabled automatic lease movement. The parser independently checks all collected maps and does not trust a `valid=true` field alone. Changes cause a normal failed cell and owned-process cleanup. Verification is by discrete snapshots; an unobserved move away and back is not excluded. Freeze the sampling interval and account for its SQL/CPU cost. Freeze the observer interval explicitly in the campaign configuration.
 
 Public native operations are `layout-plan`, `layout`, `watch-layout`, and `layout-check`, taking the adapter-generated native `--config`. The normal user path remains common's `plan`/`run` lifecycle, which manages these operations and their output collection. Workers require only declared binaries and common's stdlib-Python executor, with no installed adapter package.
 
@@ -39,7 +39,7 @@ Set `juicer.enabled=true` and `juicer.hold_calibration=true` for a **separate ba
 
 The finalizer verifies the native calibration declaration on every server and retains the original Juicer log lines. The parser uses consecutive **observed native epoch-summary timestamps** to select complete epochs inside the intersection of the client measurement windows. Initialization, loading, partial boundary epochs and missing epoch boundaries are excluded. It verifies zero cumulative holds/queued/held markers in those epochs, rather than relying on the requested switch alone.
 
-The source meter times first marker to commit/abort applied on that server/key. Its selected epoch histograms are merged across keys, epochs and nodes before quantiles are computed. Pooled lines are not added again, and per-epoch p99 values are not averaged. Histogram bucket midpoints and overflow semantics follow `juicer/adaptive_wait.go`; p99 outside finite buckets cannot yield a recommendation. Unresolved/read-only spans and lost tracking are retained, not imputed. Individual span start timestamps are not present in the native histogram, so this is a **completion-epoch calibration population**, distinct from client execution-latency samples requiring both individual endpoints inside their window.
+The source meter times first marker to commit/abort applied on that server/key. Its selected epoch histograms are merged across keys, epochs and nodes before quantiles are computed. Pooled lines are not added again, and per-epoch p99 values are not averaged. Histogram bucket midpoints and overflow semantics follow `juicer/hold_calibration.go`; p99 outside finite buckets cannot yield a recommendation. Unresolved/read-only spans and lost tracking are retained, not imputed. Individual span start timestamps are not present in the native histogram, so this is a **completion-epoch calibration population**, distinct from client execution-latency samples requiring both individual endpoints inside their window.
 
 `hold-calibration.json` includes the histogram, span/commit/abort counts, unresolved/untracked counts, selected native epoch behavior, source references, window policy, p50/p99 in microseconds, and a ceiling-to-milliseconds `juicer.env.MAX_HOLD_MS` override. Lost tracking, actual holding or missing evidence invalidates calibration. A recommendation from a functional smoke is not the scientific workload's calibrated default; run the separate stage at its frozen selected workpoint.
 
@@ -60,7 +60,7 @@ no adopted scientific threshold. Bind every field before running:
 | `stop_on_unstable_off` | Explicit `true` |
 
 These are method bindings, not recommended numerical values. Omitting the
-entire policy on a legacy/custom configuration reports `not_assessed`; it
+entire policy on a configuration reports `not_assessed`; it
 does not establish stability. Partially supplied, null or unsupported policies
 fail validation before execution. Thresholds remain in frozen configuration,
 logical continuation identity and each stability decision.
@@ -111,7 +111,7 @@ sources, populations, ratio numerators/denominators and reasons. The public
 and a `stability_status` column in Figure 7.8b inputs; curve labels distinguish
 the states. Unstable/insufficient measurements remain visible but are not
 marked comparison-eligible. Original source hashes and raw files are retained.
-See `stability-20261022/REPORT.md` for actual fixture validation and its limits.
+See `stability-20261022/REPORT.md` for the stability method and its boundaries.
 
 ## Defined retry and error layers
 
@@ -124,7 +124,11 @@ See `stability-20261022/REPORT.md` for actual fixture validation and its limits.
 - Visible client 40001 attempts per client SQL attempt and terminal 40001 errors per completed logical transaction, with separate attempt/terminal SQLSTATE maps and explicit windows. Successful retries do not become terminal errors.
 - Deadlocks per server commit and **failed server-side 1PC batch attempts / (successful + failed server-side 1PC batch attempts)**. This is not `1 - one_phase_commits / client_commits`; it does not count cross-range transactions that disabled 1PC before making a server-side attempt. Zero-attempt ratios are null with a reason.
 
-The source has no dedicated per-cause SQL automatic-retry counter. KV reason counts are not silently renamed SQL counts, even when the same-window totals reconcile. `sql_retry_cause_attribution` remains null with that specific reason; the real native evidence separately demonstrates the observed cause-sum identity. Exact per-SQL reason instrumentation would require a source capability outside this bench-only change.
+SQL text-reason counters describe observed retry text, not preserved structured
+KV causes. The same-node class sum is compared with its SQL retry total, while KV
+reason counts remain separate. `sql_retry_cause_attribution` exposes complete
+text-class populations with their own status and uncertainty. Read
+[SQL-RETRY-TEXT-OBSERVATION.md](SQL-RETRY-TEXT-OBSERVATION.md) before interpretation.
 
 All server numerators and denominators use each node's retained first/last successful scrape windows. They include server background and observation work; client attempts are a different population. Scrapes are not atomic across nodes and SQL totals are updated at transaction completion, so boundary residuals are observable rather than suppressed. No abort percentage sums these layers.
 
@@ -136,8 +140,8 @@ A standalone derived report uses verified common batches and collection hashes:
 
 ```sh
 PYTHONPATH="$PWD/bench:/absolute/path/to/experiment-common" python3.14 \
-  -m crdb_bench.evaluation --batch /absolute/path/to/batch \
-  --output /absolute/path/to/evaluation-report
+  -m crdb_bench.evaluation --batch /absolute/launch/juicer-exp-runs/run-id/batch \
+  --output /absolute/launch/juicer-exp-runs/run-id/evaluation-report
 ```
 
 Multiple `--batch` values use common's continuation/deduplication checks; incompatible plans or conflicting successful repeats fail. Current parsing is recomputed from immutable collected files into the new report, leaving original batch results and raw data unchanged. Exports are `evaluation-report.json`, `retry-layers.csv`, `figure-7.8b.csv`, `figure-7.8b.svg`, `layout.json`, and `hold-calibration.json`. The three panels use achieved throughput versus p99, p50 and the correctly defined CC restart ratio. Conditions, Juicer settings, repeats and calibration stage remain distinct. These are per-cell input points, not the common layer's paired-block/min-max research estimator. Observe-only calibration points are visibly labelled and cannot masquerade as ordinary Juicer-on efficacy evidence.
@@ -146,26 +150,27 @@ Multiple `--batch` values use common's continuation/deduplication checks; incomp
 
 ```sh
 python -m crdb_bench plan --template /absolute/path/to/T-CR-00.yaml \
-  --config bench/examples/evaluation-site.json --output /tmp/crdb-card-plan
+  --config bench/examples/evaluation-site.json --output /absolute/launch/juicer-exp-runs/run-id/crdb-card-plan
 ```
 
-See [EVALUATION-COVERAGE.md](EVALUATION-COVERAGE.md) for actual output paths and scope, and `validation/evaluation/` for retained functional artifacts.
+See [EVALUATION-COVERAGE.md](EVALUATION-COVERAGE.md) for capability boundaries.
 
 ## Source checks
 
-The maintained code uses source semantics from the current fork rather than old-runner APIs:
+Authoritative source interfaces:
 
 | Operation / quantity | Authoritative source |
 |---|---|
-| Hot-rank scrambling and duplicate UPSERT inputs | `pkg/workload/ycsbt/ycsbt.go`; maintained helper `sqlclient/sql.go` (unchanged by ticket11). |
-| Range/replica columns and per-key lookup | `pkg/sql/delegate/show_ranges.go`, `show_range_for_row.go`; historical layout SQL was audited, then implemented in maintained `sqlclient/layout.go`. |
+| Hot-rank scrambling and duplicate UPSERT inputs | `pkg/workload/ycsbt/ycsbt.go`; maintained helper `sqlclient/sql.go`. |
+| Range/replica columns and per-key lookup | `pkg/sql/delegate/show_ranges.go`, `show_range_for_row.go`; implemented in `sqlclient/layout.go`. |
 | Observe-only calibration switch | `pkg/rpc/juicer_spi.go`; gRPC fork `juicer/hold_calibration.go` and `queue_manager.go`. |
-| Histogram bucket midpoint / finite overflow | gRPC fork `juicer/adaptive_wait.go`; original key/epoch histogram rows are merged in `crdb_bench/evaluation_metrics.py`. |
+| Histogram bucket midpoint / finite overflow | shared gRPC `juicer/hold_calibration.go`; original key/epoch histogram rows are merged in `crdb_bench/evaluation_metrics.py`. |
 | KV restart reasons and histogram population | `pkg/kv/kvclient/kvcoord/txn_metrics.go`, `txn_coord_sender.go`, `txn_interceptor_metric_recorder.go`. |
-| SQL automatic-retry total at completion | `pkg/sql/conn_executor_exec.go`; no dedicated per-cause SQL retry counter exists here. |
+| SQL automatic-retry total at completion | `pkg/sql/conn_executor_exec.go`; SQL text-reason classes are separate from structured KV causes. |
 | Server-side attempted 1PC success/failure | `pkg/kv/kvserver/metrics.go`; failed attempts divided by success plus failure. |
 
-The cached binary's full source manifest is retained with the native proof. No historical Python runner or experiment directory is imported at runtime.
-
-
-The S3/F5 follow-up preserves environment/repeat identities through the report CLI and uses common's public plotting renderer. Parsed capacity-wait evidence now reaches automatic selection through `diagnostics.capacity_limited`. See [REVIEW-FIXES.md](REVIEW-FIXES.md) for regression evidence and the F2 coordination note about legacy warmup counters.
+Native build identity includes the CRDB and shared gRPC revisions, toolchain
+and binary hashes. Research exports retain environment/repeat identity; common
+renders plots. Capacity-wait diagnostics reach working-point selection through
+`diagnostics.capacity_limited`. Interpret counters with their native measurement
+window and population; see [VALIDATION.md](VALIDATION.md).

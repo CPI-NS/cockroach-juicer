@@ -1,135 +1,156 @@
-# 规范 1.2 版里推不出期望的地方
+# Specification questions and pending expectations
 
-写场景时，凡是期望输出不能从规范条文唯一推出的，都记在这里：歧义在哪、三套现在怎么做（据 `dev/<系统>/CHANGES.md` 与代码）、牵涉哪些场景、建议怎么定。牵涉的场景放在 `scenarios/p-pending-ambiguity.json`，状态是 `pending_ambiguity`，每个裁定选项下的期望都写在 `expect_by_option` 里；运行器跳过它们。用户裁定后：规范出新版本写明这一条，选中选项的期望搬进 `expect`、状态改成 `active`，重新生成 `SHA256SUMS` 并同步三个仓库的副本。
+This register identifies behavior not uniquely determined by specification 1.2.
+It describes the open choice and the scope that a conformance scenario can safely
+assert. Recommendations are proposals, not approval to change implementation.
+A14 is resolved; the other entries remain specification questions.
 
-活跃场景（`active`）都避开了这些歧义：作者在一个只用于核对的参考模型上把每个活跃场景按下表各选项的全部组合跑过（A3 三种、A5 两种、A6 两种、A7 两种），输出都相同；测试集 1.1 版起，参考模型按 A16 的建议把过期未清扫的持有记为到期，并核对活跃场景里不出现 A16 的情形。
+Pending scenarios are in `scenarios/p-pending-ambiguity.json`. They contain
+`expect_by_option` and are skipped. To resolve one, update the specification,
+select its expectation, mark it active and synchronize checksums and runner
+identities. Active scenarios avoid outcomes that depend on unresolved choices.
 
-共 17 条，其中 A14 已定（10-20），其余待用户裁定。最影响跨实现比较的是 A1、A3、A6、A15、A16；A2 不改变任何结果，但规范应写明；A17 只在真实部署的 CockroachDB 上出现，测试集覆盖不到。A16、A17 是测试集 1.1 版（10-20）按三个运行器的报告新加的。
+## A1. Control messages in conservation counters (1.1, 1.7)
 
-## A1　守恒计数里的“拦截”是否包括控制消息（1.7 与 1.1）
+Does intercepted traffic include commit, abort, prepare, ResolveIntent and
+coordinator decisions, or only sortable data messages? P-05 covers the choice.
+Active comparisons normalize to data messages as FORMAT 6.1 specifies.
+Recommendation: count all transactional messages entering Juicer, classify
+controls as direct, and expose their count separately.
 
-- **歧义**：1.7 要求“拦截 = 直接投递 + 排队后投递 + 丢弃 + 仍扣着”，但没说提交、中止、准备、ResolveIntent、协调者决定这些控制消息算不算“拦截”。1.1 说 Juicer 拦截“事务请求与并发控制消息”，按这个范围控制消息也被拦截、并且是“直接投递”；但 1.7 的上下文（扣留路径）也可以读成只数可能被扣的数据消息。
-- **三套现状**：juicer-cc 只数排序路径上的 Get、Set、GetForPut（CHANGES 2.2 节写明）；CockroachDB 的守恒测试把控制消息算进拦截；Spanner 的拦截数由“各类持有候选之和”推出，控制消息与没碰到受观察 key 的消息是否在内要看代码。
-- **牵涉场景**：P-05。活跃场景只比较数据消息（FORMAT 第 6.1 节：运行器先减去自己喂进去的控制消息数）。
-- **建议**：按 1.1 计入（A1-a）：拦截 = 进入 Juicer 判定路径的全部事务消息，控制消息记为直接投递；每周期摘要另列“其中控制消息”一项，方便与旧口径对照。
+## A2. Control-message markers (5.1, 9.1)
 
-## A2　控制消息是否拆标记进队（9.1、5.1）
+The phrase "each touched managed key" does not explicitly exclude controls.
+The system adapters treat controls as observed events, not queued data markers.
+Recommendation: state explicitly that release-only controls create no markers.
+The scenario language already models them as control events.
 
-- **歧义**：9.1 说“一条消息在它碰到的每个受管 key 上各有一个标记”，没有把提交、中止等控制消息除外；表 5-A 又把它们当成结束持有的事件。
-- **三套现状**：三套都不让控制消息进队，只把它们当事件喂给依赖执行器和第一级（Spanner 的终止消息还会冲刷本事务被扣的消息）。
-- **牵涉场景**：无（格式里控制消息只能写成 `control_arrive`、`control_applied` 事件，本身就按三套现状建模）。
-- **建议**：规范 9.1 补一句“提交、中止以及其他只用来结束持有的控制消息不拆标记、不进队，只作为事件”。
+## A3. Candidate retention across epochs (2.1, 2.3)
 
-## A3　上一周期的第一级候选在下一周期是否仍被观察（2.1、2.3）
+The specification resets first-level counts but does not define the next epoch's
+initial observation set. Choices are empty, the preceding top K plus current
+candidates, or all candidates ever observed. The shared Go analyzer's ApplyDelta
+adds candidates without removing them. P-01 distinguishes the alternatives.
+Recommendation: retain the preceding top K for one epoch and retain nominated
+keys until removal; stop observing other withdrawn candidates.
 
-- **歧义**：2.1 说第一级“取前 K 个作候选；计数每个统计周期清零”，2.3 说候选“从这个周期起”被第二级观察。没说新周期开始时候选集合是什么：清空、沿用上一周期末的前 K，还是一直保留。
-- **三套现状**：Spanner 把上一周期末的前 K 作为下一周期的初始观察集合，再加上本周期运行中进入前 K 的（A3-b）；Go 两套的第二级只接收第一级的新增、忽略撤销，一个 key 成为候选后一直被观察（A3-c，`reorder_analyzer.go` 的 `ApplyDelta` 只处理 Added，`RemoveKey` 在非测试代码里没有调用）。
-- **牵涉场景**：P-01（周期 0 被拒绝过、周期 1 没有中止却有乱序的 key，周期 1 末提名与否）。活跃的过滤场景都在每个要数乱序的周期里重新给出中止，或让旧候选没有乱序到达。
-- **建议**：A3-b（Spanner 现状）：只沿用一个周期，既不让冷下来的 key 无限占用第二级的统计，又不在周期边界丢掉刚变热的 key。Go 两套要加“第一级撤销时第二级停止观察（已提名的除外）”。
+## A4. Arrivals before nomination within an epoch (2.2, 2.3)
 
-## A4　成为候选之前、同一周期里的到达是否追溯计入（2.2、2.3）
+"Starting this epoch" can mean retroactive observation from the epoch boundary
+or observation starting at candidate admission. Active cases avoid dependence on
+retroactivity. Recommendation: start at admission; retroactive reconstruction
+requires per-key arrival history independent of K.
 
-- **歧义**：2.3 说候选“从这个周期起”被数乱序，可以读成从成为候选的那一刻起，也可以读成从这个周期开头起（要求追溯此前的到达，t_max 也从周期开头算）。
-- **三套现状**：都不追溯：第二级在 key 成为候选时才开始记 t_max 与计数。
-- **牵涉场景**：无专门场景；活跃场景里候选的到达都在它第一次被拒绝之后，或者追溯与否结果相同（S09-06 已核对）。
-- **建议**：不追溯，规范写成“从它成为候选的那一刻起”。追溯要给每个 key 记到达历史，开销与 K 无关地增长。
+## A5. Observation while draining (2.3, 8.2)
 
-## A5　排空中的 key 不是第一级候选时是否继续被第二级观察（2.3、8.2）
+Does observation stop when removal starts, or when the queue is deleted?
+This controls whether a draining noncandidate can be renominated. P-02 covers
+it; S08-03 explicitly supplies a candidate during the draining epoch.
+Recommendation A5-a: observe until deletion so cancellation of draining remains
+reachable independently of first-level candidacy.
 
-- **歧义**：2.3 说已提名的 key 要被观察“直到被撤”。“撤”可以指惰性移除选中它（开始排空），也可以指队列真正删除。若开始排空就不再观察，8.2 的“排空中被重新提名”只有在它恰好又是第一级候选时才可能发生。
-- **三套现状**：开发记录没有写；Go 两套的观察集合只增不减（见 A3），排空中的 key 实际上一直被观察；Spanner 要看 `pendingRemoval_` 的 key 是否还留在观察集合里。
-- **牵涉场景**：P-02。活跃场景 S08-03 让排空中的 key 在那个周期重新被拒绝、成为候选，两种读法结果相同。
-- **建议**：A5-a：排空中的 key 继续被观察直到队列删除，这样 8.2 才是一条真正可达的路径。
+## A6. Unbound identity and conflicting holds (3.5, 5.2)
 
-## A6　事务号未绑定的队头遇到冲突的持有（5.2、3.5）
+"Must admit" an unbound head can mean unconditional admission, or merely that
+identity binding is not an additional blocker. P-03 distinguishes them; S05-12
+uses no conflicting hold. Spanner treats transaction zero as a real identity,
+so these unbound cases apply only to CC/CRDB. Recommendation A6-a: respect buffer
+and dependency conditions, then admit without registering a hold.
 
-- **歧义**：5.2 说“事务号尚未绑定的队头必须放行，但不登记为持有”。“必须放行”可以读成无条件放行（不看在途持有、甚至不等缓冲时间），也可以读成“不因为未绑定而挡”，仍受在途持有与缓冲时间约束。
-- **三套现状**：Go 两套与 Spanner 都是后者：未绑定的队头照样和在途持有逐个比较（事务号 0 与任何持有都算不同事务），被挡就等；只是放行时不登记（`dependency_enforcer.go` 的 AdmitUnbound 注释“the head respects the in-flight holds below but is admitted untracked”，Spanner `enforcer.cc` 同）。三套的接入层都不会产生未绑定的数据消息，这是核心层的规定。
-- **牵涉场景**：P-03。活跃场景 S05-12 只测没有冲突持有时的情形。Spanner 运行器报告：Spanner 的事务号 0 是真实的事务号，没有“未绑定”的概念，构造不出未绑定的标记（核心的未绑定路径由它自己的 engine-vectors 覆盖），所以测试集 1.1 版把 S05-12、P-03 改为只适用于 juicer-cc 与 CockroachDB。
-- **建议**：A6-a（三套现状）：规范改成“事务号未绑定不构成挡住队头的理由；它仍须满足缓冲时间与在途持有的判定，放行时不登记为持有”。
+## A7. First-level ties (2.1)
 
-## A7　第一级排名的平局（2.1）
+The specification gives a second-level byte-order tie-break but no first-level
+rule. Active cases avoid ties at the K boundary. Recommendation: use smaller
+key byte order for equal abort counts, matching the second level.
 
-- **歧义**：2.4 给了第二级的平局规则（取 key 字节序较小者），2.1 没给第一级的。前 K 的边界上中止次数相同时谁进候选，规范推不出。
-- **三套现状**：Go 的 `compareAbortCount` 与 Spanner 运行中的前 K 都有确定的次序，但是否同为“字节序较小者优先”没有核对。
-- **牵涉场景**：无；活跃场景在前 K 边界上都没有平局（参考模型按两种平局次序跑过，结果相同）。
-- **建议**：与 2.4 一致：次数相同取 key 字节序较小者。
+## A8. Draining queues in queue counts (2.6, 8.1)
 
-## A8　“同时存在的队列数”是否包括排空中的队列（2.6）
+An existing draining queue consumes resources but is no longer accepting.
+P-06 distinguishes inclusion in `queues_now`; active cases avoid disputed
+snapshots. Recommendation A8-a: count every existing queue and report draining
+queues as a separate subset.
 
-- **歧义**：2.6 说“每台服务器同时存在的队列数等于已提名而未撤的 key 数，可能因惰性移除短暂多于 S”。排空中的队列“存在”，但它的 key 已被撤（见 A5 对“撤”的两种读法）。
-- **三套现状**：CockroachDB 的每周期摘要把排空中的队列单列（`Draining`）；juicer-cc 与 Spanner 未核对。
-- **牵涉场景**：P-06。活跃场景里有队列在排空时不比较 `queues_now`，`queues_max` 只在两种口径相同时比较。
-- **建议**：A8-a：计入（它确实还在占内存、还在放行），每周期摘要另列其中排空中的个数。
+## A9. Cancellation after delivery (1.3, 10.1)
 
-## A9　投递之后调用方才放弃：已登记的持有撤不撤（10.1、1.3）
+The cancellation clause describes messages still held by Juicer; it does not
+specify whether cancellation during handler execution removes admitted holds.
+P-04 covers the case. Recommendation A9-a: retain those holds until their normal
+release event or H. Delivery has already occurred and storage locks do not
+vanish merely because the caller abandons the RPC.
 
-- **歧义**：10.1 要求调用方放弃时“撤回还没放行的标记；撤销它已登记的持有；不调用处理函数；计入丢弃”。这是针对还扣在 Juicer 里的消息写的。消息已经交给并发控制、处理函数还在执行时调用方放弃（gRPC 的上下文同样会结束），持有撤不撤，规范没说。
-- **三套现状**：Go 两套的撤回只在 `AwaitAdmission` 里（准入之前与等待中）检查上下文；CockroachDB 10-19 还删掉了“放行成功后二次检查上下文”。投递之后的放弃，推断不撤。
-- **牵涉场景**：P-04。
-- **建议**：A9-a：不撤。消息已经到了并发控制，它在那里留下的锁或意向不会因为调用方放弃而消失，持有照常等结束事件或 H；1.3 里它的结局是“投递”，不是“丢弃”。
+## A10. Zero and sub-millisecond hold caps (4.3, 6.2)
 
-## A10　H 配成 0 或小于 1 ms（6.2、4.3）
+The default cap is described as at least 1 ms, but the validity of smaller
+configured values is unspecified. Active scenarios use H >= 7 ms.
+Recommendation: reject H < 1 ms, including zero, rather than treating zero as
+unbounded. Any accepted behavior needs an explicit normative decision.
 
-- **歧义**：6.2 只说默认 H “毫秒级（不小于 1 ms）”，没说配置值小于 1 ms（或为 0）时拒绝启动还是照用。4.3 里“任何配置值 0 都不得表示不封顶”还是待定。
-- **三套现状**：CockroachDB 要求 `MAX_HOLD_MS ≥ 1`，否则拒绝启动；Spanner 的 `--juicer_max_hold_us` 以微秒计，可以配成 500；juicer-cc 的 `--maxHoldMs` 是浮点数。
-- **牵涉场景**：无（活跃场景的 H 都 ≥ 7 ms）。
-- **建议**：H < 1 ms 拒绝启动（与 6.2 的“毫秒级”一致，也避开 Go 定时器不足 1 ms 时的取整）；0 一律拒绝。
+## A11. Expiry boundary and equal-time inputs (6.1)
 
-## A11　存活恰好 H 时的边界，与同一时刻的输入和到期谁先（6.1）
+Does a hold stop blocking at age >= H or > H, and does expiry precede input at
+the same time? Inputs stay at least 500 us away from expiry; comparisons use
+100 us tolerance. Recommendation: expire at >= H and process expiry first.
 
-- **歧义**：“存活满 H 即不再挡人”：存活恰好等于 H 的那一刻是否已不挡（≥ 还是 >）；同一时刻既有输入事件又有持有到期时，先处理哪个。
-- **三套现状**：未核对。
-- **牵涉场景**：无。场景作者保证输入与任何到期时刻至少相隔 500 µs，比较时给 100 µs 容差（FORMAT 第 7.1 节）。
-- **建议**：规范写“存活达到 H（≥）即结束”；同一时刻先处理到期，再处理输入。
+## A12. Lazy-expiry lifetime and accounting (6.1, 6.4)
 
-## A12　到期结束的持有，结束时刻与寿命怎么记（6.4、6.1）
+An idle hold may be swept only when a later head is evaluated. Should its
+lifetime be H or its age when swept? Should an expired unswept entry count as
+ended at scenario completion? FORMAT 7.2 permits lazy sweep and count intervals.
+Recommendation: lifetime is min(release time, start+H)-start; separately report
+expired unswept entries.
 
-- **歧义**：没有队头在等的持有到期时，三套都要到下一次评估队头时才清扫。6.4 要求按原因计数并报寿命分布，但没说到期的持有寿命记 H，还是记到被清扫的那一刻（后者会比 H 长，抬高 p99）；场景结束时还没被清扫的过期持有算不算“到期”。
-- **三套现状**：清扫都是惰性的（Go 的 `expireLocked` 只在评估队头时调用，Spanner 注释写明“The only place expiry runs on the queue path”）；寿命记法未核对。
-- **牵涉场景**：无。比较时这类持有标 `lazy`，只要求原因相同、时刻不早于 start + H，计数给区间（FORMAT 第 7.2 节）。
-- **建议**：寿命记为 min(结束事件时刻, start + H) − start，即到期的一律记 H；摘要里另报“过期未清扫”的个数。
+## A13. Epoch deltas versus cumulative counters (1.7, 11.1)
 
-## A13　每周期摘要里的“持有结束原因分布”“迟到进队数”是本周期增量还是累计（11.1）
+The specification explicitly makes conservation cumulative, but does not define
+whether late-marker and hold-end distributions are cumulative or per epoch.
+S11-03 avoids distinguishing them. Recommendation: per-epoch deltas for
+distributions and late counts, cumulative conservation counters.
 
-- **歧义**：11.1 列了每周期摘要的字段，没说这些数是本周期的还是开机以来累计的；1.7 明确守恒计数是累计的。
-- **三套现状**：juicer-cc 每周期打印到期占比与寿命分位，CockroachDB 摘要行有提名与撤销、迟到标记、持有结束原因，Spanner 有迟到与持有结束原因；三套是增量还是累计都未核对。
-- **牵涉场景**：S11-03 设计成两种口径的数值相同（周期 0 没有持有、没有迟到），守恒计数按累计比较。
-- **建议**：分布与迟到数报本周期增量，守恒计数报累计（与 1.7 一致）。
+## A14. Banner specification version — resolved
 
-## A14　配置声明行里的规范版本号（11.1）　【已定，10-20】
+Every implementation declares `spec_version` exactly `1.2`. S11-01 compares
+that field strictly. Use the normative specification version without a suffix.
 
-- **裁定**（主会话，2026-10-20）：三套的配置声明行统一印规范版本号，现为 `1.2`。S11-01 从测试集 1.1 版起对 `spec_version` 严格比较（原来只告警）。下面是裁定前的记录，保留不删。
-- **歧义**：11.1 要求打印“规范版本”。三套代码里写的是对齐时依据的版本：Spanner `1.1`，CockroachDB `1.1-draft-20261019`，juicer-cc `juicer-spec-v1+20261019`（运行器报告）；规范现已是 1.2 版。该写代码声称符合的版本，还是写入时的规范版本，没有说。
-- **牵涉场景**：S11-01（测试集 1.0 版只告警，1.1 版起严格比较）。
-- **建议**：写代码声称符合的规范版本，并在本测试集对该版本全部通过时才改；三套统一写成形如 `1.2` 的版本号，不带后缀。
+## A15. CRDB EndTxn keys outside the anchor range (table 5-C)
 
-## A15　CockroachDB：EndTxn 锁区间里、属于本节点其他 range 的 key，何时算“提交执行完”（表 5-C）
+EndTxn may synchronously resolve keys in the anchor range while other local
+ranges still have intents awaiting asynchronous ResolveIntent. The SPI can
+report applied completion for point keys in the lock spans and in-flight writes
+once the transaction is decided. Is that sufficient, or must each other range
+wait for its own ResolveIntent? P-07 distinguishes the choices. S05-15 separates
+anchor and remote-intent events to avoid the ambiguity.
 
-- **歧义**：表 5-C 写“锚点 key：EndTxn 批次的处理函数返回；其他 key：这个 key 的 ResolveIntent 批次的处理函数返回”。没说两种中间情形：(1) 与锚点同一 range 的其他 key，EndTxn 同步解析它们的意向，不会再有 ResolveIntent；(2) 本节点上其他 range 的 key，EndTxn 返回时意向还在，要等异步 ResolveIntent。
-- **CockroachDB 现状**：`AppliedControlEvents` 对 EndTxn 锁区间里的全部点 key 与 in-flight 写的 key 都报“执行完”，包括其他 range 的（代码注释的理由：事务此时已有定论，冲突请求遇到它的意向会去解析而不是中止）。情形 (1) 这样做是对的；情形 (2) 比表 5-C 字面早。
-- **牵涉场景**：P-07。活跃场景 S05-15 把两件事分开：锚点所在节点只看锚点 key，ResolveIntent 用锚点在别的节点的事务，避开情形 (2)。
-- **建议**：表 5-C 改为“EndTxn 执行完结束本事务在锚点 range 内各 key 上的持有；其他 range 的 key 以该 key 的 ResolveIntent 执行完为准”（A15-b），CockroachDB 按 range 过滤；若认为提早结束的收益更大（少等一次异步解析），则把现状写进规范（A15-a），并说明它依赖“遇到已决事务的意向会解析而不中止”。
+Recommendation A15-b: EndTxn releases holds in the anchor range; other ranges
+use ResolveIntent completion. Alternative A15-a explicitly permits decided-state
+release and documents that conflicting requests resolve decided intents rather
+than abort. This register does not authorize changing the SPI.
 
-## A16　过期未清扫的持有被自己的事件放掉：结束原因算 event 还是 ttl（6.1、6.4）
+## A16. Own release after expiry but before sweep (6.1, 6.4)
 
-- **歧义**：规范 6.1 说持有“存活满 H 即不再挡人”。没有队头在等它时，三套都要到下一次评估队头才清扫（见 A12）；若清扫之前先来了它自己的结束事件（回复、提交或中止执行完），实现会把它记成“事件结束”，而按 6.1 它在 H 时已经结束，原因应是“到期”。6.4 的结束原因计数与到期占比（冒烟健康指标“到期占比不超过 5%”）都受影响。
-- **三套现状**：Spanner 运行器报告，测试集 1.0 版的 S02-06、S02-07、S02-08（H = 10 ms，提交执行完在持有开始后 50–100 ms）里，这类持有被依赖执行器记为事件结束；另两套同为惰性清扫，推断相同。1.0 版的期望写的也是 event（参考模型当时同样没有先清扫）。
-- **牵涉场景**：测试集 1.1 版把这三个场景的 H 调到 200 ms，每个持有都在到期前被事件结束，场景要测的提名与撤销时机不变；没有新增待裁定场景。FORMAT 第 7.2 节写明裁定前场景避开这种情形。
-- **建议**：按 6.1，持有在存活满 H 时即结束，原因记 ttl（实现晚清扫时，清扫或遇到事件的那一刻补记为到期，寿命记 H）；实现若晚清扫，只要放行时刻不早于规范规定的时刻就算符合。
+When an own reply/applied event arrives after start+H but before lazy expiry
+cleanup, should the reason be `event` or `ttl`? This affects lifetime and expiry
+share. Active cases avoid the condition: their holds end before H or expire
+while blocking a head. Recommendation: attribute to TTL at start+H with lifetime
+H, even if accounting occurs later.
 
-## A17　CockroachDB 的队列 key 是原 key 的哈希：2.4 的平局次序在真实部署里比的是哈希（2.4、2.1）
+## A17. CRDB hashed queue-key tie-break (2.1, 2.4)
 
-- **歧义**：规范 2.4 规定第二级提名“次数相同取 key 字节序较小者”。CockroachDB 的接入层把每个 key 用 FNV-64a 哈希成 int64 作队列 key，两级过滤平局时比的是哈希的十进制串，不是原 key 的字节序（`dev/crdb/STATUS.md`“一致性测试交主会话的事”第 6 条）。只在乱序次数恰好相等时与规范不同。
-- **牵涉场景**：无。核心层场景 S02-04 用保序的映射，CockroachDB 运行器通过；测试集没有覆盖这一点的接入层场景（要构造两个原 key 字节序与哈希次序相反的 key，且乱序次数相等）。
-- **选项**：(a) CockroachDB 改用原 key 的字节作队列 key 与比较依据，`COCKROACH_JUICER_MANUAL_QUEUE_KEYS` 的格式随之改变（现在写的是哈希值）；(b) 规范对 CockroachDB 写明例外：平局按队列 key（原 key 的 FNV-64a 哈希）的次序取，与 3.1 的排序键例外并列。
-- **建议**：等用户定。(a) 让三套在平局时完全一致，代价是改接入层与手动队列的配置格式；(b) 不动代码，平局本来少见，影响只在提名先后。若选 (a)，补一个 CockroachDB 的接入层场景。
+CRDB uses an FNV-64a int64 queue-key identity. Comparing its decimal spelling is
+not raw-key byte order, so equal-count nominations can differ. Core scenario
+S02-04 uses an order-preserving mapping and does not establish this adapter
+property. Options: (a) use raw-key bytes for identity/order and update manual-key
+configuration; (b) specify a CRDB exception ordering by queue-key hash.
+User decision required. Option (a) also needs an adapter test whose raw and hash
+orders differ.
 
----
+## Pending buffer definitions
 
-## 不是歧义、但等用户定口径的条款
+These are explicitly undecided specification parameters, represented by
+`pending_caliber` rather than the ambiguity numbering:
 
-下列条款规范里已明写“待定”，相关场景状态是 `pending_caliber`，不列入上面的编号：
-
-- **4.3、6.3 缓冲时间与其他定时等待的上限**（是否 W ≤ W_max ≤ H，启动时检查）：S04-04。若选 4.3 (a)，期望是“W > H 拒绝启动，W = H 可以启动”，场景里已按此写好，口径定下即可启用。
-- **4.1、4.6 自适应缓冲的口径**（L_a、r、F(W) 的样本、候选 W、门槛、s、统计范围）：S04-05 只写了要验证的性质（每周期、每个受管 key 一个 W，周期内不变），没有输入与数值。公式本身的表驱动用例（以 Spanner `adaptive-wait-test` 的 36 个用例为底）等口径定下后另加一个文件 `s04-formula.json`。
+- Sections 4.3/6.3: whether W <= W_max <= H is required at startup. S04-04
+  encodes rejection for W > H and acceptance for W = H if that rule is chosen.
+- Sections 4.1/4.6: definitions of L_a, r, F(W), candidate waits, thresholds,
+  scale s and sample population. S04-05 asserts the intended epoch/key
+  stability property but requires numerical inputs. Formula cases belong in
+  `s04-formula.json` once their normative definition is approved.
