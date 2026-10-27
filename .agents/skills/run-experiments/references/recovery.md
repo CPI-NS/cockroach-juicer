@@ -64,7 +64,8 @@ An inefficient collector is not by itself proof that recovery is impossible.
 Near an actual hard limit, prioritize data protection and cleanup and report
 which work could not fit. Preserve both collection verification stages.
 
-Ctrl-C or the public stop command must stop dispatch, terminate owned children and descendants, retain evidence and report cleanup failures. Confirm the stopped/interrupted records and cleanup_errors=[]; keep unrelated processes and shared control running. A SIGKILL cannot run finally; the configured deadline remains the backstop.
+Ctrl-C or the public stop command must stop dispatch, terminate owned children and descendants, retain evidence and report cleanup failures. Confirm the stopped/interrupted records and cleanup_errors=[]; protect unrelated processes and control. Keep control available for active jobs,
+authorized reuse and both verified collections, then follow [control finalization](aws.md#control-finalization). A SIGKILL cannot run finally; the configured deadline remains the backstop.
 
 Completed cells remain valid; interrupted cells run again from the beginning in a fresh batch with --previous. Supply all associated batches for continuation and analysis. Preserve the frozen config and successful results. Source/artifact changes require explicit compatibility review; never relabel them as an unchanged continuation.
 

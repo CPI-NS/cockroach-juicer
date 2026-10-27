@@ -19,7 +19,64 @@ and [recovery assessment](recovery.md). Near the limit, start no new cells.
 Estimates are not instantaneous billing guarantees. Neither an unattended
 instruction nor an infrastructure retry expands the approved budget.
 
-Collection is two-stage: workers to control, then the initiator retrieves control results to the configured durable destination. Maintained collection transfers tar bundles with per-file manifests, verifies them before publication and cleans temporary archives on normal interruption. Verify file manifests, sizes and hashes at both stages; data remaining only on temporary instances is not durably saved. Collection failure gets bounded retries, stops new work and produces a clear report before the resource deadline. The initiator releases exact owned workers and audits the result; retain usable control. Never mark missing data as a successful run to satisfy cleanup.
+Collection is two-stage: workers to control, then the initiator retrieves control results to the configured durable destination. Maintained collection transfers tar bundles with per-file manifests, verifies them before publication and cleans temporary archives on normal interruption. Verify file manifests, sizes and hashes at both stages; data remaining only on temporary instances is not durably saved. Collection failure gets bounded retries, stops new work and produces a clear report before the resource deadline. The initiator releases exact owned workers and audits the result. Complete control finalization below after all authorized reuse phases. Never mark missing data as a successful run to satisfy cleanup.
+
+## Control finalization
+
+Before the task starts, record control selection, region/account, whether it is
+newly created and task-owned exclusive or explicitly reused pre-existing, the
+final action and its authorization, and estimated compute and retained-storage
+cost in the run handoff. Newly created task-owned exclusive control defaults to
+terminate; explicitly reused existing control is stopped when authorized. The
+user's explicit stop authorization applies only to the selected reused control,
+not to unrelated or shared controls. Stopped control retains billable EBS; record
+volume type/size and the regional storage estimate, then report retained volumes.
+
+Reuse control between authorized phases. Finalize only after ALL authorized reuse
+phases and BOTH verified collections (worker -> control -> durable destination),
+and only when no active experiment or other authorized job needs it. Do not stop
+or terminate control needed by an active job, or touch unrelated control. Failed
+collection is a blocker to normal finalization; report it and the remaining
+resource ownership rather than claiming cleanup complete.
+
+Framework worker release (`cluster delete`, `all --cleanup-policy release`, or
+full-manifest cleanup) mechanically retains usable control. The Skill operator
+must perform this separate step from the initiating host; no runtime helper or
+control-side AWS credentials are needed.
+
+Use the lifecycle journal and read-only preflight to verify account/region, the
+exact instance ID, ownership/reuse authorization, active jobs and collection
+receipts. Capture its attached EBS volume and ENI IDs and delete-on-termination
+settings. Tags alone do not authorize cleanup. With `REGION` and `CONTROL_ID`
+bound to that verified control, inspect it from the initiating host:
+
+```sh
+aws sts get-caller-identity
+aws ec2 describe-instances --region "$REGION" --instance-ids "$CONTROL_ID"
+```
+
+For newly created task-owned exclusive control, after the gates above:
+
+```sh
+aws ec2 terminate-instances --region "$REGION" --instance-ids "$CONTROL_ID"
+aws ec2 wait instance-terminated --region "$REGION" --instance-ids "$CONTROL_ID"
+aws ec2 describe-instances --region "$REGION" --instance-ids "$CONTROL_ID"
+```
+
+For explicitly reused existing control with stop authorization:
+
+```sh
+aws ec2 stop-instances --region "$REGION" --instance-ids "$CONTROL_ID"
+aws ec2 wait instance-stopped --region "$REGION" --instance-ids "$CONTROL_ID"
+aws ec2 describe-instances --region "$REGION" --instance-ids "$CONTROL_ID"
+```
+
+Verify the described terminal state. After termination, use `describe-volumes`
+and `describe-network-interfaces` on the captured exact IDs to verify applicable
+owned EBS/ENI cleanup; resolve only proven task-owned leftovers within authorized
+scope. After stop, verify retained EBS with `describe-volumes` and report its
+continuing storage cost. A successful waiter or worker-release receipt alone is
+not the complete audit. Save evidence in the run directory, not memory.
 
 ## Named reusable clusters
 
@@ -28,7 +85,7 @@ control defaults. Manual creation/run/delete are separate operations. Workers
 remain available after a named run until explicit delete or their fixed creation
 deadline. For Skill-driven execution, explicitly choose and record the maximum
 release lifetime and pass `--deadline-seconds`; release workers at task completion
-and retain usable control. A new experiment never extends the existing deadline.
+and finalize control as above. A new experiment never extends the existing deadline.
 An individual cell failure triggers recovery assessment, not immediate cluster
 deletion. Keep healthy workers available for an authorized useful retry within
 their lifetime. Release on task completion, an explicit abandonment/stop decision,

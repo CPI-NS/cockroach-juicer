@@ -127,4 +127,5 @@ reasoning turns.
 
 Ownership ends after requested outputs, verified collection and audited cleanup,
 or an explicit blocker with evidence, remaining ownership and the safe recovery/
-deadline path reported. Retain usable control and follow exact resource ownership.
+deadline path reported. Include the separate [control finalization](aws.md#control-finalization)
+and its audit; worker release alone does not complete control cleanup.

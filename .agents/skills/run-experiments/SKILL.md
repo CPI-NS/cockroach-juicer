@@ -21,9 +21,13 @@ Environment bootstrap is keyed by cluster, system and recipe hash, independently
 of run_id. Reuse it until the declared packages or toolchains change. Manual runs retain workers until
 explicit deletion or their frozen deadline. Before Skill-driven creation, choose
 and record a finite maximum release lifetime, including setup and collection,
-and pass `--deadline-seconds`. Release workers when the authorized task ends;
-retain control. When the user chooses guided operation, provide the commands and
-inspect returned output; the user performs AWS operations.
+and pass `--deadline-seconds`. Release workers when the authorized task ends.
+Record control ownership, the final stop/terminate choice and estimated compute
+and retained-storage cost before starting the task. After all authorized reuse
+and both verified collection stages, explicitly finalize control from the
+initiating host using [AWS control finalization](references/aws.md#control-finalization).
+When the user chooses guided operation, provide the commands and inspect returned
+output; the user performs AWS operations.
 
 Read [commands](references/commands.md) for entries and installed resources.
 A common or juicer-project checkout is not required by a standalone system.
@@ -41,7 +45,7 @@ A common or juicer-project checkout is not required by a standalone system.
    selected branch and freezes a new checkout; active runs remain unchanged.
    For CC/CRDB comparisons, verify that both clean gRPC submodules pin the same reviewed shared Juicer revision. Build and deploy fixed artifacts before measurement, using control. Use available verified caches. Tool installation follows the user's source-disclosure and approval rules. Runtime never downloads or upgrades dependencies.
 4. Assign one operator the full authorized lifecycle: preparation, execution, recovery, analysis, plotting, both collection stages and exact owned-resource cleanup. Follow [progress reporting](references/progress.md) before load. Prefer detached `all` plus the default file monitor; Claude can use its channel backend. Programs continue while the model is idle; files do not wake it. For Codex, keep a managed tool wait or status-file observation assignment through cleanup and use native agent handoffs and available parent-message tools for reports. Record operator and parent routes and the attended/away policy. The parent reports meaningful results and failures to the user. Supported separate commands remain one continuous assignment.
-5. Read concise runtime summaries and fresh evidence first. Collect and verify both worker-to-control and control-to-durable copies. Analyze all compatible continuation batches together and produce every supported requested plot. Publish `report_ready` as soon as verified summaries/plots are usable, stating any pending collection or cleanup; continue through closure. A `selection.status=insufficient_evidence` result limits selection-dependent followups, not available scan plots or other independent outputs. Retain failed attempts and provenance; successful cells are not repeated or selected for favorable results.
+5. Read concise runtime summaries and fresh evidence first. Collect and verify both worker-to-control and control-to-durable copies. Analyze all compatible continuation batches together and produce every supported requested plot. Publish `report_ready` as soon as verified summaries/plots are usable, stating any pending collection or cleanup; continue through closure. After all authorized reuse phases, release owned workers and complete [control finalization](references/aws.md#control-finalization); worker release alone does not finalize control. A `selection.status=insufficient_evidence` result limits selection-dependent followups, not available scan plots or other independent outputs. Retain failed attempts and provenance; successful cells are not repeated or selected for favorable results.
 6. Report actual outcomes, invalid or missing cells, output paths, tested versions, and remaining limitations. Distinguish local functional smoke results from performance evidence. Report actual token counters when available, including cached-input accounting and a stated measurement boundary; do not estimate usage from wall time.
 
 Use the highest available Opus or Sol model for experiment execution and experiment-log analysis when the project requires it. Record the actual model identifier. A running shell command itself is not an Agent reasoning turn.

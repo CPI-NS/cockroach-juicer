@@ -20,7 +20,8 @@ There is one control plus the requested server and client hosts. Role IDs are
 `server-1`, `server-2`, ... and `client-1`, `client-2`, ... . A worker host is not a
 server process or shard. The worker deadline is fixed at creation and is not
 extended by environment setup or subsequent runs. Explicit deletion or that
-frozen deadline releases workers; control is retained.
+frozen deadline releases workers. These operations mechanically retain control;
+complete the separate control finalization below when the authorized task ends.
 
 ## Bootstrap an environment once
 
@@ -128,7 +129,17 @@ named runs retain workers for reuse, subject to the fixed deadline. To release:
 python bench/run.py cluster delete --name demo
 ```
 
-Deletion audits only owned workers and retains control. Skill-driven execution
-must declare a finite release lifetime and release workers at task completion.
+Deletion audits only owned workers and mechanically retains control. Skill-driven
+execution declares a finite release lifetime and releases workers at task completion.
+Record control ownership, final action and estimated compute/retained-storage cost
+before the task. Reuse control through all authorized phases; finalize it from the
+initiating host only after both verified collections and no active job needs it.
+New task-owned exclusive control defaults to terminate with owned EBS/ENI audit;
+explicitly reused existing control is stopped when authorized, with stopped state
+verified and retained billable EBS reported. Protect unrelated/shared control.
+Follow [control finalization](../.agents/skills/run-experiments/references/aws.md#control-finalization)
+for the separate read-only preflight, initiating-host AWS CLI action, waiter and
+final describe/audit. Cluster destruction is incomplete while its eligible control
+is still running; worker release alone does not perform this step.
 Native builds and full remote readiness require actual Ubuntu control validation;
 configuration plans and local/fake-cloud tests alone do not establish acceptance.

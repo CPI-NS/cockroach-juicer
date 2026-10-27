@@ -18,8 +18,8 @@ python run.py all --cluster smoke --site aws-site.yaml \
 
 Select machine size from workload requirements and the declared site. This
 composes creation, bootstrap and the native experiment lifecycle. `release`
-releases this workflow's workers and retains control; `retain` preserves workers
-for manual reuse. Use the separate commands below for an existing cluster.
+releases this workflow's workers; `retain` preserves workers for manual reuse.
+Both mechanically retain control; separately follow [control finalization](aws.md#control-finalization). Use the separate commands below for an existing cluster.
 Verify `all --help` in the pinned environment before use. A reported milestone
 does not require a new supervisor GO for the next authorized stage.
 
@@ -41,7 +41,8 @@ python run.py cluster delete --name smoke
 Replace `run.py` with the chosen file entry. `run --detach` uses the maintained
 background coordinator. The initiating host must remain available for collection.
 Manual runs retain workers for reuse; explicit delete releases only owned workers
-and retains control. Skill-driven creation also passes an explicitly chosen
+and mechanically retains control. Complete [control finalization](aws.md#control-finalization)
+after all authorized reuse and both verified collections. Skill-driven creation also passes an explicitly chosen
 `--deadline-seconds`; its maximum applies across all reuse and is not renewed by
 another run. Read the installed `docs/manual-aws.md` and [AWS](aws.md).
 
