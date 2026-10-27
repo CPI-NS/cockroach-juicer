@@ -7,6 +7,22 @@ script paths work from another directory.
 
 ## Named cluster workflow
 
+For a new authorized create-and-run assignment, prefer the continuous entry:
+
+```sh
+python run.py all --cluster smoke --site aws-site.yaml \
+  --instance-type c5.2xlarge --placement same-az --clients 3 --servers 3 \
+  --template control-env.yaml --config experiment.yaml \
+  --deadline-seconds 7200 --cleanup-policy release
+```
+
+Select machine size from workload requirements and the declared site. This
+composes creation, bootstrap and the native experiment lifecycle. `release`
+releases this workflow's workers and retains control; `retain` preserves workers
+for manual reuse. Use the separate commands below for an existing cluster.
+Verify `all --help` in the pinned environment before use. A reported milestone
+does not require a new supervisor GO for the next authorized stage.
+
 Prepare `aws-site.yaml` once from the supplied example. It supplies account,
 network, AMI, machine estimates, placement presets. Source versions belong to the experiment configuration. Regular cluster creation needs only these five inputs:
 
