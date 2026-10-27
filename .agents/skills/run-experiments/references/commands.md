@@ -100,3 +100,20 @@ interrupted events from the control batch as well as coordinator progress.
 Status and heartbeat alone do not establish cell completion. Recollection uses
 `collect`; parsing-only failure with verified raw files uses `analyze --reparse`
 through the standalone analysis entry, without launching another workload.
+
+## File monitor
+
+```sh
+python /absolute/path/to/experiment-common/run.py monitor \
+  --run-dir /absolute/path/to/run --lifetime-seconds 7500 --detach
+```
+
+This source entry and its detached monitor use that checkout with the current
+interpreter's existing dependencies; no installation or active environment update
+is needed. The supported backends are `file` (default) and `claude`. Only Claude
+delivery takes a target: `--backend claude --target /absolute/private/channel-spool`.
+
+Read the existing `monitor/status.json`, event streams and full
+`monitor/notifications/*.json` records. Files do not wake an idle model. Follow
+[progress reporting](progress.md) for the managed observation assignment,
+operator-to-parent route and parent-to-user reports through cleanup.
