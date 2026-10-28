@@ -6,6 +6,7 @@
 package rpc
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -708,7 +709,7 @@ func TestJuicerReadHoldOrderedSPI(t *testing.T) {
 			t.Fatalf("did not parse candidate %q", env)
 		}
 		rules := newCRDBJuicerSPI().BuildRules()
-		if !rules.Enabled() || rules.MaxHold != time.Duration(juicerMaxHoldMillis)*time.Millisecond || !rules.AdmitUnbound {
+		if !rules.Enabled() || rules.ReadAheadOfBlockedWrite || rules.MaxHold != time.Duration(juicerMaxHoldMillis)*time.Millisecond || !rules.AdmitUnbound {
 			t.Fatal("SPI did not select ordered readhold with existing hold settings")
 		}
 		for _, tc := range []struct {
@@ -735,6 +736,50 @@ func TestJuicerReadHoldOrderedSPI(t *testing.T) {
 		if !strings.Contains(banner, " rules=readhold-ordered ") || !strings.Contains(banner, " sort_key=batch-now(") {
 			t.Fatalf("candidate or batch-now key missing from native banner: %s", banner)
 		}
+	}
+}
+
+func TestJuicerReadPassWiringAndConfiguration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	saved := readCRDBKnobs()
+	defer saved.set()
+	defer func(fifo, skip bool, diagnostic string) {
+		juicerFifo, juicerSkipQueueing, juicerFilterDiagnostic = fifo, skip, diagnostic
+	}(juicerFifo, juicerSkipQueueing, juicerFilterDiagnostic)
+	reset := func() {
+		crdbKnobs{enabled: true, rules: " READHOLD-ORDERED-READPASS ", maxHold: 25,
+			k: 100, s: 32, epochMs: 10000, idle: 3, late: "queue"}.set()
+		juicerFifo, juicerSkipQueueing, juicerFilterDiagnostic = false, false, "off"
+	}
+	reset()
+	spi := newCRDBJuicerSPI()
+	if juicerRulesMode() != juicerRulesReadPass || !spi.BuildRules().ReadAheadOfBlockedWrite || len(juicerServerOptions()) == 0 ||
+		!strings.Contains(juicerSpecBanner(), " rules=readhold-ordered-readpass ") {
+		t.Fatal("readpass parser, rules, configuration or banner wiring missing")
+	}
+	markers := spi.SplitMarker(juicerBatch(juicerTestTxn(1), refresh("r"), lockingGet("l"), put("w")))
+	if len(markers) != 3 || markers[0].TypedOpType != juicer.OpGet || markers[1].TypedOpType != juicer.OpGetForPut || markers[2].TypedOpType != juicer.OpSet {
+		t.Fatal("point Refresh/mixed fragments lost their original marker types")
+	}
+	for name, change := range map[string]func(){
+		"FIFO":          func() { juicerFifo = true },
+		"late bypass":   func() { juicerLatePolicy = "bypass" },
+		"positive wait": func() { juicerFixedWaitMillis = 1 },
+		"AW":            func() { juicerAW = true },
+		"calibration":   func() { juicerHoldCalibration = true },
+		"skip queues":   func() { juicerSkipQueueing = true },
+		"diagnostic":    func() { juicerFilterDiagnostic = "l1" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			reset()
+			change()
+			defer func() {
+				if r := recover(); r == nil || !strings.Contains(fmt.Sprint(r), "readhold-ordered-readpass") {
+					t.Fatalf("unsupported readpass configuration did not fail its guard: %v", r)
+				}
+			}()
+			juicerServerOptions()
+		})
 	}
 }
 

@@ -50,6 +50,51 @@ func TestJuicerReadHoldOrderedPairs(t *testing.T) {
 	}
 }
 
+// This compiles the actual CRDB relation with the shared queue; named SPI
+// selection and startup validation are separately covered by the native test.
+func TestJuicerReadPassRetainsCRDBReadHolds(t *testing.T) {
+	rules := crdbReadHoldRules(25*time.Millisecond, true)
+	rules.ReadAheadOfBlockedWrite = true
+	clock := juicer.NewManualClock(time.Unix(100, 0))
+	logger := juicer.NewLogger("readpass", readHoldTestLogger{}, "", 0, false, false)
+	de := juicer.NewDependencyEnforcer(rules, logger)
+	q := juicer.NewPerKeyQueue("k", func(string) time.Duration { return 0 }, de, logger, false,
+		juicer.WithClock(clock), juicer.WithManualLoop())
+	defer q.Stop()
+	enqueue := func(txn, ts int64, op juicer.OperationType) *juicer.QueueMarker {
+		m := &juicer.QueueMarker{Key: "k", Timestamp: ts, OpType: op, ReadyChan: make(chan struct{})}
+		m.TxnId.Store(txn)
+		q.Enqueue(m)
+		return m
+	}
+	ready := func(m *juicer.QueueMarker) bool {
+		select {
+		case <-m.ReadyChan:
+			return true
+		default:
+			return false
+		}
+	}
+	enqueue(1, 10, juicer.OpGet)
+	q.Pump()
+	write := enqueue(2, 20, juicer.OpSet)
+	read := enqueue(3, 30, juicer.OpGet)
+	q.Pump()
+	if ready(write) || !ready(read) || de.InflightLen() != 2 {
+		t.Fatal("CRDB readpass did not retain both read holds behind its blocked write")
+	}
+	q.Observe(juicer.Event{Kind: juicer.RespReturned, TxnID: 1, OpType: juicer.OpGet})
+	q.Pump()
+	if !ready(write) || de.InflightLen() != 2 || de.Stats().Ended[juicer.HoldEndExpiry] != 0 {
+		t.Fatal("newer read hold blocked older write or progress used the TTL")
+	}
+	q.Observe(juicer.Event{Kind: juicer.RespReturned, TxnID: 3, OpType: juicer.OpGet, Failed: true})
+	q.Observe(juicer.Event{Kind: juicer.RespReturned, TxnID: 2, OpType: juicer.OpSet})
+	if de.InflightLen() != 0 {
+		t.Fatal("original CRDB read/write response rules left holds behind")
+	}
+}
+
 func TestJuicerReadHoldOrderedHoldabilityAndReleases(t *testing.T) {
 	old, ordered := crdbReadHoldRules(25*time.Millisecond, false), crdbReadHoldRules(25*time.Millisecond, true)
 	if !ordered.Enabled() || ordered.MaxHold != old.MaxHold || ordered.AdmitUnbound != old.AdmitUnbound ||

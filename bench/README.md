@@ -104,6 +104,16 @@ those of `readhold`. The native banner reports `rules=readhold-ordered`.
 This is a local admission candidate without a global deadlock-freedom or
 validated performance claim; native SQL and concurrency control are unchanged.
 
+`juicer.env.RULES: "readhold-ordered-readpass"` additionally admits the earliest
+queued `OpGet` marker ahead of a write head blocked by the enforcer. The read
+uses the same enforcer, token, hold and release rules; the real write is
+rechecked between reads. This includes point Refresh and nonlocking fragments
+of mixed RPCs, which still wait for all keys. It requires `FIFO=false`,
+`LATE_POLICY=queue`, `FIXED_WAIT_MS=0`, `AW=false`, calibration off,
+`SKIP_QUEUEING=false` and `FILTER_DIAGNOSTIC=off`. Other combinations fail
+startup validation. Existing rules are unchanged. Heap scans can add CPU cost;
+this candidate has no established performance or global fairness guarantee.
+
 The adapter uses insecure SQL/RPC for isolated trusted experiment networks. It does not configure production authentication or install firewall rules.
 
 ## SSH and artifact provenance

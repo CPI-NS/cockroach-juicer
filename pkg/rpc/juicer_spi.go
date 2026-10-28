@@ -353,6 +353,7 @@ const (
 	juicerRulesWriteGate       juicerRules = "writegate"
 	juicerRulesReadHold        juicerRules = "readhold"
 	juicerRulesReadHoldOrdered juicerRules = "readhold-ordered"
+	juicerRulesReadPass        juicerRules = "readhold-ordered-readpass"
 	juicerRulesReadOnly        juicerRules = "readonly"
 	juicerRulesNoReadRead      juicerRules = "noreadread"
 	juicerRulesTypeGate        juicerRules = "typegate"
@@ -388,6 +389,8 @@ func juicerRulesMode() juicerRules {
 		return juicerRulesReadHold
 	case juicerRulesReadHoldOrdered:
 		return juicerRulesReadHoldOrdered
+	case juicerRulesReadPass:
+		return juicerRulesReadPass
 	case juicerRulesReadOnly:
 		return juicerRulesReadOnly
 	case juicerRulesNoReadRead:
@@ -681,6 +684,11 @@ func juicerServerOptions() []grpc.ServerOption {
 	}
 	if juicerHoldCalibration && (awCfg.Enabled || manualKeys != nil) {
 		panic("COCKROACH_JUICER_HOLD_CALIBRATION cannot run with COCKROACH_JUICER_AW or COCKROACH_JUICER_MANUAL_QUEUE_KEYS")
+	}
+	if juicerRulesMode() == juicerRulesReadPass && (juicerFifo || juicerLatePolicy != "queue" ||
+		juicerFixedWaitMillis != 0 || awCfg.Enabled || juicerHoldCalibration || juicerSkipQueueing ||
+		juicerFilterDiagnostic != "off") {
+		panic("readhold-ordered-readpass requires sorted late-queue admission, zero fixed wait, AW off, calibration off, queueing enabled and FILTER_DIAGNOSTIC=off")
 	}
 	log.Dev.Infof(context.Background(), "juicer: filter diagnostic = %s; filter K = %d; filter S = %d; typed markers = true",
 		juicerFilterDiagnostic, juicerFilterK, juicerFilterS)
@@ -1279,6 +1287,12 @@ func (crdbJuicerSPI) AbortCurrentRequest(req interface{}) (interface{}, error)  
 //	                release relation and TTL are readhold's unchanged. This
 //	                local admission rule makes no global deadlock-freedom or
 //	                performance claim.
+//	readhold-ordered-readpass The ordered candidate plus marker-level OpGet
+//	                admission ahead of a blocked write head, through the same
+//	                enforcer with the same holds and releases. Includes point
+//	                Refresh and nonlocking fragments of mixed RPCs; the RPC
+//	                still waits for every key. Requires sorted late-queue
+//	                admission with no buffer wait, AW or calibration.
 //	readonly        ABLATION PROBE (campaign #19): the complement none of the
 //	                #15-#17 probes ran — ONLY plain reads hold and ONLY plain
 //	                read heads wait (cross-txn read-read pairs exclude;
@@ -1520,7 +1534,7 @@ func (crdbJuicerSPI) BuildRules() juicer.DependencyRules {
 			MaxHold:      maxHold,
 			AdmitUnbound: true,
 		}
-	case juicerRulesReadHold, juicerRulesReadHoldOrdered:
+	case juicerRulesReadHold, juicerRulesReadHoldOrdered, juicerRulesReadPass:
 		// The campaign #17 ablation probe: writes plus one change on the
 		// OTHER side of the relation than writegate moved — the held
 		// population widens from writes to writes-and-plain-reads, while
@@ -1534,8 +1548,10 @@ func (crdbJuicerSPI) BuildRules() juicer.DependencyRules {
 		// are not holdable (Blocks never matches them as held), keeping
 		// the campaign #13 RMW hazard out by construction.
 		// The ordered candidate adds only a strict sorting-HLC direction;
-		// both modes use this same release relation and MaxHold backstop.
-		return crdbReadHoldRules(maxHold, mode == juicerRulesReadHoldOrdered)
+		// All three modes share this release relation and MaxHold backstop.
+		rules := crdbReadHoldRules(maxHold, mode != juicerRulesReadHold)
+		rules.ReadAheadOfBlockedWrite = mode == juicerRulesReadPass
+		return rules
 	case juicerRulesReadOnly:
 		// The campaign #19 ablation probe: the exact complement of the
 		// pairing grid's tested rows — cross-txn read-read pairs exclude and
