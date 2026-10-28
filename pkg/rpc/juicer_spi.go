@@ -347,20 +347,21 @@ func parseJuicerManualQueueKeys(raw string) ([]string, error) {
 type juicerRules string
 
 const (
-	juicerRulesConflictTable juicerRules = juicer.ConflictTableRulesName
-	juicerRulesGate          juicerRules = "gate"
-	juicerRulesWrites        juicerRules = "writes"
-	juicerRulesWriteGate     juicerRules = "writegate"
-	juicerRulesReadHold      juicerRules = "readhold"
-	juicerRulesReadOnly      juicerRules = "readonly"
-	juicerRulesNoReadRead    juicerRules = "noreadread"
-	juicerRulesTypeGate      juicerRules = "typegate"
-	juicerRulesReadWait      juicerRules = "readwait"
-	juicerRulesReadGate      juicerRules = "readgate"
-	juicerRulesReadFirst     juicerRules = "readfirst"
-	juicerRulesFull          juicerRules = "full"
-	juicerRulesSFU           juicerRules = "sfu"
-	juicerRulesOff           juicerRules = "off"
+	juicerRulesConflictTable   juicerRules = juicer.ConflictTableRulesName
+	juicerRulesGate            juicerRules = "gate"
+	juicerRulesWrites          juicerRules = "writes"
+	juicerRulesWriteGate       juicerRules = "writegate"
+	juicerRulesReadHold        juicerRules = "readhold"
+	juicerRulesReadHoldOrdered juicerRules = "readhold-ordered"
+	juicerRulesReadOnly        juicerRules = "readonly"
+	juicerRulesNoReadRead      juicerRules = "noreadread"
+	juicerRulesTypeGate        juicerRules = "typegate"
+	juicerRulesReadWait        juicerRules = "readwait"
+	juicerRulesReadGate        juicerRules = "readgate"
+	juicerRulesReadFirst       juicerRules = "readfirst"
+	juicerRulesFull            juicerRules = "full"
+	juicerRulesSFU             juicerRules = "sfu"
+	juicerRulesOff             juicerRules = "off"
 )
 
 // The default is CONFLICT-TABLE as of 2026-10-19 (Juicer spec section 5, user
@@ -385,6 +386,8 @@ func juicerRulesMode() juicerRules {
 		return juicerRulesWriteGate
 	case juicerRulesReadHold:
 		return juicerRulesReadHold
+	case juicerRulesReadHoldOrdered:
+		return juicerRulesReadHoldOrdered
 	case juicerRulesReadOnly:
 		return juicerRulesReadOnly
 	case juicerRulesNoReadRead:
@@ -1259,7 +1262,8 @@ func (crdbJuicerSPI) AbortCurrentRequest(req interface{}) (interface{}, error)  
 //	                half that campaigns #16/#16b measured as owning the gate's
 //	                mixed-load advantage: plain reads and writes both hold,
 //	                but only WRITE heads wait (behind any cross-txn hold);
-//	                reads pass everything. Splits read-holding into its two
+//	                read heads are not directly blocked, but queued reads can
+//	                wait behind a blocked write. Splits read-holding into two
 //	                sub-components — this keeps "reads block later writes"
 //	                (write-anchored micro-batching: reads flow until a write
 //	                arrives, the write drains the in-flight reads, reads pile
@@ -1267,6 +1271,14 @@ func (crdbJuicerSPI) AbortCurrentRequest(req interface{}) (interface{}, error)  
 //	                pacing of the read flood). Locking reads hold nothing —
 //	                the derivation gets that from Blocks — so the RMW hazard
 //	                stays out by construction.
+//	readhold-ordered Timestamp-directed admission CANDIDATE: readhold with
+//	                the additional requirement that the held sorting HLC is
+//	                strictly earlier than the head's (physical, then logical).
+//	                Exact HLC ties do not block; TxnID is only an equality
+//	                guard. Uses batch-now ordering, not MVCC timestamps; the
+//	                release relation and TTL are readhold's unchanged. This
+//	                local admission rule makes no global deadlock-freedom or
+//	                performance claim.
 //	readonly        ABLATION PROBE (campaign #19): the complement none of the
 //	                #15-#17 probes ran — ONLY plain reads hold and ONLY plain
 //	                read heads wait (cross-txn read-read pairs exclude;
@@ -1508,38 +1520,22 @@ func (crdbJuicerSPI) BuildRules() juicer.DependencyRules {
 			MaxHold:      maxHold,
 			AdmitUnbound: true,
 		}
-	case juicerRulesReadHold:
+	case juicerRulesReadHold, juicerRulesReadHoldOrdered:
 		// The campaign #17 ablation probe: writes plus one change on the
 		// OTHER side of the relation than writegate moved — the held
 		// population widens from writes to writes-and-plain-reads, while
-		// the waiting population narrows back to write heads only. Reads
-		// never wait; a write waits behind any cross-txn in-flight read or
-		// write. Held entries end at their own kind of response (a write
+		// the waiting population narrows back to write heads only. Read
+		// heads are not directly blocked; queued reads can wait behind a
+		// blocked write. A write waits behind any cross-txn in-flight read
+		// or write. Held entries end at their own kind of response (a write
 		// hold at the txn's write response, a read hold at the txn's read
 		// response — key-scoped delivery as always), at commit/abort
 		// arrival, at any failed response, or at the TTL. Locking reads
 		// are not holdable (Blocks never matches them as held), keeping
 		// the campaign #13 RMW hazard out by construction.
-		return juicer.DependencyRules{
-			Blocks: func(h, hd juicer.OpRef) bool {
-				return h.TxnID != hd.TxnID && hd.OpType == juicer.OpSet &&
-					(h.OpType == juicer.OpSet || h.OpType == juicer.OpGet)
-			},
-			Releases: func(h juicer.OpRef, ev juicer.Event) bool {
-				if ev.TxnID != h.TxnID {
-					return false
-				}
-				if juicer.ReleasedOnCommitAbort(h, ev) {
-					return true
-				}
-				if ev.Kind != juicer.RespReturned {
-					return false
-				}
-				return ev.Failed || ev.OpType == h.OpType
-			},
-			MaxHold:      maxHold,
-			AdmitUnbound: true,
-		}
+		// The ordered candidate adds only a strict sorting-HLC direction;
+		// both modes use this same release relation and MaxHold backstop.
+		return crdbReadHoldRules(maxHold, mode == juicerRulesReadHoldOrdered)
 	case juicerRulesReadOnly:
 		// The campaign #19 ablation probe: the exact complement of the
 		// pairing grid's tested rows — cross-txn read-read pairs exclude and

@@ -93,6 +93,17 @@ After all servers start, bounded readiness commands initialize the cluster, conn
 
 `juicer.enabled` becomes `COCKROACH_JUICER=true|false` on every server. Explicit `juicer.env` keys map to the audited `COCKROACH_JUICER_` suffixes. Unsupported keys fail. Finalization extracts real Juicer startup lines from each node's own log files and validates interception against the requested switch. Failed/missing treatment evidence invalidates the result.
 
+`juicer.env.RULES: "readhold-ordered"` selects a timestamp-directed admission
+candidate. It keeps `readhold`'s operation types and same-transaction exemption,
+but a held plain read or write blocks another transaction's write head only
+when its sorting HLC is strictly earlier (physical, then logical). Exact HLC
+ties do not block; transaction IDs provide no ordering tie break. The sorting
+key is batch-now (falling back to MinTimestamp), not the MVCC timestamp.
+Hold membership, release events, cancellation and the `MAX_HOLD_MS` TTL remain
+those of `readhold`. The native banner reports `rules=readhold-ordered`.
+This is a local admission candidate without a global deadlock-freedom or
+validated performance claim; native SQL and concurrency control are unchanged.
+
 The adapter uses insecure SQL/RPC for isolated trusted experiment networks. It does not configure production authentication or install firewall rules.
 
 ## SSH and artifact provenance

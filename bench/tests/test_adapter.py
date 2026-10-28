@@ -65,6 +65,20 @@ def config():
 
 
 class AdapterPlan(unittest.TestCase):
+    def test_readhold_ordered_rules_reach_native_server_environment(self):
+        c = config()
+        c["juicer"] = dict(enabled=True, env={"RULES": "readhold-ordered"})
+        adapter = CRDBAdapter()
+        adapter.validate(c)
+        plan = adapter.plan_cell(
+            c,
+            [dict(host_id="local", process_id=0, slots=3, rate=10, cpu_ids=[0, 1, 2])],
+            Path("/tmp/cell"),
+        )
+        self.assertEqual(
+            plan.servers[0].env["COCKROACH_JUICER_RULES"], "readhold-ordered"
+        )
+
     def test_plan_uses_one_global_allocation_and_post_start_load(self):
         c = config()
         plan = CRDBAdapter().plan_cell(

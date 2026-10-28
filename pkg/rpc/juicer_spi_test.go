@@ -6,6 +6,7 @@
 package rpc
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -626,9 +627,9 @@ func TestJuicerWriteGateRules(t *testing.T) {
 
 // TestJuicerReadHoldRules pins the campaign #17 ablation probe: reads and
 // writes hold, only write heads wait. The one widened clause (reads enter the
-// held population) and the one narrowed clause (read heads never wait) are
-// asserted positively; the RMW exemption (locking reads unholdable) must fall
-// out of the derivation.
+// held population) and the one narrowed clause (read heads are not directly
+// blocked) are asserted positively; the RMW exemption (locking reads
+// unholdable) must fall out of the derivation.
 func TestJuicerReadHoldRules(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer func(saved string) { juicerRulesEnv = saved }(juicerRulesEnv)
@@ -655,7 +656,8 @@ func TestJuicerReadHoldRules(t *testing.T) {
 	if !rules.Blocks(readA, writeB) {
 		t.Fatal("write head did not wait behind a cross-txn read hold (the probe's point)")
 	}
-	// Nothing else waits: reads pass everything, and same-txn stays exempt.
+	// Read heads have no direct dependency; same-txn stays exempt. Queued
+	// reads can still wait behind a blocked write (see the HOL test).
 	if rules.Blocks(writeA, readB) || rules.Blocks(readA, readB) {
 		t.Fatal("a read head waited under readhold")
 	}
@@ -694,6 +696,45 @@ func TestJuicerReadHoldRules(t *testing.T) {
 	}
 	if rules.Releases(readA, juicer.Event{Kind: juicer.RespReturned, OpType: juicer.OpGet, TxnID: 9}) {
 		t.Fatal("another txn's read response released the read hold")
+	}
+}
+
+func TestJuicerReadHoldOrderedSPI(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer func(saved string) { juicerRulesEnv = saved }(juicerRulesEnv)
+	for _, env := range []string{"readhold-ordered", "  READHOLD-ORDERED "} {
+		juicerRulesEnv = env
+		if juicerRulesMode() != juicerRulesReadHoldOrdered {
+			t.Fatalf("did not parse candidate %q", env)
+		}
+		rules := newCRDBJuicerSPI().BuildRules()
+		if !rules.Enabled() || rules.MaxHold != time.Duration(juicerMaxHoldMillis)*time.Millisecond || !rules.AdmitUnbound {
+			t.Fatal("SPI did not select ordered readhold with existing hold settings")
+		}
+		for _, tc := range []struct {
+			heldWall, heldLogical int64
+			headWall, headLogical int64
+			want                  bool
+		}{
+			{10, 9, 20, 0, true},
+			{20, 0, 10, 9, false},
+			{10, 1, 10, 2, true},
+			{10, 2, 10, 1, false},
+			{10, 2, 10, 2, false},
+			{0, 0, 0, 0, false},
+		} {
+			for _, op := range []juicer.OperationType{juicer.OpGet, juicer.OpSet} {
+				held := juicer.OpRef{TxnID: 9, OpType: op, Timestamp: tc.heldWall, Logical: tc.heldLogical}
+				head := juicer.OpRef{TxnID: 1, OpType: juicer.OpSet, Timestamp: tc.headWall, Logical: tc.headLogical}
+				if got := rules.Blocks(held, head); got != tc.want {
+					t.Fatalf("SPI Blocks(%+v, %+v)=%v, want %v", held, head, got, tc.want)
+				}
+			}
+		}
+		banner := juicerSpecBanner()
+		if !strings.Contains(banner, " rules=readhold-ordered ") || !strings.Contains(banner, " sort_key=batch-now(") {
+			t.Fatalf("candidate or batch-now key missing from native banner: %s", banner)
+		}
 	}
 }
 
