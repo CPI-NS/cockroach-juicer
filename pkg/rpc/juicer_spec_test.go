@@ -664,3 +664,156 @@ func TestJuicerAbortedKeys(t *testing.T) {
 		t.Fatalf("AbortedKeys must name the GetKeysFromRequest keys: %v", keys)
 	}
 }
+
+// The rule-level tests are locally runnable without native dependencies. This
+// composition uses the real CRDB SPI and both shared interceptor paths; the
+// existing AppliedControlEvents tests retain detailed key/status coverage.
+func TestJuicerWritesAppliedReadPassInterceptor(t *testing.T) {
+	defer saveJuicerSpecState()()
+	juicerRulesEnv, juicerMaxHoldMillis = juicerWritesAppliedReadPassName, 60000
+	for _, stream := range []bool{false, true} {
+		name := "unary"
+		if stream {
+			name = "stream"
+		}
+		t.Run(name, func(t *testing.T) {
+			h := newConflictTableHarness(t, "k", "anchor")
+			send := func(ba *kvpb.BatchRequest, status *roachpb.TransactionStatus, release chan struct{}) (chan struct{}, chan error) {
+				if !stream {
+					return h.sendHeld(ba, status, release)
+				}
+				ran, done := make(chan struct{}), make(chan error, 1)
+				go func() {
+					ss := &writesAppliedTestStream{request: ba}
+					done <- h.ji.GetStreamInterceptor(map[string]bool{juicerStreamBatchPaths[0]: true})(nil, ss,
+						&grpc.StreamServerInfo{FullMethod: juicerStreamBatchPaths[0]}, func(_ interface{}, s grpc.ServerStream) error {
+							request := &kvpb.BatchRequest{}
+							if err := s.RecvMsg(request); err != nil {
+								return err
+							}
+							close(ran)
+							if release != nil {
+								<-release
+							}
+							br := &kvpb.BatchResponse{}
+							if request.Txn != nil {
+								br.Txn = request.Txn.Clone()
+								if status != nil {
+									br.Txn.Status = *status
+								}
+							}
+							return s.SendMsg(br)
+						})
+				}()
+				return ran, done
+			}
+			completed := func(done chan error) {
+				t.Helper()
+				select {
+				case err := <-done:
+					if err != nil {
+						t.Fatal(err)
+					}
+				case <-time.After(5 * time.Second):
+					t.Fatal("interceptor did not finish")
+				}
+			}
+			a := juicerTestTxn(10)
+			// Ordinary successful write responses retain both same-txn holds.
+			for i := 0; i < 2; i++ {
+				ran, done := send(juicerBatch(a, put("k")), nil, nil)
+				h.admitted(ran, "same-txn write")
+				completed(done)
+			}
+			if h.ji.SnapshotMetrics().Queue.Holds.Live != 2 {
+				t.Fatal("PENDING replies or same-txn admission lost holds")
+			}
+			b := juicerTestTxn(20)
+			blocked, doneB := send(juicerBatch(b, put("k")), nil, nil)
+			h.held(blocked, "writer behind pending control holds")
+			readRelease := make(chan struct{})
+			read, doneRead := send(juicerBatch(juicerTestTxn(30), plainGet("k")), nil, readRelease)
+			h.admitted(read, "unholdable read ahead of blocked writer")
+			if h.ji.SnapshotMetrics().Queue.Holds.Live != 2 {
+				t.Fatal("read created a hold")
+			}
+			close(readRelease)
+			completed(doneRead)
+			staged := roachpb.STAGING
+			et := endTxn(true)
+			et.Key = roachpb.Key("k")
+			et.LockSpans = []roachpb.Span{{Key: roachpb.Key("k")}}
+			stagedRelease := make(chan struct{})
+			control, doneControl := send(juicerBatch(a, et), &staged, stagedRelease)
+			h.admitted(control, "control arrival")
+			h.held(blocked, "writer before control handler completion")
+			close(stagedRelease)
+			completed(doneControl)
+			h.held(blocked, "writer after STAGING response")
+			committed := roachpb.COMMITTED
+			finalRelease := make(chan struct{})
+			final, doneFinal := send(juicerBatch(a, et), &committed, finalRelease)
+			h.admitted(final, "explicit final control")
+			h.held(blocked, "writer before final control response")
+			close(finalRelease)
+			completed(doneFinal)
+			h.admitted(blocked, "writer after terminal applied event")
+			completed(doneB)
+			st := h.ji.SnapshotMetrics().Queue.Holds
+			if st.Live != 1 || st.Ended[juicer.HoldEndEvent] != 2 {
+				t.Fatal("duplicate point keys or terminal events lost hold accounting")
+			}
+			// A finalized [Put, EndTxn] response also clears prior same-txn holds.
+			onePC, doneOnePC := send(juicerBatch(b, put("k"), endTxn(true)), &committed, nil)
+			h.admitted(onePC, "finalized write batch")
+			completed(doneOnePC)
+			if h.ji.SnapshotMetrics().Queue.Holds.Live != 0 {
+				t.Fatal("finalized write response did not feed applied control")
+			}
+		})
+	}
+}
+
+// Only RecvMsg/SendMsg/Context are used by the serial interceptor. The fixture
+// preserves real BatchRequest/BatchResponse values and never fakes SPI events.
+type writesAppliedTestStream struct {
+	grpc.ServerStream
+	request *kvpb.BatchRequest
+}
+
+func (s *writesAppliedTestStream) Context() context.Context { return context.Background() }
+func (s *writesAppliedTestStream) RecvMsg(m interface{}) error {
+	*m.(*kvpb.BatchRequest) = *s.request
+	return nil
+}
+func (s *writesAppliedTestStream) SendMsg(interface{}) error { return nil }
+
+func TestJuicerWritesAppliedReadPassOwnFailureThroughSPI(t *testing.T) {
+	defer saveJuicerSpecState()()
+	juicerRulesEnv, juicerMaxHoldMillis = juicerWritesAppliedReadPassName, 60000
+	h := newConflictTableHarness(t, "k")
+	a := juicerTestTxn(10)
+	for i := 0; i < 2; i++ {
+		ran, done := h.send(juicerBatch(a, put("k")), nil)
+		h.admitted(ran, "same-txn write")
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, goError := range []bool{false, true} {
+		_, _ = h.intercept(context.Background(), juicerBatch(a, put("k")), h.info, func(context.Context, interface{}) (interface{}, error) {
+			if goError {
+				return nil, context.Canceled
+			}
+			br := &kvpb.BatchResponse{}
+			br.Error = kvpb.NewError(&kvpb.TransactionAbortedError{})
+			return br, nil
+		})
+		if h.ji.SnapshotMetrics().Queue.Holds.Live != 2 {
+			t.Fatal("failed write cleared a different same-txn hold")
+		}
+	}
+	if h.ji.SnapshotMetrics().Queue.Holds.Ended[juicer.HoldEndEvent] != 2 {
+		t.Fatal("own failures did not end exactly their request holds")
+	}
+}

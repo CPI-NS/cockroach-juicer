@@ -354,6 +354,7 @@ const (
 	juicerRulesGate            juicerRules = "gate"
 	juicerRulesWrites          juicerRules = "writes"
 	juicerRulesWritesReadPass  juicerRules = "writes-readpass"
+	juicerRulesWritesApplied   juicerRules = juicerWritesAppliedReadPassName
 	juicerRulesWriteGate       juicerRules = "writegate"
 	juicerRulesReadHold        juicerRules = "readhold"
 	juicerRulesReadHoldOrdered juicerRules = "readhold-ordered"
@@ -390,6 +391,8 @@ func juicerRulesMode() juicerRules {
 		return juicerRulesWrites
 	case juicerRulesWritesReadPass:
 		return juicerRulesWritesReadPass
+	case juicerRulesWritesApplied:
+		return juicerRulesWritesApplied
 	case juicerRulesWriteGate:
 		return juicerRulesWriteGate
 	case juicerRulesReadHold:
@@ -584,6 +587,9 @@ func juicerSpecBanner() string {
 		holdEnd = "request(get,refresh):own_reply|own_failure|ttl;" +
 			"control(put,cput,inc,del,locking-get):applied(endtxn|resolve-intent|1pc-reply)|own_failure|ttl"
 	}
+	if mode == juicerRulesWritesApplied {
+		holdEnd = crdbWritesAppliedReadPassRules(time.Duration(juicerMaxHoldMillis) * time.Millisecond).HoldEnds
+	}
 	// Per-event logging (11.3): the native release trace.
 	eventLog := "off"
 	if juicertrace.Enabled() {
@@ -694,7 +700,7 @@ func juicerServerOptions() []grpc.ServerOption {
 	if juicerHoldCalibration && (awCfg.Enabled || manualKeys != nil) {
 		panic("COCKROACH_JUICER_HOLD_CALIBRATION cannot run with COCKROACH_JUICER_AW or COCKROACH_JUICER_MANUAL_QUEUE_KEYS")
 	}
-	if mode := juicerRulesMode(); (mode == juicerRulesReadPass || mode == juicerRulesReadPassGuarded || mode == juicerRulesWritesReadPass) && (juicerFifo || juicerLatePolicy != "queue" ||
+	if mode := juicerRulesMode(); (mode == juicerRulesReadPass || mode == juicerRulesReadPassGuarded || mode == juicerRulesWritesReadPass || mode == juicerRulesWritesApplied) && (juicerFifo || juicerLatePolicy != "queue" ||
 		juicerFixedWaitMillis != 0 || awCfg.Enabled || juicerHoldCalibration || juicerSkipQueueing ||
 		juicerFilterDiagnostic != "off") {
 		panic(fmt.Sprintf("%s requires sorted late-queue admission, zero fixed wait, AW off, calibration off, queueing enabled and FILTER_DIAGNOSTIC=off", mode))
@@ -1491,6 +1497,8 @@ func (crdbJuicerSPI) BuildRules() juicer.DependencyRules {
 			MaxHold:      maxHold,
 			AdmitUnbound: true,
 		}
+	case juicerRulesWritesApplied:
+		return crdbWritesAppliedReadPassRules(maxHold)
 	case juicerRulesWrites, juicerRulesWritesReadPass:
 		// writes-readpass changes only queue read-ahead; predicates stay shared.
 		// The unified-rule candidate: space concurrent WRITERS per hot key and

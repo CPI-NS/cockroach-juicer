@@ -132,6 +132,18 @@ native SQL or database protocol and has no established performance or fairness
 guarantee. Benchmark only after reviewed shared dependency integration and
 native validation.
 
+`juicer.env.RULES: "writes-applied-readpass"` keeps the same Set/Set
+cross-transaction blocking, unholdable plain/locking reads and existing read-ahead
+as `writes-readpass`. It enables applied-control observations and ends Set holds
+on the SPI's observed finalized commit/abort or the admitted request's own failed
+response (matched by marker token), with the existing cancellation, eviction and
+TTL backstops. A successful PENDING/STAGING Set response or commit/abort arrival
+alone does not release a hold. It has the same read-ahead startup restrictions.
+The startup banner declares this release contract. Applied events do not certify
+per-key physical intent removal: ranged resolutions and missing/late events can
+leave holds until TTL. This is an explicit candidate, with no default or existing
+mode change, native transaction-protocol change, or performance guarantee.
+
 The adapter uses insecure SQL/RPC for isolated trusted experiment networks. It does not configure production authentication or install firewall rules.
 
 ## Admission stage timing diagnostic
