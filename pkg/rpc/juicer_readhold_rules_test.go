@@ -43,6 +43,13 @@ func TestJuicerReadHoldOrderedPairs(t *testing.T) {
 								t.Fatalf("ordered=%v Blocks(%+v, %+v)=%v, want %v", ordered, held, head, got, want)
 							}
 						}
+						guardedWant := ids[0] != ids[1] && tc.earlier &&
+							(heldType == juicer.OpGet || heldType == juicer.OpSet) &&
+							(headType == juicer.OpGet || headType == juicer.OpSet) &&
+							(heldType == juicer.OpSet || headType == juicer.OpSet)
+						if got := crdbReadPassGuardedRules(time.Millisecond).Blocks(held, head); got != guardedWant {
+							t.Fatalf("guarded Blocks(%+v, %+v)=%v, want %v", held, head, got, guardedWant)
+						}
 					}
 				}
 			}
@@ -53,80 +60,116 @@ func TestJuicerReadHoldOrderedPairs(t *testing.T) {
 // This compiles the actual CRDB relation with the shared queue; named SPI
 // selection and startup validation are separately covered by the native test.
 func TestJuicerReadPassRetainsCRDBReadHolds(t *testing.T) {
-	rules := crdbReadHoldRules(25*time.Millisecond, true)
-	rules.ReadAheadOfBlockedWrite = true
-	clock := juicer.NewManualClock(time.Unix(100, 0))
-	logger := juicer.NewLogger("readpass", readHoldTestLogger{}, "", 0, false, false)
-	de := juicer.NewDependencyEnforcer(rules, logger)
-	q := juicer.NewPerKeyQueue("k", func(string) time.Duration { return 0 }, de, logger, false,
-		juicer.WithClock(clock), juicer.WithManualLoop())
-	defer q.Stop()
-	enqueue := func(txn, ts int64, op juicer.OperationType) *juicer.QueueMarker {
-		m := &juicer.QueueMarker{Key: "k", Timestamp: ts, OpType: op, ReadyChan: make(chan struct{})}
-		m.TxnId.Store(txn)
-		q.Enqueue(m)
-		return m
-	}
-	ready := func(m *juicer.QueueMarker) bool {
-		select {
-		case <-m.ReadyChan:
-			return true
-		default:
-			return false
+	for _, guarded := range []bool{false, true} {
+		for _, activeWrite := range []bool{false, true} {
+			t.Run(fmt.Sprintf("guarded=%v/activeWrite=%v", guarded, activeWrite), func(t *testing.T) {
+				rules := crdbReadHoldRules(25*time.Millisecond, true)
+				rules.ReadAheadOfBlockedWrite = true
+				if guarded {
+					rules = crdbReadPassGuardedRules(25 * time.Millisecond)
+				}
+				clock := juicer.NewManualClock(time.Unix(100, 0))
+				logger := juicer.NewLogger("readpass", readHoldTestLogger{}, "", 0, false, false)
+				de := juicer.NewDependencyEnforcer(rules, logger)
+				q := juicer.NewPerKeyQueue("k", func(string) time.Duration { return 0 }, de, logger, false,
+					juicer.WithClock(clock), juicer.WithManualLoop(), juicer.WithLatePolicy(juicer.LateQueue))
+				defer q.Stop()
+				enqueue := func(txn, ts int64, op juicer.OperationType) *juicer.QueueMarker {
+					m := &juicer.QueueMarker{Key: "k", Timestamp: ts, OpType: op, ReadyChan: make(chan struct{})}
+					m.TxnId.Store(txn)
+					if !q.Enqueue(m) || m.BypassQueue {
+						t.Fatal("fixture must use actual queued admission")
+					}
+					return m
+				}
+				ready := func(m *juicer.QueueMarker) bool {
+					select {
+					case <-m.ReadyChan:
+						return true
+					default:
+						return false
+					}
+				}
+				if activeWrite {
+					holder := enqueue(4, 7, juicer.OpSet)
+					q.Pump()
+					if !ready(holder) || de.InflightLen() != 1 {
+						t.Fatal("initial write did not acquire its real hold")
+					}
+				}
+				// An older read can acquire its hold even if the later write is active.
+				early := enqueue(1, 5, juicer.OpGet)
+				q.Pump()
+				write := enqueue(2, 20, juicer.OpSet)
+				read := enqueue(3, 30, juicer.OpGet)
+				q.Pump()
+				wantHolds := 2
+				if activeWrite && !guarded {
+					wantHolds++
+				}
+				wantReadReady := !guarded || !activeWrite
+				if !ready(early) || ready(write) || ready(read) != wantReadReady || de.InflightLen() != wantHolds {
+					t.Fatal("read readiness or retained holds did not match the active-write guard")
+				}
+				if activeWrite {
+					q.Observe(juicer.Event{Kind: juicer.RespReturned, TxnID: 4, OpType: juicer.OpSet})
+					q.Pump()
+					if ready(write) || !ready(read) || de.InflightLen() != 2 || de.Stats().Ended[juicer.HoldEndExpiry] != 0 {
+						t.Fatal("write response must allow read-ahead through the same enforcer while the early read still blocks the write")
+					}
+				}
+				q.Observe(juicer.Event{Kind: juicer.RespReturned, TxnID: 1, OpType: juicer.OpGet})
+				q.Pump()
+				if !ready(write) || de.InflightLen() != 2 || de.Stats().Ended[juicer.HoldEndExpiry] != 0 {
+					t.Fatal("newer read hold blocked older write or progress used the TTL")
+				}
+				q.Observe(juicer.Event{Kind: juicer.RespReturned, TxnID: 3, OpType: juicer.OpGet, Failed: true})
+				q.Observe(juicer.Event{Kind: juicer.RespReturned, TxnID: 2, OpType: juicer.OpSet})
+				if de.InflightLen() != 0 {
+					t.Fatal("original CRDB read/write response rules left holds behind")
+				}
+			})
 		}
-	}
-	enqueue(1, 10, juicer.OpGet)
-	q.Pump()
-	write := enqueue(2, 20, juicer.OpSet)
-	read := enqueue(3, 30, juicer.OpGet)
-	q.Pump()
-	if ready(write) || !ready(read) || de.InflightLen() != 2 {
-		t.Fatal("CRDB readpass did not retain both read holds behind its blocked write")
-	}
-	q.Observe(juicer.Event{Kind: juicer.RespReturned, TxnID: 1, OpType: juicer.OpGet})
-	q.Pump()
-	if !ready(write) || de.InflightLen() != 2 || de.Stats().Ended[juicer.HoldEndExpiry] != 0 {
-		t.Fatal("newer read hold blocked older write or progress used the TTL")
-	}
-	q.Observe(juicer.Event{Kind: juicer.RespReturned, TxnID: 3, OpType: juicer.OpGet, Failed: true})
-	q.Observe(juicer.Event{Kind: juicer.RespReturned, TxnID: 2, OpType: juicer.OpSet})
-	if de.InflightLen() != 0 {
-		t.Fatal("original CRDB read/write response rules left holds behind")
 	}
 }
 
 func TestJuicerReadHoldOrderedHoldabilityAndReleases(t *testing.T) {
 	old, ordered := crdbReadHoldRules(25*time.Millisecond, false), crdbReadHoldRules(25*time.Millisecond, true)
-	if !ordered.Enabled() || ordered.MaxHold != old.MaxHold || ordered.AdmitUnbound != old.AdmitUnbound ||
-		ordered.ObserveControlApplied != old.ObserveControlApplied {
-		t.Fatal("candidate changed hold configuration")
-	}
-	for op := juicer.OpUnknown; op < juicer.NumOperationTypes; op++ {
-		want := op == juicer.OpGet || op == juicer.OpSet
-		if ordered.Holdable(op) != want || ordered.Holdable(op) != old.Holdable(op) {
-			t.Fatalf("holdable(%v): old=%v ordered=%v, want %v", op, old.Holdable(op), ordered.Holdable(op), want)
+	for _, ordered := range []juicer.DependencyRules{ordered, crdbReadPassGuardedRules(25 * time.Millisecond)} {
+		if !ordered.Enabled() || ordered.MaxHold != old.MaxHold || ordered.AdmitUnbound != old.AdmitUnbound ||
+			ordered.ObserveControlApplied != old.ObserveControlApplied {
+			t.Fatal("candidate changed hold configuration")
 		}
-	}
-	for _, heldType := range []juicer.OperationType{juicer.OpGet, juicer.OpSet} {
-		held := juicer.OpRef{TxnID: 1, OpType: heldType, Timestamp: 10, Logical: 2, Token: 7}
-		for _, txn := range []int64{1, 9} {
-			for _, kind := range []juicer.EventKind{juicer.ReqArrived, juicer.RespReturned, juicer.ControlApplied} {
-				for op := juicer.OpUnknown; op < juicer.NumOperationTypes; op++ {
-					for _, failed := range []bool{false, true} {
-						for _, token := range []uint64{0, 7, 8} {
-							ev := juicer.Event{Kind: kind, OpType: op, TxnID: txn, Failed: failed, Token: token}
-							want := txn == held.TxnID && ((kind == juicer.ReqArrived &&
-								(op == juicer.OpCommit || op == juicer.OpAbort)) ||
-								(kind == juicer.RespReturned && (failed || op == heldType)))
-							if old.Releases(held, ev) != want || ordered.Releases(held, ev) != want {
-								t.Fatalf("held=%+v ev=%+v: old=%v ordered=%v, want %v",
-									held, ev, old.Releases(held, ev), ordered.Releases(held, ev), want)
+		for op := juicer.OpUnknown; op < juicer.NumOperationTypes; op++ {
+			want := op == juicer.OpGet || op == juicer.OpSet
+			if ordered.Holdable(op) != want || ordered.Holdable(op) != old.Holdable(op) {
+				t.Fatalf("holdable(%v): old=%v ordered=%v, want %v", op, old.Holdable(op), ordered.Holdable(op), want)
+			}
+		}
+		for _, heldType := range []juicer.OperationType{juicer.OpGet, juicer.OpSet} {
+			held := juicer.OpRef{TxnID: 1, OpType: heldType, Timestamp: 10, Logical: 2, Token: 7}
+			for _, txn := range []int64{1, 9} {
+				for _, kind := range []juicer.EventKind{juicer.ReqArrived, juicer.RespReturned, juicer.ControlApplied} {
+					for op := juicer.OpUnknown; op < juicer.NumOperationTypes; op++ {
+						for _, failed := range []bool{false, true} {
+							for _, token := range []uint64{0, 7, 8} {
+								ev := juicer.Event{Kind: kind, OpType: op, TxnID: txn, Failed: failed, Token: token}
+								want := txn == held.TxnID && ((kind == juicer.ReqArrived &&
+									(op == juicer.OpCommit || op == juicer.OpAbort)) ||
+									(kind == juicer.RespReturned && (failed || op == heldType)))
+								if old.Releases(held, ev) != want || ordered.Releases(held, ev) != want {
+									t.Fatalf("held=%+v ev=%+v: old=%v ordered=%v, want %v",
+										held, ev, old.Releases(held, ev), ordered.Releases(held, ev), want)
+								}
 							}
 						}
 					}
 				}
 			}
 		}
+	}
+	if old.ReadAheadOfBlockedWrite || ordered.ReadAheadOfBlockedWrite || !crdbReadPassGuardedRules(old.MaxHold).ReadAheadOfBlockedWrite {
+		t.Fatal("read-ahead flag changed outside its explicit candidates")
 	}
 }
 
@@ -172,11 +215,13 @@ func TestJuicerReadHoldOrderedPartialAdmissions(t *testing.T) {
 }
 
 func TestJuicerReadHoldOrderedTTLAndCancellation(t *testing.T) {
-	for _, ordered := range []bool{false, true} {
+	const ttl = 25 * time.Millisecond
+	for mode, rules := range []juicer.DependencyRules{
+		crdbReadHoldRules(ttl, false), crdbReadHoldRules(ttl, true), crdbReadPassGuardedRules(ttl),
+	} {
 		for _, op := range []juicer.OperationType{juicer.OpGet, juicer.OpSet} {
-			t.Run(fmt.Sprintf("ordered=%v/%v", ordered, op), func(t *testing.T) {
-				const ttl = 25 * time.Millisecond
-				de := juicer.NewDependencyEnforcer(crdbReadHoldRules(ttl, ordered), nil)
+			t.Run(fmt.Sprintf("mode=%d/%v", mode, op), func(t *testing.T) {
+				de := juicer.NewDependencyEnforcer(rules, nil)
 				now := time.Unix(100, 0)
 				for _, token := range []uint64{1, 2} {
 					if de.OnHeadEligible(juicer.OpRef{TxnID: 1, OpType: op, Timestamp: 10, Token: token}, now) != juicer.EnforcerAllow {

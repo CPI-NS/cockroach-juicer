@@ -38,3 +38,18 @@ func crdbReadHoldRules(maxHold time.Duration, ordered bool) juicer.DependencyRul
 		AdmitUnbound: true,
 	}
 }
+
+// crdbReadPassGuardedRules lets plain reads pass blocked writes only when
+// no earlier active write holds them back, using the sorting HLC, not MVCC.
+func crdbReadPassGuardedRules(maxHold time.Duration) juicer.DependencyRules {
+	rules := crdbReadHoldRules(maxHold, true)
+	rules.Blocks = func(h, hd juicer.OpRef) bool {
+		return h.TxnID != hd.TxnID &&
+			(h.OpType == juicer.OpGet || h.OpType == juicer.OpSet) &&
+			(hd.OpType == juicer.OpGet || hd.OpType == juicer.OpSet) &&
+			(h.OpType == juicer.OpSet || hd.OpType == juicer.OpSet) &&
+			(h.Timestamp < hd.Timestamp || (h.Timestamp == hd.Timestamp && h.Logical < hd.Logical))
+	}
+	rules.ReadAheadOfBlockedWrite = true
+	return rules
+}

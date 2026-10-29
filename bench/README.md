@@ -114,6 +114,13 @@ of mixed RPCs, which still wait for all keys. It requires `FIFO=false`,
 startup validation. Existing rules are unchanged. Heap scans can add CPU cost;
 this candidate has no established performance or global fairness guarantee.
 
+`juicer.env.RULES: "readpass-guarded"` uses the same read-ahead path and
+configuration restrictions, but either plain reads or writes wait behind an
+earlier active write. Cross-transaction plain read/write pairs block only when
+at least one operation is a write and the held sorting HLC is strictly earlier.
+Read/read pairs, locking reads and exact HLC ties do not block. It reuses
+`readhold` releases and TTL; performance and global deadlock freedom are unproven.
+
 The adapter uses insecure SQL/RPC for isolated trusted experiment networks. It does not configure production authentication or install firewall rules.
 
 ## SSH and artifact provenance

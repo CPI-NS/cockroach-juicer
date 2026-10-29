@@ -746,39 +746,48 @@ func TestJuicerReadPassWiringAndConfiguration(t *testing.T) {
 	defer func(fifo, skip bool, diagnostic string) {
 		juicerFifo, juicerSkipQueueing, juicerFilterDiagnostic = fifo, skip, diagnostic
 	}(juicerFifo, juicerSkipQueueing, juicerFilterDiagnostic)
-	reset := func() {
-		crdbKnobs{enabled: true, rules: " READHOLD-ORDERED-READPASS ", maxHold: 25,
-			k: 100, s: 32, epochMs: 10000, idle: 3, late: "queue"}.set()
-		juicerFifo, juicerSkipQueueing, juicerFilterDiagnostic = false, false, "off"
-	}
-	reset()
-	spi := newCRDBJuicerSPI()
-	if juicerRulesMode() != juicerRulesReadPass || !spi.BuildRules().ReadAheadOfBlockedWrite || len(juicerServerOptions()) == 0 ||
-		!strings.Contains(juicerSpecBanner(), " rules=readhold-ordered-readpass ") {
-		t.Fatal("readpass parser, rules, configuration or banner wiring missing")
-	}
-	markers := spi.SplitMarker(juicerBatch(juicerTestTxn(1), refresh("r"), lockingGet("l"), put("w")))
-	if len(markers) != 3 || markers[0].TypedOpType != juicer.OpGet || markers[1].TypedOpType != juicer.OpGetForPut || markers[2].TypedOpType != juicer.OpSet {
-		t.Fatal("point Refresh/mixed fragments lost their original marker types")
-	}
-	for name, change := range map[string]func(){
-		"FIFO":          func() { juicerFifo = true },
-		"late bypass":   func() { juicerLatePolicy = "bypass" },
-		"positive wait": func() { juicerFixedWaitMillis = 1 },
-		"AW":            func() { juicerAW = true },
-		"calibration":   func() { juicerHoldCalibration = true },
-		"skip queues":   func() { juicerSkipQueueing = true },
-		"diagnostic":    func() { juicerFilterDiagnostic = "l1" },
-	} {
-		t.Run(name, func(t *testing.T) {
+	for _, mode := range []juicerRules{juicerRulesReadPass, juicerRulesReadPassGuarded} {
+		t.Run(string(mode), func(t *testing.T) {
+			reset := func() {
+				crdbKnobs{enabled: true, rules: " " + strings.ToUpper(string(mode)) + " ", maxHold: 25,
+					k: 100, s: 32, epochMs: 10000, idle: 3, late: "queue"}.set()
+				juicerFifo, juicerSkipQueueing, juicerFilterDiagnostic = false, false, "off"
+			}
 			reset()
-			change()
-			defer func() {
-				if r := recover(); r == nil || !strings.Contains(fmt.Sprint(r), "readhold-ordered-readpass") {
-					t.Fatalf("unsupported readpass configuration did not fail its guard: %v", r)
-				}
-			}()
-			juicerServerOptions()
+			spi := newCRDBJuicerSPI()
+			if juicerRulesMode() != mode || !spi.BuildRules().ReadAheadOfBlockedWrite || len(juicerServerOptions()) == 0 ||
+				!strings.Contains(juicerSpecBanner(), " rules="+string(mode)+" ") {
+				t.Fatal("readpass parser, rules, configuration or banner wiring missing")
+			}
+			held := juicer.OpRef{TxnID: 9, OpType: juicer.OpSet, Timestamp: 10, Logical: 1}
+			head := juicer.OpRef{TxnID: 1, OpType: juicer.OpGet, Timestamp: 10, Logical: 2}
+			if got := spi.BuildRules().Blocks(held, head); got != (mode == juicerRulesReadPassGuarded) {
+				t.Fatal("SPI did not select the mode's active-write guard")
+			}
+			markers := spi.SplitMarker(juicerBatch(juicerTestTxn(1), refresh("r"), lockingGet("l"), put("w")))
+			if len(markers) != 3 || markers[0].TypedOpType != juicer.OpGet || markers[1].TypedOpType != juicer.OpGetForPut || markers[2].TypedOpType != juicer.OpSet {
+				t.Fatal("point Refresh/mixed fragments lost their original marker types")
+			}
+			for name, change := range map[string]func(){
+				"FIFO":          func() { juicerFifo = true },
+				"late bypass":   func() { juicerLatePolicy = "bypass" },
+				"positive wait": func() { juicerFixedWaitMillis = 1 },
+				"AW":            func() { juicerAW = true },
+				"calibration":   func() { juicerHoldCalibration = true },
+				"skip queues":   func() { juicerSkipQueueing = true },
+				"diagnostic":    func() { juicerFilterDiagnostic = "l1" },
+			} {
+				t.Run(name, func(t *testing.T) {
+					reset()
+					change()
+					defer func() {
+						if r := recover(); r == nil || !strings.Contains(fmt.Sprint(r), string(mode)) {
+							t.Fatalf("unsupported readpass configuration did not fail its guard: %v", r)
+						}
+					}()
+					juicerServerOptions()
+				})
+			}
 		})
 	}
 }
@@ -1195,6 +1204,9 @@ func TestJuicerRulesModes(t *testing.T) {
 			rules := newCRDBJuicerSPI().BuildRules()
 			if got := rules.Enabled(); got != tc.expectedEnabled {
 				t.Fatalf("Enabled() = %v, want %v", got, tc.expectedEnabled)
+			}
+			if rules.ReadAheadOfBlockedWrite {
+				t.Fatal("original mode unexpectedly enabled read-ahead")
 			}
 			if !tc.expectedEnabled {
 				// A disabled relation must be the zero value throughout, or the
