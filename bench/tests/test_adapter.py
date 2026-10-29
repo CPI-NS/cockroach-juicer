@@ -92,7 +92,7 @@ class AdapterPlan(unittest.TestCase):
                     self.assertEqual(plan.collect, baseline.collect)
 
     def test_readhold_candidates_reach_native_server_environment(self):
-        for rules in ("readhold-ordered", "readhold-ordered-readpass", "readpass-guarded", "writes-readpass", "writes-applied-readpass"):
+        for rules in ("readhold-ordered", "readhold-ordered-readpass", "readfirst-ordered-readpass", "readpass-guarded", "writes-readpass", "writes-applied-readpass"):
             with self.subTest(rules=rules):
                 c = config()
                 c["juicer"] = dict(enabled=True, env={"RULES": rules})

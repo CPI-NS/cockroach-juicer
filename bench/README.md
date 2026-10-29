@@ -114,6 +114,20 @@ of mixed RPCs, which still wait for all keys. It requires `FIFO=false`,
 startup validation. Existing rules are unchanged. Heap scans can add CPU cost;
 this candidate has no established performance or global fairness guarantee.
 
+`juicer.env.RULES: "readfirst-ordered-readpass"` removes only the held-write
+blocking a write head clause from `readhold-ordered-readpass`. Only an earlier
+cross-transaction plain `OpGet` hold blocks an `OpSet` head, using strict sorting
+HLC (physical, then logical; no transaction-ID tie break). Writes and locking
+reads hold nothing. Overtaking plain reads acquire real holds, but a read newer
+than the waiting write cannot prolong that write's wait; an earlier read still
+blocks it. Same-transaction exemption, response/arrival releases, unbound
+admission, cancellation and `MAX_HOLD_MS` remain unchanged. This is not the
+unordered `readfirst` relation or an applied-control release mode. It has the
+same readpass startup restrictions above and leaves StageTiming off by default;
+`JUICER_STAGE_TIMING=1` still overrides the diagnostic option. It changes no
+shared library or native database protocol and promises no global fairness,
+deadlock freedom or performance improvement.
+
 `juicer.env.RULES: "readpass-guarded"` uses the same read-ahead path and
 configuration restrictions, but either plain reads or writes wait behind an
 earlier active write. Cross-transaction plain read/write pairs block only when

@@ -789,7 +789,7 @@ func TestJuicerReadPassWiringAndConfiguration(t *testing.T) {
 	defer func(fifo, skip bool, diagnostic string) {
 		juicerFifo, juicerSkipQueueing, juicerFilterDiagnostic = fifo, skip, diagnostic
 	}(juicerFifo, juicerSkipQueueing, juicerFilterDiagnostic)
-	for _, mode := range []juicerRules{juicerRulesReadPass, juicerRulesReadPassGuarded, juicerRulesWritesReadPass, juicerRulesWritesApplied} {
+	for _, mode := range []juicerRules{juicerRulesReadPass, juicerRulesReadFirstPass, juicerRulesReadPassGuarded, juicerRulesWritesReadPass, juicerRulesWritesApplied} {
 		t.Run(string(mode), func(t *testing.T) {
 			reset := func() {
 				crdbKnobs{enabled: true, rules: " " + strings.ToUpper(string(mode)) + " ", maxHold: 25,
@@ -801,6 +801,18 @@ func TestJuicerReadPassWiringAndConfiguration(t *testing.T) {
 			if juicerRulesMode() != mode || !spi.BuildRules().ReadAheadOfBlockedWrite || len(juicerServerOptions()) == 0 ||
 				!strings.Contains(juicerSpecBanner(), " rules="+string(mode)+" ") {
 				t.Fatal("readpass parser, rules, configuration or banner wiring missing")
+			}
+			if mode == juicerRulesReadFirstPass {
+				rules := spi.BuildRules()
+				read := juicer.OpRef{TxnID: 9, OpType: juicer.OpGet, Timestamp: 10}
+				write := juicer.OpRef{TxnID: 1, OpType: juicer.OpSet, Timestamp: 20}
+				later := read
+				later.Timestamp = 30
+				if !rules.Holdable(juicer.OpGet) || rules.Holdable(juicer.OpSet) || rules.Holdable(juicer.OpGetForPut) ||
+					!rules.Blocks(read, write) || rules.Blocks(later, write) || rules.ObserveControlApplied ||
+					rules.MaxHold != 25*time.Millisecond || !rules.AdmitUnbound {
+					t.Fatal("readfirst ordered readpass selected a different relation or hold contract")
+				}
 			}
 			if mode == juicerRulesWritesApplied {
 				rules := spi.BuildRules()

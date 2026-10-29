@@ -366,6 +366,7 @@ const (
 	juicerRulesReadWait        juicerRules = "readwait"
 	juicerRulesReadGate        juicerRules = "readgate"
 	juicerRulesReadFirst       juicerRules = "readfirst"
+	juicerRulesReadFirstPass   juicerRules = "readfirst-ordered-readpass"
 	juicerRulesFull            juicerRules = "full"
 	juicerRulesSFU             juicerRules = "sfu"
 	juicerRulesOff             juicerRules = "off"
@@ -415,6 +416,8 @@ func juicerRulesMode() juicerRules {
 		return juicerRulesReadGate
 	case juicerRulesReadFirst:
 		return juicerRulesReadFirst
+	case juicerRulesReadFirstPass:
+		return juicerRulesReadFirstPass
 	case juicerRulesFull:
 		return juicerRulesFull
 	case juicerRulesSFU:
@@ -700,7 +703,7 @@ func juicerServerOptions() []grpc.ServerOption {
 	if juicerHoldCalibration && (awCfg.Enabled || manualKeys != nil) {
 		panic("COCKROACH_JUICER_HOLD_CALIBRATION cannot run with COCKROACH_JUICER_AW or COCKROACH_JUICER_MANUAL_QUEUE_KEYS")
 	}
-	if mode := juicerRulesMode(); (mode == juicerRulesReadPass || mode == juicerRulesReadPassGuarded || mode == juicerRulesWritesReadPass || mode == juicerRulesWritesApplied) && (juicerFifo || juicerLatePolicy != "queue" ||
+	if mode := juicerRulesMode(); (mode == juicerRulesReadPass || mode == juicerRulesReadFirstPass || mode == juicerRulesReadPassGuarded || mode == juicerRulesWritesReadPass || mode == juicerRulesWritesApplied) && (juicerFifo || juicerLatePolicy != "queue" ||
 		juicerFixedWaitMillis != 0 || awCfg.Enabled || juicerHoldCalibration || juicerSkipQueueing ||
 		juicerFilterDiagnostic != "off") {
 		panic(fmt.Sprintf("%s requires sorted late-queue admission, zero fixed wait, AW off, calibration off, queueing enabled and FILTER_DIAGNOSTIC=off", mode))
@@ -1315,6 +1318,9 @@ func (crdbJuicerSPI) AbortCurrentRequest(req interface{}) (interface{}, error)  
 //	                Refresh and nonlocking fragments of mixed RPCs; the RPC
 //	                still waits for every key. Requires sorted late-queue
 //	                admission with no buffer wait, AW or calibration.
+//	readfirst-ordered-readpass Ordered readpass with only held-read -> head-write
+//	                blocking. Reads retain holds; writes and locking reads do not.
+//	                Shares ordered readpass releases, TTL and restrictions.
 //	readpass-guarded Read-ahead with strict sorting-HLC read/write conflicts:
 //	                an earlier active write also blocks a plain read. Shares
 //	                readpass restrictions and readhold releases and TTL.
@@ -1563,6 +1569,8 @@ func (crdbJuicerSPI) BuildRules() juicer.DependencyRules {
 			MaxHold:      maxHold,
 			AdmitUnbound: true,
 		}
+	case juicerRulesReadFirstPass:
+		return crdbReadFirstOrderedReadPassRules(maxHold)
 	case juicerRulesReadPassGuarded:
 		return crdbReadPassGuardedRules(maxHold)
 	case juicerRulesReadHold, juicerRulesReadHoldOrdered, juicerRulesReadPass:

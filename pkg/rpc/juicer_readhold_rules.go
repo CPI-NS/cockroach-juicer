@@ -53,3 +53,16 @@ func crdbReadPassGuardedRules(maxHold time.Duration) juicer.DependencyRules {
 	rules.ReadAheadOfBlockedWrite = true
 	return rules
 }
+
+// crdbReadFirstOrderedReadPassRules removes only held-write -> head-write
+// blocking from ordered readpass. Newer overtaking reads retain holds but
+// cannot delay an older write; releases and TTL remain readhold's unchanged.
+func crdbReadFirstOrderedReadPassRules(maxHold time.Duration) juicer.DependencyRules {
+	rules := crdbReadHoldRules(maxHold, true)
+	rules.Blocks = func(h, hd juicer.OpRef) bool {
+		return h.TxnID != hd.TxnID && h.OpType == juicer.OpGet && hd.OpType == juicer.OpSet &&
+			(h.Timestamp < hd.Timestamp || (h.Timestamp == hd.Timestamp && h.Logical < hd.Logical))
+	}
+	rules.ReadAheadOfBlockedWrite = true
+	return rules
+}

@@ -43,6 +43,12 @@ func TestJuicerReadHoldOrderedPairs(t *testing.T) {
 								t.Fatalf("ordered=%v Blocks(%+v, %+v)=%v, want %v", ordered, held, head, got, want)
 							}
 						}
+						// The new candidate differs from ordered readpass in exactly
+						// one pair: a held write cannot block another write.
+						wantReadFirst := oldWant && tc.earlier && heldType == juicer.OpGet
+						if got := crdbReadFirstOrderedReadPassRules(time.Millisecond).Blocks(held, head); got != wantReadFirst {
+							t.Fatalf("readfirst ordered Blocks(%+v, %+v)=%v, want %v", held, head, got, wantReadFirst)
+						}
 						guardedWant := ids[0] != ids[1] && tc.earlier &&
 							(heldType == juicer.OpGet || heldType == juicer.OpSet) &&
 							(headType == juicer.OpGet || headType == juicer.OpSet) &&
@@ -157,7 +163,8 @@ func TestJuicerReadHoldOrderedHoldabilityAndReleases(t *testing.T) {
 								want := txn == held.TxnID && ((kind == juicer.ReqArrived &&
 									(op == juicer.OpCommit || op == juicer.OpAbort)) ||
 									(kind == juicer.RespReturned && (failed || op == heldType)))
-								if old.Releases(held, ev) != want || ordered.Releases(held, ev) != want {
+								if old.Releases(held, ev) != want || ordered.Releases(held, ev) != want ||
+									crdbReadFirstOrderedReadPassRules(old.MaxHold).Releases(held, ev) != want {
 									t.Fatalf("held=%+v ev=%+v: old=%v ordered=%v, want %v",
 										held, ev, old.Releases(held, ev), ordered.Releases(held, ev), want)
 								}
@@ -362,6 +369,112 @@ func TestJuicerReadHoldOrderedHeadOfLine(t *testing.T) {
 			}
 			if ea.InflightLen() != 0 || eb.InflightLen() != 0 {
 				t.Fatal("V and R responses left holds behind")
+			}
+		})
+	}
+}
+
+// Compile this exact helper with the shared enforcer locally, and also run it
+// in the native RPC target. No alternate policy is reconstructed by the test.
+func TestJuicerReadFirstOrderedReadPassContract(t *testing.T) {
+	const ttl = 25 * time.Millisecond
+	rules := crdbReadFirstOrderedReadPassRules(ttl)
+	if !rules.Enabled() || !rules.AdmitUnbound || !rules.ReadAheadOfBlockedWrite || rules.ObserveControlApplied || rules.MaxHold != ttl {
+		t.Fatal("candidate changed the inherited admission/release configuration")
+	}
+	for op := juicer.OpUnknown; op < juicer.NumOperationTypes; op++ {
+		if rules.Holdable(op) != (op == juicer.OpGet) {
+			t.Fatalf("only plain reads may hold: op=%v", op)
+		}
+	}
+	de := juicer.NewDependencyEnforcer(rules, nil)
+	now := time.Unix(100, 0)
+	unbound := juicer.OpRef{OpType: juicer.OpGet, Timestamp: 10}
+	if de.OnHeadEligible(unbound, now) != juicer.EnforcerAllow || de.InflightLen() != 0 {
+		t.Fatal("unbound read must pass untracked")
+	}
+	read := juicer.OpRef{TxnID: 1, OpType: juicer.OpGet, Timestamp: 10, Token: 1}
+	de.OnHeadEligible(read, now)
+	unbound.OpType, unbound.Timestamp = juicer.OpSet, 20
+	if de.OnHeadEligible(unbound, now) != juicer.EnforcerBlock {
+		t.Fatal("unbound write ignored an earlier live read")
+	}
+	if de.OnHeadEligible(juicer.OpRef{TxnID: 1, OpType: juicer.OpSet, Timestamp: 20}, now) != juicer.EnforcerAllow || de.InflightLen() != 1 {
+		t.Fatal("same-txn write must pass without creating a hold")
+	}
+	if !de.CancelHold(1, now) || de.CancelHold(1, now) || de.OnHeadEligible(unbound, now) != juicer.EnforcerAllow || de.InflightLen() != 0 {
+		t.Fatal("cancellation/unbound admission changed")
+	}
+	de.OnHeadEligible(read, now)
+	write := juicer.OpRef{TxnID: 2, OpType: juicer.OpSet, Timestamp: 20}
+	if de.OnHeadEligible(write, now.Add(ttl-time.Nanosecond)) != juicer.EnforcerBlock ||
+		de.OnHeadEligible(write, now.Add(ttl)) != juicer.EnforcerAllow || de.InflightLen() != 0 ||
+		de.Stats().Ended[juicer.HoldEndExpiry] != 1 {
+		t.Fatal("read TTL boundary changed or admitted write acquired a hold")
+	}
+}
+
+func TestJuicerReadFirstOrderedReadPassQueue(t *testing.T) {
+	for _, tc := range []struct {
+		name                  string
+		readWall, readLogical int64
+		readTxn               int64
+		stillBlocks           bool
+	}{
+		{"newer overtaking read", 30, 0, 3, false},
+		{"late arriving earlier read", 15, 9, 3, true},
+		{"logical earlier", 20, 0, 3, true},
+		{"logical newer", 20, 2, 3, false},
+		{"exact HLC tie", 20, 1, 3, false},
+		{"same txn earlier read", 15, 0, 2, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			start := time.Unix(100, 0)
+			clock := juicer.NewManualClock(start)
+			rules := crdbReadFirstOrderedReadPassRules(25 * time.Millisecond)
+			logger := juicer.NewLogger("readfirst-ordered-readpass", readHoldTestLogger{}, "", 0, false, false)
+			de := juicer.NewDependencyEnforcer(rules, logger)
+			q := juicer.NewPerKeyQueue("k", func(string) time.Duration { return 0 }, de, logger, false,
+				juicer.WithClock(clock), juicer.WithManualLoop(), juicer.WithLatePolicy(juicer.LateQueue))
+			defer q.Stop()
+			enqueue := func(txn, wall, logical int64, op juicer.OperationType) *juicer.QueueMarker {
+				m := &juicer.QueueMarker{Key: "k", OpType: op, Timestamp: wall, Logical: logical, ReadyChan: make(chan struct{})}
+				m.TxnId.Store(txn)
+				if !q.Enqueue(m) || m.BypassQueue {
+					t.Fatal("fixture requires real queued admission")
+				}
+				q.Pump()
+				return m
+			}
+			ready := func(m *juicer.QueueMarker) bool {
+				select {
+				case <-m.ReadyChan:
+					return true
+				default:
+					return false
+				}
+			}
+			r1 := enqueue(1, 10, 0, juicer.OpGet)
+			w2 := enqueue(2, 20, 1, juicer.OpSet)
+			if !ready(r1) || ready(w2) || de.InflightLen() != 1 {
+				t.Fatal("old read must hold and block the write")
+			}
+			// Earlier arrivals replace the heap head; newer reads pass through
+			// read-ahead behind the blocked write. Both must retain real holds.
+			r3 := enqueue(tc.readTxn, tc.readWall, tc.readLogical, juicer.OpGet)
+			if !ready(r3) || ready(w2) || de.InflightLen() != 2 || de.Stats().Created != 2 {
+				t.Fatal("read did not pass and acquire a hold while old read blocks")
+			}
+			q.Observe(juicer.Event{Kind: juicer.RespReturned, TxnID: 1, OpType: juicer.OpGet})
+			q.Pump()
+			if ready(w2) == tc.stillBlocks || de.InflightLen() != 1 {
+				t.Fatal("only an earlier cross-txn read may keep the write blocked")
+			}
+			q.Observe(juicer.Event{Kind: juicer.RespReturned, TxnID: tc.readTxn, OpType: juicer.OpGet})
+			q.Pump()
+			if !ready(w2) || de.InflightLen() != 0 || de.Stats().Created != 2 ||
+				de.Stats().Ended[juicer.HoldEndEvent] != 2 || de.Stats().Ended[juicer.HoldEndExpiry] != 0 || !clock.Now().Equal(start) {
+				t.Fatal("write progress must use read replies without write holds or TTL")
 			}
 		})
 	}
