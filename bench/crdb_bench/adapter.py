@@ -172,6 +172,7 @@ class CRDBAdapter:
             "IDLE_EPOCHS",
             "LATE_POLICY",
             "DIAG",
+            "STAGE_TIMING",
             "AW",
             "FIFO",
             "SKIP_QUEUEING",

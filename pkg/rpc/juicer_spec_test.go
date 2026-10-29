@@ -26,15 +26,15 @@ import (
 // saveJuicerSpecState snapshots every package-level knob these tests flip.
 func saveJuicerSpecState() func() {
 	enabled, rules, maxHold, fixed := juicerEnabled, juicerRulesEnv, juicerMaxHoldMillis, juicerFixedWaitMillis
-	k, s, epoch, idle, late, diag := juicerFilterK, juicerFilterS, juicerEpochMillis, juicerIdleEpochs,
-		juicerLatePolicy, juicerDiagnostics
+	k, s, epoch, idle, late, diag, stageTiming := juicerFilterK, juicerFilterS, juicerEpochMillis, juicerIdleEpochs,
+		juicerLatePolicy, juicerDiagnostics, juicerStageTiming
 	aw := []interface{}{juicerAW, juicerAWMaxUsRaw, juicerAWMaxUsSet, juicerAWScaleRaw, juicerAWScaleSet,
 		juicerAWInvRaw, juicerAWInvSet, juicerAWLaRaw, juicerAWLaSet, juicerAWLaUsRaw, juicerAWLaUsSet,
 		juicerAWMinRaw, juicerAWMinSet, juicerManualQueueKeysSet, juicerHoldCalibration}
 	return func() {
 		juicerEnabled, juicerRulesEnv, juicerMaxHoldMillis, juicerFixedWaitMillis = enabled, rules, maxHold, fixed
 		juicerFilterK, juicerFilterS, juicerEpochMillis, juicerIdleEpochs = k, s, epoch, idle
-		juicerLatePolicy, juicerDiagnostics = late, diag
+		juicerLatePolicy, juicerDiagnostics, juicerStageTiming = late, diag, stageTiming
 		juicerAW = aw[0].(bool)
 		juicerAWMaxUsRaw, juicerAWMaxUsSet = aw[1].(string), aw[2].(bool)
 		juicerAWScaleRaw, juicerAWScaleSet = aw[3].(string), aw[4].(bool)
@@ -97,6 +97,7 @@ func TestJuicerSpecStartupChecks(t *testing.T) {
 		{"zero epoch", func() { juicerEpochMillis = 0 }, "EPOCH_MS"},
 		{"zero idle epochs", func() { juicerIdleEpochs = 0 }, "IDLE_EPOCHS"},
 		{"unknown late policy", func() { juicerLatePolicy = "put-queue" }, "LATE_POLICY"},
+		{"unknown rules mode", func() { juicerRulesEnv = "writes-read-pass" }, "RULES"},
 		{"empty late policy", func() { juicerLatePolicy = "" }, "LATE_POLICY"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -532,6 +533,71 @@ func TestJuicerAdaptiveWaitKnobs(t *testing.T) {
 		false, false, false, false, false, false
 	if base := juicerServerOptions(); len(on) != len(base)+1 {
 		t.Fatalf("options with AW %d, without %d", len(on), len(base))
+	}
+}
+
+func TestJuicerStageTimingKnob(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer saveJuicerSpecState()()
+	t.Setenv("JUICER_STAGE_TIMING", "") // Isolate the CRDB option from the shared env override.
+	if juicerStageTiming {
+		t.Fatal("COCKROACH_JUICER_STAGE_TIMING must default to off")
+	}
+	juicerEnabled = true
+	for _, tc := range []struct {
+		name    string
+		enabled bool
+	}{{"off", false}, {"on", true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			juicerStageTiming = tc.enabled
+			srv := grpc.NewServer(juicerServerOptions()...)
+			defer srv.Stop()
+			ji, intercept := srv.Juicer(), srv.JuicerUnaryInterceptor()
+			if ji == nil || intercept == nil {
+				t.Fatal("server options did not install the CRDB interceptor")
+			}
+			if got := ji.SnapshotStageTiming(); (got != nil) != tc.enabled {
+				t.Fatalf("stage timing enabled=%v, snapshot=%+v", tc.enabled, got)
+			}
+			for _, req := range []kvpb.Request{plainGet("k"), put("k")} {
+				ba := juicerBatch(juicerTestTxn(1), req)
+				called := false
+				_, err := intercept(context.Background(), ba,
+					&grpc.UnaryServerInfo{FullMethod: juicerUnaryBatchPaths[0]},
+					func(context.Context, interface{}) (interface{}, error) {
+						called = true
+						br := &kvpb.BatchResponse{}
+						br.Txn = ba.Txn.Clone()
+						return br, nil
+					})
+				if err != nil || !called {
+					t.Fatalf("batch did not reach its handler: called=%v err=%v", called, err)
+				}
+			}
+			snapshot := ji.SnapshotStageTiming()
+			if !tc.enabled {
+				if snapshot != nil {
+					t.Fatal("disabled stage timing recorded unary batches")
+				}
+				return
+			}
+			if snapshot == nil {
+				t.Fatal("enabled stage timing lost its snapshot")
+			}
+			for _, class := range []string{"read_only", "write_containing"} {
+				for _, stage := range []string{"invocation", "classify_prepare", "admission_wall", "handler", "response_observation"} {
+					key := "unary/" + class + "/" + stage
+					if got := snapshot.Stages[key].Count; got != 1 {
+						t.Fatalf("stage %s count=%d, want 1", key, got)
+					}
+				}
+			}
+		})
+	}
+	juicerEnabled = false
+	juicerStageTiming = true
+	if opts := juicerServerOptions(); opts != nil {
+		t.Fatalf("stage timing enabled Juicer by itself: %d options", len(opts))
 	}
 }
 

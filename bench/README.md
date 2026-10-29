@@ -121,7 +121,52 @@ at least one operation is a write and the held sorting HLC is strictly earlier.
 Read/read pairs, locking reads and exact HLC ties do not block. It reuses
 `readhold` releases and TTL; performance and global deadlock freedom are unproven.
 
+`juicer.env.RULES: "writes-readpass"` retains the exact `writes` dependency
+relation, releases, TTL and unbound-admission behavior, adding only plain
+`OpGet` admission ahead of a blocked write queue head through the same enforcer.
+Reads create no holds; cross-transaction write/write blocking is independent
+of sorting HLC. It requires `FIFO=false`, `LATE_POLICY=queue`, `FIXED_WAIT_MS=0`,
+`AW=false`, calibration off, `SKIP_QUEUEING=false` and `FILTER_DIAGNOSTIC=off`.
+The default relation is unchanged. This targeted admission candidate changes no
+native SQL or database protocol and has no established performance or fairness
+guarantee. Benchmark only after reviewed shared dependency integration and
+native validation.
+
 The adapter uses insecure SQL/RPC for isolated trusted experiment networks. It does not configure production authentication or install firewall rules.
+
+## Admission stage timing diagnostic
+
+`juicer.env.STAGE_TIMING: true` maps to `COCKROACH_JUICER_STAGE_TIMING=true`.
+It defaults to false and does not enable Juicer by itself. With Juicer enabled,
+the shared gRPC observer records unary and serial-stream admission stages and
+logs cumulative `juicer-stage:` JSON at existing epochs and interceptor Stop.
+It changes no database protocol, SQL workload, release/hold rules or policy
+knobs. Keep it off for ordinary comparisons; timing instrumentation has cost.
+Native integration requires the reviewed shared gRPC revision providing
+`grpc.JuicerStageTiming(bool)`; do not build against an older dependency pin.
+
+For a separate 30-second diagnostic, enable it through the maintained entry's
+`--set juicer.env.STAGE_TIMING=true` with `juicer.enabled=true`, keeping the
+reviewed workload and policy configuration fixed. The existing `evidence`
+finalizer retains every log line containing `juicer` in each node's
+`*.evidence.json` under `juicer_log_lines`. Common collects that file unchanged
+under `collected/<host_id>/`; the result parser retains its path/hash without
+turning stage snapshots into SQL latency or retry metrics. Decode JSON after
+`juicer-stage:` and treat it as cumulative; do not sum snapshots or subtract
+stage quantiles to infer a transaction critical path.
+
+The helper scans the **first 64 MiB of each regular `.log` file**, not its tail;
+symlinks are skipped. Budget the full process lifetime, including reset/load,
+warmup, measurement and evidence finalization. Count every emitted epoch over
+each interceptor's full lifetime, plus any Stop rows. For each log file require
+`other_log_bytes + sum(row_count * max_row_bytes)
+< 67,108,864`, using the actual maximum serialized snapshot size including its
+logger prefix/newline and every interceptor writing there. A four-row synthetic
+retention test or a 30-second measurement alone does not establish lifetime fit.
+At execution, check each evidence `logs[].bytes_scanned` against the actual
+source log file size, both below the cap, and decode every expected stage row as
+complete JSON. Evidence finalization precedes server shutdown; do not depend on
+the Stop row or claim full-window coverage from its absence.
 
 ## SSH and artifact provenance
 

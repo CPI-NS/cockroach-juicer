@@ -65,8 +65,34 @@ def config():
 
 
 class AdapterPlan(unittest.TestCase):
+    def test_stage_timing_reaches_every_server_without_changing_workload(self):
+        for enabled in (False, True):
+            for value in (None, False, True, "false", "true"):
+                with self.subTest(enabled=enabled, value=value):
+                    c = config()
+                    c["topology"]["nodes"].append(dict(
+                        id="n2", host_id="local", rpc_port=27367,
+                        sql_port=27368, http_port=28090,
+                    ))
+                    c["juicer"] = dict(enabled=enabled)
+                    allocation = [dict(host_id="local", process_id=0, slots=3, rate=10, cpu_ids=[0])]
+                    baseline = CRDBAdapter().plan_cell(c, allocation, Path("/tmp/cell"))
+                    if value is not None:
+                        c["juicer"]["env"] = dict(STAGE_TIMING=value)
+                    plan = CRDBAdapter().plan_cell(c, allocation, Path("/tmp/cell"))
+                    for before, server in zip(baseline.servers, plan.servers):
+                        expected = dict(before.env)
+                        if value is not None:
+                            expected["COCKROACH_JUICER_STAGE_TIMING"] = str(value).lower()
+                        self.assertEqual(server.env, expected)
+                        self.assertEqual(server.argv, before.argv)
+                    self.assertEqual(plan.files, baseline.files)
+                    self.assertEqual(plan.clients, baseline.clients)
+                    self.assertEqual(plan.finalize, baseline.finalize)
+                    self.assertEqual(plan.collect, baseline.collect)
+
     def test_readhold_candidates_reach_native_server_environment(self):
-        for rules in ("readhold-ordered", "readhold-ordered-readpass", "readpass-guarded"):
+        for rules in ("readhold-ordered", "readhold-ordered-readpass", "readpass-guarded", "writes-readpass"):
             with self.subTest(rules=rules):
                 c = config()
                 c["juicer"] = dict(enabled=True, env={"RULES": rules})

@@ -175,6 +175,9 @@ var juicerLatePolicy = envutil.EnvOrDefaultString("COCKROACH_JUICER_LATE_POLICY"
 // of them feeds a decision. The FILTER_DIAGNOSTIC arms keep their own timers.
 var juicerDiagnostics = envutil.EnvOrDefaultBool("COCKROACH_JUICER_DIAG", false)
 
+// Stage timing observes admission stages without changing queue/hold policy.
+var juicerStageTiming = envutil.EnvOrDefaultBool("COCKROACH_JUICER_STAGE_TIMING", false)
+
 // The adaptive buffer time (Juicer spec section 4; the fork's
 // juicer.AdaptiveWaitConfig). OFF by default: the spec leaves its formula's
 // measurement choices open (user decision 2026-10-19), so these knobs select
@@ -350,6 +353,7 @@ const (
 	juicerRulesConflictTable   juicerRules = juicer.ConflictTableRulesName
 	juicerRulesGate            juicerRules = "gate"
 	juicerRulesWrites          juicerRules = "writes"
+	juicerRulesWritesReadPass  juicerRules = "writes-readpass"
 	juicerRulesWriteGate       juicerRules = "writegate"
 	juicerRulesReadHold        juicerRules = "readhold"
 	juicerRulesReadHoldOrdered juicerRules = "readhold-ordered"
@@ -384,6 +388,8 @@ func juicerRulesMode() juicerRules {
 		return juicerRulesGate
 	case juicerRulesWrites:
 		return juicerRulesWrites
+	case juicerRulesWritesReadPass:
+		return juicerRulesWritesReadPass
 	case juicerRulesWriteGate:
 		return juicerRulesWriteGate
 	case juicerRulesReadHold:
@@ -688,7 +694,7 @@ func juicerServerOptions() []grpc.ServerOption {
 	if juicerHoldCalibration && (awCfg.Enabled || manualKeys != nil) {
 		panic("COCKROACH_JUICER_HOLD_CALIBRATION cannot run with COCKROACH_JUICER_AW or COCKROACH_JUICER_MANUAL_QUEUE_KEYS")
 	}
-	if mode := juicerRulesMode(); (mode == juicerRulesReadPass || mode == juicerRulesReadPassGuarded) && (juicerFifo || juicerLatePolicy != "queue" ||
+	if mode := juicerRulesMode(); (mode == juicerRulesReadPass || mode == juicerRulesReadPassGuarded || mode == juicerRulesWritesReadPass) && (juicerFifo || juicerLatePolicy != "queue" ||
 		juicerFixedWaitMillis != 0 || awCfg.Enabled || juicerHoldCalibration || juicerSkipQueueing ||
 		juicerFilterDiagnostic != "off") {
 		panic(fmt.Sprintf("%s requires sorted late-queue admission, zero fixed wait, AW off, calibration off, queueing enabled and FILTER_DIAGNOSTIC=off", mode))
@@ -710,6 +716,9 @@ func juicerServerOptions() []grpc.ServerOption {
 		grpc.JuicerIdleEpochs(juicerIdleEpochs),
 		grpc.JuicerLatePolicy(juicerLatePolicy),
 		grpc.JuicerDiagnostics(juicerDiagnostics),
+	}
+	if juicerStageTiming {
+		opts = append(opts, grpc.JuicerStageTiming(juicerStageTiming))
 	}
 	// Appended only when on, so the option list of every run without it is
 	// unchanged.
@@ -1260,6 +1269,10 @@ func (crdbJuicerSPI) AbortCurrentRequest(req interface{}) (interface{}, error)  
 //	                neutral on RMW — one always-on relation with no
 //	                workload-class caveat. See the case below for the
 //	                fact-by-fact derivation.
+//	writes-readpass The writes relation unchanged, with plain OpGet admission
+//	                ahead of a blocked write queue head. Reads create no holds;
+//	                write/write blocking remains independent of sorting HLC.
+//	                Shares the readpass configuration restrictions below.
 //	writegate       ABLATION PROBE (campaign #16), not a production candidate:
 //	                writes plus one change — EVERY head (reads included) waits
 //	                behind a live cross-txn write hold, but reads still hold
@@ -1478,7 +1491,8 @@ func (crdbJuicerSPI) BuildRules() juicer.DependencyRules {
 			MaxHold:      maxHold,
 			AdmitUnbound: true,
 		}
-	case juicerRulesWrites:
+	case juicerRulesWrites, juicerRulesWritesReadPass:
+		// writes-readpass changes only queue read-ahead; predicates stay shared.
 		// The unified-rule candidate: space concurrent WRITERS per hot key and
 		// touch nothing else. Every clause is pinned to a measured fact —
 		// cross-txn write-write spacing is where the single-wave wins came
@@ -1511,8 +1525,9 @@ func (crdbJuicerSPI) BuildRules() juicer.DependencyRules {
 			},
 			// Hold membership is derived from Blocks (fork -21): only writes
 			// can block here, so only writes enter the in-flight set.
-			MaxHold:      maxHold,
-			AdmitUnbound: true,
+			MaxHold:                 maxHold,
+			AdmitUnbound:            true,
+			ReadAheadOfBlockedWrite: mode == juicerRulesWritesReadPass,
 		}
 	case juicerRulesWriteGate:
 		// The campaign #16 ablation probe: identical to writes except that

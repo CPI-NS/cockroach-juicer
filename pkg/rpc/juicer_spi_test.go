@@ -739,6 +739,49 @@ func TestJuicerReadHoldOrderedSPI(t *testing.T) {
 	}
 }
 
+func TestJuicerWritesReadPassRules(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer saveJuicerSpecState()()
+	juicerRulesEnv = "writes"
+	base := newCRDBJuicerSPI().BuildRules()
+	juicerRulesEnv = "writes-readpass"
+	rules := newCRDBJuicerSPI().BuildRules()
+	if base.ReadAheadOfBlockedWrite || !rules.ReadAheadOfBlockedWrite ||
+		rules.MaxHold != base.MaxHold || rules.AdmitUnbound != base.AdmitUnbound ||
+		rules.ObserveControlApplied != base.ObserveControlApplied || rules.Name != base.Name || rules.HoldEnds != base.HoldEnds {
+		t.Fatal("writes-readpass must change only read-ahead")
+	}
+	for heldType := juicer.OpUnknown; heldType < juicer.NumOperationTypes; heldType++ {
+		if rules.Holdable(heldType) != (heldType == juicer.OpSet) {
+			t.Fatalf("only writes may hold, got Holdable(%v)", heldType)
+		}
+		for headType := juicer.OpUnknown; headType < juicer.NumOperationTypes; headType++ {
+			for _, txn := range []int64{0, 1, 2} {
+				for _, stamp := range [][2]int64{{9, 0}, {10, 0}, {10, 1}, {11, 0}} {
+					held := juicer.OpRef{TxnID: 1, OpType: heldType, Timestamp: 10}
+					head := juicer.OpRef{TxnID: txn, OpType: headType, Timestamp: stamp[0], Logical: stamp[1]}
+					want := heldType == juicer.OpSet && headType == juicer.OpSet && txn != 1
+					if rules.Blocks(held, head) != base.Blocks(held, head) || rules.Blocks(held, head) != want {
+						t.Fatalf("write serialization changed: held=%+v head=%+v", held, head)
+					}
+					for _, kind := range []juicer.EventKind{juicer.ReqArrived, juicer.RespReturned, juicer.ControlApplied} {
+						for _, failed := range []bool{false, true} {
+							ev := juicer.Event{TxnID: txn, OpType: headType, Kind: kind, Failed: failed}
+							if rules.Releases(held, ev) != base.Releases(held, ev) {
+								t.Fatalf("write release changed: held=%+v event=%+v", held, ev)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	de := juicer.NewDependencyEnforcer(rules, nil)
+	if de.OnHeadEligible(juicer.OpRef{TxnID: 1, OpType: juicer.OpGet}, time.Unix(1, 0)) != juicer.EnforcerAllow || de.InflightLen() != 0 {
+		t.Fatal("plain read must pass without creating a hold")
+	}
+}
+
 func TestJuicerReadPassWiringAndConfiguration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	saved := readCRDBKnobs()
@@ -746,7 +789,7 @@ func TestJuicerReadPassWiringAndConfiguration(t *testing.T) {
 	defer func(fifo, skip bool, diagnostic string) {
 		juicerFifo, juicerSkipQueueing, juicerFilterDiagnostic = fifo, skip, diagnostic
 	}(juicerFifo, juicerSkipQueueing, juicerFilterDiagnostic)
-	for _, mode := range []juicerRules{juicerRulesReadPass, juicerRulesReadPassGuarded} {
+	for _, mode := range []juicerRules{juicerRulesReadPass, juicerRulesReadPassGuarded, juicerRulesWritesReadPass} {
 		t.Run(string(mode), func(t *testing.T) {
 			reset := func() {
 				crdbKnobs{enabled: true, rules: " " + strings.ToUpper(string(mode)) + " ", maxHold: 25,

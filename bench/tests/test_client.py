@@ -244,6 +244,86 @@ class SchedulerCLI(ClientCLI):
             thread.join()
 
 
+class EvidenceCLI(ClientCLI):
+    def test_stage_json_survives_evidence_collection_and_result_parsing(self):
+        from experiment_common.collection import collect, archive_collection
+        from experiment_common.process import Executor
+        from crdb_bench import CRDBAdapter
+        from test_evaluation import collected_fixture
+
+        root = Path(self.temp.name) / "workspace"
+        root.mkdir()
+        c = collected_fixture(root)
+        c["juicer"]["hold_calibration"] = False
+        c["artifacts"]["sql_client"] = self.binary
+        c["juicer"]["env"] = dict(STAGE_TIMING=True)
+        adapter = CRDBAdapter()
+        baseline = adapter.parse_results(c, root)
+        self.assertTrue(baseline["validity"]["valid"], baseline["validity"])
+        proof = json.loads((root / "n1.evidence.json").read_text())
+        # Opaque payloads exercise retention, independent of the shared schema.
+        # Four 64-KiB rows budget three 10-s epochs plus a possible Stop row.
+        rows = [
+            "I261029 00:00:00.000000 juicer-stage: " + json.dumps(
+                dict(fixture_epoch=i, padding="x" * 65000)
+            )
+            for i in range(4)
+        ]
+        logdir = root / "n1" / "logs"
+        logdir.mkdir(parents=True)
+        logfile = logdir / "cockroach.log"
+        logfile.write_text("\n".join([
+            "juicer: interception enabled", *proof["juicer_log_lines"], *rows,
+        ]) + "\n")
+        self.assertLess(logfile.stat().st_size, 256 * 1024)
+        plan = adapter.plan_cell(c, [dict(
+            host_id="local", process_id=0, slots=1, cpu_ids=[0],
+        )], root)
+        for generated in plan.files:
+            Path(generated.path).write_text(generated.content)
+        command = next(cmd for cmd in plan.finalize if cmd.name == "evidence-n1")
+        subprocess.run(command.argv, check=True, capture_output=True, text=True)
+        evidence = json.loads((root / "n1.evidence.json").read_text())
+        self.assertEqual([r for r in evidence["juicer_log_lines"] if "juicer-stage:" in r], rows)
+        self.assertEqual(evidence["logs"][0]["bytes_scanned"], logfile.stat().st_size)
+        # Use the actual plan's paths and both common collection stages locally.
+        (root / "client-0.metrics.jsonl").touch()
+        destination = root.parent / "collected"
+        executor = Executor(c, root.parent / "executor")
+        self.assertTrue(collect(executor, plan.collect, root, destination)["verified"])
+        durable = root.parent / "durable"
+        archive_collection(destination, durable)
+        self.assertEqual((durable / "local/n1.evidence.json").read_bytes(),
+                         (root / "n1.evidence.json").read_bytes())
+        result = adapter.parse_results(c, durable)
+        self.assertTrue(result["validity"]["valid"], result["validity"])
+        self.assertEqual(result["metrics"], baseline["metrics"])
+        self.assertIn("local/n1.evidence.json", [f["path"] for f in result["files"]])
+        for row in rows:
+            json.loads(row.split("juicer-stage: ", 1)[1])
+
+    def test_evidence_reads_first_64_mib_per_log(self):
+        root = Path(self.temp.name) / "cap"
+        root.mkdir()
+        before = 'juicer-stage: {"fixture":"before-cap"}\n'
+        after = 'juicer-stage: {"fixture":"after-cap"}\n'
+        cap = 64 << 20
+        with (root / "cockroach.log").open("wb") as stream:
+            stream.write(b"juicer: interception enabled\n")
+            stream.seek(cap - len(before) - 1)
+            stream.write(("\n" + before + after).encode())
+        path = root / "config.json"
+        path.write_text(json.dumps(dict(
+            keys=1, ops_per_txn=1, slots=1, mode="closed", duration_seconds=30,
+            log_dir=str(root), output=str(root / "node"), juicer_enabled=True,
+        )))
+        subprocess.run([self.binary, "evidence", "--config", str(path)], check=True)
+        proof = json.loads((root / "node.evidence.json").read_text())
+        self.assertEqual(proof["logs"][0]["bytes_scanned"], cap)
+        self.assertIn(before.strip(), proof["juicer_log_lines"])
+        self.assertNotIn(after.strip(), proof["juicer_log_lines"])
+
+
 class WorkloadCLI(ClientCLI):
     def test_ten_million_keys_zipf_and_poisson_are_parameterized_and_seeded(self):
         a = self.trace(keys=10_000_000, arrival="poisson", duplicates=False)
