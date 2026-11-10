@@ -49,9 +49,11 @@ two-stage collection, analysis) follow the normal path in [SKILL.md](../SKILL.md
 - Hardware is recorded as `hardware`/`cpus` in scientific identity. Do not mix
   AWS and CloudLab batches as one continuation, and rebuild baselines on CloudLab
   hardware before comparing off/on results.
-- Use worker paths under `/mnt/extra/<user>/` for `runtime.workspace_root`,
-  artifact `deploy_to` and runtime libraries (for example Spanner's
-  `LD_LIBRARY_PATH` directory).
+- Use worker paths under `/mnt/extra/<user>/` for artifact `deploy_to` and
+  runtime libraries (for example Spanner's `LD_LIBRARY_PATH` directory).
+  `runtime.workspace_root` is the same absolute path on control and workers;
+  control has no `/mnt/extra`, so keep the default `/tmp/experiment-common`
+  unless that path exists on every host.
 
 ## Stop and collection
 
