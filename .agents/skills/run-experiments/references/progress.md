@@ -127,5 +127,6 @@ reasoning turns.
 
 Ownership ends after requested outputs, verified collection and audited cleanup,
 or an explicit blocker with evidence, remaining ownership and the safe recovery/
-deadline path reported. Include the separate [control finalization](aws.md#control-finalization)
-and its audit; worker release alone does not complete control cleanup.
+deadline path reported. On AWS, include the separate [control finalization](aws.md#control-finalization)
+and its audit; worker release alone does not complete control cleanup. CloudLab
+has no release or finalization; see [CloudLab](cloudlab.md).

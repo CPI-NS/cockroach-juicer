@@ -1,5 +1,7 @@
 # One-time site configuration. Bind every REPLACE/null before creating resources.
 # Resource creation only. Use explicit baseline bootstrap for software setup.
+# provider is mandatory and selects the site: aws or cloudlab.
+provider: aws
 region: us-east-1
 output_root: juicer-exp-runs
 infra:

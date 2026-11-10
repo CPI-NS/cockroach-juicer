@@ -23,8 +23,9 @@ Both mechanically retain control; separately follow [control finalization](aws.m
 Verify `all --help` in the pinned environment before use. A reported milestone
 does not require a new supervisor GO for the next authorized stage.
 
-Prepare `aws-site.yaml` once from the supplied example. It supplies account,
-network, AMI, machine estimates, placement presets. Source versions belong to the experiment configuration. Regular cluster creation needs only these five inputs:
+Prepare `aws-site.yaml` once from the supplied example. It declares
+`provider: aws` and supplies account, network, AMI, machine estimates, placement
+presets. `cluster delete` refuses while a bootstrap or run holds the cluster. Source versions belong to the experiment configuration. Regular cluster creation needs only these five inputs:
 
 ```sh
 python run.py cluster create --name smoke --instance-type c5.2xlarge \
@@ -45,6 +46,27 @@ and mechanically retains control. Complete [control finalization](aws.md#control
 after all authorized reuse and both verified collections. Skill-driven creation also passes an explicitly chosen
 `--deadline-seconds`; its maximum applies across all reuse and is not renewed by
 another run. Read the installed `docs/manual-aws.md` and [AWS](aws.md).
+
+### CloudLab site
+
+With a `provider: cloudlab` site, `cluster create` reserves fixed hosts from a
+named partition instead of creating machines; omit `--instance-type`. All later
+commands above are unchanged:
+
+```sh
+python run.py cluster create --name cc-a --site cloudlab-site.yaml \
+  --placement a --servers 3 --clients 6
+python run.py all --cluster cc-b --site cloudlab-site.yaml --placement b \
+  --servers 3 --clients 6 --template control-env.yaml --config experiment.yaml \
+  --deadline-seconds 86400 --cleanup-policy retain
+```
+
+Creation and each run refuse a deadline past `expires_at`, then perform
+read-only SSH, LAN-resolution and work-directory checks from control.
+`--deadline-seconds` bounds each run; `cluster delete` and
+`--cleanup-policy release` only end the local reservation. There is no AWS call
+or control finalization. Read the installed `docs/manual-cloudlab.md` and
+[CloudLab](cloudlab.md).
 
 ## Configured outputs
 
@@ -85,7 +107,7 @@ continuation entry and explicit batch paths; never guess local-to-control paths.
 ## Installed resources
 
 The environment's data directory contains `share/experiment-common/` with
-`examples/aws-site.yaml`, evaluation cards, capability coverage and operating
+`examples/aws-site.yaml`, `examples/cloudlab-site.yaml`, evaluation cards, capability coverage and operating
 manuals. Resolve it with the selected interpreter's `sysconfig.get_path("data")`.
 Use that environment's resources and pinned adapter, rather than assuming a
 sibling source checkout. Shipped site/artifact placeholders are planning inputs,
