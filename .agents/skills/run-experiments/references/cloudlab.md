@@ -3,7 +3,8 @@
 Use this reference when the selected site file declares `provider: cloudlab`.
 Read the installed `docs/manual-cloudlab.md` for commands and the site schema.
 Shared phases (named cluster, experiment config, bootstrap, run/all, observation,
-two-stage collection, analysis) follow the normal path in [SKILL.md](../SKILL.md).
+verified collection, analysis) follow the normal path in [SKILL.md](../SKILL.md); raw
+outputs stay on control as described under Stop and collection.
 
 ## What differs from AWS
 
@@ -58,7 +59,15 @@ two-stage collection, analysis) follow the normal path in [SKILL.md](../SKILL.md
 ## Stop and collection
 
 Ctrl-C or `stop --cluster NAME --config FILE` stops dispatch, cleans owned process
-groups on all hosts and collects evidence, as on AWS. Verify both collection
-stages (worker -> control, control -> initiating host) and owned-process cleanup
-before reporting completion. A collection failure remains a failure; the hosts
-stay available for an authorized retry.
+groups on all hosts and collects evidence, as on AWS.
+
+Raw worker outputs stay on control by default (`raw_data: control`). The two
+verified stages are: worker -> control raw collection after every cell (SHA-256
+per file), and control -> initiating host for results, analysis, configurations,
+provenance, events, logs and each attempt's raw-file manifest with hashes. Verify
+both stages, `raw-data.json` (control path, `missing` empty) and owned-process
+cleanup before reporting completion. Pull raw outputs only when an analysis needs
+them: `collect --cluster NAME --config FILE` verifies each pulled file against the
+stage-1 hashes. A site with `raw_data: initiator` copies raw outputs after every
+run as on AWS. A collection failure remains a failure; the hosts stay available
+for an authorized retry.
