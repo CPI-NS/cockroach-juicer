@@ -84,6 +84,10 @@ class AdapterPlan(unittest.TestCase):
         self.assertEqual((cfg["slots"], cfg["rate"], cfg["ops_per_txn"]), (3, 10, 5))
         self.assertTrue(cfg["duplicates"])
         self.assertFalse(any("run_cell" in a for cmd in plan.clients for a in cmd.argv))
+        # Evidence comes from finalize; a node left without quorum is stopped after a
+        # bounded grace and recorded, not treated as a clean-stop failure.
+        self.assertEqual(plan.metadata["server_stop_grace_seconds"], 10)
+        self.assertNotIn("clean_stop_returncodes", plan.metadata)
 
 
 class CollectedMetrics(unittest.TestCase):

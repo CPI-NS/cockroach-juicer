@@ -589,6 +589,10 @@ class CRDBAdapter:
             security="Insecure SQL/RPC; use only isolated trusted experiment networks",
         )
         plan.metadata["measurement_coordination"] = "native-gate-v1"
+        # Node evidence is captured by finalize before servers stop. When every node
+        # gets SIGTERM together, the last one cannot finish draining without quorum;
+        # bound its wait instead of the runner's default grace (a recorded anomaly).
+        plan.metadata["server_stop_grace_seconds"] = 10
         return plan
 
     def parse_results(self, config, collected_dir):
